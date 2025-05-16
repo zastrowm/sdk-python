@@ -1,17 +1,24 @@
 # Strands Agents
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-
 <div align="center">
   <h2>
     A model-driven approach to building AI agents in just a few lines of code.
   </h2>
 
-  <a href="https://strandsagents.com/">Docs</a>
-  ◆ <a href="https://github.com/strands-agents/docs/tree/main/docs/examples">Samples</a>
-  ◆ <a href="https://github.com/strands-agents/tools">Tools</a>
-  ◆ <a href="https://github.com/strands-agents/agent-builder">Agent Builder</a>
+  <div align="center">
+    <a href="https://github.com/strands-agents/sdk-python/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/strands-agents/sdk-python"/></a>
+    <a href="https://github.com/strands-agents/sdk-python/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/strands-agents/sdk-python"/></a>
+    <a href="https://github.com/strands-agents/sdk-python/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/strands-agents/sdk-python"/></a>
+    <a href="https://pypi.org/project/strands-agents/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/strands-agents"/></a>
+    <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/strands-agents"/></a>
+  </div>
+  
+  <p>
+    <a href="https://strandsagents.com/">Docs</a>
+    ◆ <a href="https://github.com/strands-agents/docs/tree/main/docs/examples">Samples</a>
+    ◆ <a href="https://github.com/strands-agents/tools">Tools</a>
+    ◆ <a href="https://github.com/strands-agents/agent-builder">Agent Builder</a>
+  </p>
 </div>
 
 Strands Agents is a simple yet powerful SDK that takes a model-driven approach to building and running AI agents. From simple conversational assistants to complex autonomous workflows, from local development to production deployment, Strands Agents scales with your needs.
