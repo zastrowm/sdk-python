@@ -90,5 +90,5 @@ jobs:
 
       - name: Run lint
         id: lint
-        run: hatch run test-lint
+        run: hatch -v run test-lint
         continue-on-error: false
