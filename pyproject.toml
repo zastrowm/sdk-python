@@ -100,7 +100,9 @@ format-fix = [
 ]
 lint-check = [
     "ruff check",
-    "mypy -p src"
+    "mypy -p src",
+    "which mypy",
+    "mypy --version",
 ]
 lint-fix = [
     "ruff check --fix"
@@ -157,7 +159,7 @@ lint = [
     "hatch fmt --linter"
 ]
 test-lint = [
-    "hatch fmt --linter --check"
+    "hatch -v fmt --linter --check"
 ]
 test = [
     "hatch test --cover --cov-report html --cov-report xml {args}"
