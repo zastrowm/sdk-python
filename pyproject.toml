@@ -100,9 +100,9 @@ format-fix = [
 ]
 lint-check = [
     "ruff check",
-    "mypy -p src",
     "which mypy",
     "mypy --version",
+    "mypy -p src",
 ]
 lint-fix = [
     "ruff check --fix"
