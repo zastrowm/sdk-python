@@ -8,9 +8,9 @@ dynamic = ["version"]
 description = "A model-driven approach to building AI agents in just a few lines of code"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
+license = { text = "Apache-2.0" }
 authors = [
-    {name = "AWS", email = "opensource@amazon.com"},
+    { name = "AWS", email = "opensource@amazon.com" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -59,7 +59,6 @@ dev = [
     "pytest>=8.0.0,<9.0.0",
     "pytest-asyncio>=0.26.0,<0.27.0",
     "ruff>=0.4.4,<0.5.0",
-    "swagger-parser>=1.0.2,<2.0.0",
 ]
 docs = [
     "sphinx>=5.0.0,<6.0.0",
@@ -86,9 +85,9 @@ source = "vcs"
 [tool.hatch.envs.hatch-static-analysis]
 features = ["anthropic", "litellm", "llamaapi", "ollama", "openai"]
 dependencies = [
-  "mypy>=1.15.0,<2.0.0",
-  "ruff>=0.11.6,<0.12.0",
-  "strands-agents @ {root:uri}"
+    "mypy>=1.15.0,<2.0.0",
+    "ruff>=0.11.6,<0.12.0",
+    "strands-agents @ {root:uri}"
 ]
 
 [tool.hatch.envs.hatch-static-analysis.scripts]
@@ -148,7 +147,7 @@ list = [
     "echo 'Scripts commands available for default env:'; hatch env show --json | jq --raw-output '.default.scripts | keys[]'"
 ]
 format = [
-  "hatch fmt --formatter",
+    "hatch fmt --formatter",
 ]
 test-format = [
     "hatch fmt --formatter --check",
@@ -193,13 +192,13 @@ include = ["examples/**/*.py", "src/**/*.py", "tests/**/*.py", "tests-integ/**/*
 
 [tool.ruff.lint]
 select = [
-  "B", # flake8-bugbear
-  "D", # pydocstyle
-  "E", # pycodestyle
-  "F", # pyflakes
-  "G", # logging format
-  "I", # isort
-  "LOG", # logging
+    "B", # flake8-bugbear
+    "D", # pydocstyle
+    "E", # pycodestyle
+    "F", # pyflakes
+    "G", # logging format
+    "I", # isort
+    "LOG", # logging
 ]
 
 [tool.ruff.lint.per-file-ignores]
