@@ -24,6 +24,7 @@ from opentelemetry import trace
 from ..event_loop.event_loop import event_loop_cycle
 from ..handlers.callback_handler import CompositeCallbackHandler, PrintingCallbackHandler, null_callback_handler
 from ..handlers.tool_handler import AgentToolHandler
+from ..hooks.agent_hook import AgentHook, AgentHookManager, AgentInitialized
 from ..models.bedrock import BedrockModel
 from ..telemetry.metrics import EventLoopMetrics
 from ..telemetry.tracer import get_tracer
@@ -186,6 +187,7 @@ class Agent:
         model: Union[Model, str, None] = None,
         messages: Optional[Messages] = None,
         tools: Optional[List[Union[str, Dict[str, str], Any]]] = None,
+        hooks: Optional[List[AgentHook]] = None,
         system_prompt: Optional[str] = None,
         callback_handler: Optional[
             Union[Callable[..., Any], _DefaultCallbackHandlerSentinel]
@@ -289,6 +291,13 @@ class Agent:
         self.trace_span: Optional[trace.Span] = None
 
         self.tool_caller = Agent.ToolCaller(self)
+        self.hooks = AgentHookManager(agent=self)
+
+        if hooks is not None:
+            for hook in hooks:
+                self.hooks.add(hook)
+
+        self.hooks.get_hook(AgentInitialized)(agent=self)
 
     @property
     def tool(self) -> ToolCaller:
