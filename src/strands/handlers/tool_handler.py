@@ -28,7 +28,6 @@ class AgentToolHandler(ToolHandler):
     def preprocess(
         self,
         tool: ToolUse,
-        tool_config: ToolConfig,
         **kwargs: Any,
     ) -> Optional[ToolResult]:
         """Preprocess a tool before invocation (not implemented).
@@ -43,6 +42,9 @@ class AgentToolHandler(ToolHandler):
         """
         pass
 
+    def get_tool_config(self) -> ToolConfig:
+        return self.tool_registry.initialize_tool_config()
+
     def process(
         self,
         tool: Any,
@@ -50,7 +52,6 @@ class AgentToolHandler(ToolHandler):
         model: Model,
         system_prompt: Optional[str],
         messages: List[Any],
-        tool_config: Any,
         callback_handler: Any,
         **kwargs: Any,
     ) -> Any:
@@ -97,7 +98,6 @@ class AgentToolHandler(ToolHandler):
                     "model": model,
                     "system_prompt": system_prompt,
                     "messages": messages,
-                    "tool_config": tool_config,
                     "callback_handler": callback_handler,
                 }
             )

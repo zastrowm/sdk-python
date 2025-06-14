@@ -153,7 +153,6 @@ class Agent:
                 tool_execution_handler = kwargs.get("tool_execution_handler", self._agent.thread_pool_wrapper)
                 event_loop_metrics = kwargs.get("event_loop_metrics", self._agent.event_loop_metrics)
                 messages = kwargs.get("messages", self._agent.messages)
-                tool_config = kwargs.get("tool_config", self._agent.tool_config)
                 callback_handler = kwargs.get("callback_handler", self._agent.callback_handler)
                 record_direct_tool_call = kwargs.get("record_direct_tool_call", self._agent.record_direct_tool_call)
 
@@ -184,7 +183,6 @@ class Agent:
                     model=self._agent.model,
                     system_prompt=self._agent.system_prompt,
                     messages=messages,
-                    tool_config=tool_config,
                     callback_handler=callback_handler,
                     tool_execution_handler=tool_execution_handler,
                     event_loop_metrics=event_loop_metrics,
@@ -510,9 +508,7 @@ class Agent:
         tool_execution_handler = kwargs.pop("tool_execution_handler", self.thread_pool_wrapper)
         event_loop_metrics = kwargs.pop("event_loop_metrics", self.event_loop_metrics)
         callback_handler_override = kwargs.pop("callback_handler", callback_handler)
-        tool_handler = kwargs.pop("tool_handler", self.tool_handler)
         messages = kwargs.pop("messages", self.messages)
-        tool_config = kwargs.pop("tool_config", self.tool_config)
         kwargs.pop("agent", None)  # Remove agent to avoid conflicts
 
         try:
@@ -522,8 +518,7 @@ class Agent:
                 system_prompt=system_prompt,
                 messages=messages,  # will be modified by event_loop_cycle
                 callback_handler=callback_handler_override,
-                tool_config=tool_config,
-                tool_handler=tool_handler,
+                tool_handler=self.tool_handler,
                 tool_execution_handler=tool_execution_handler,
                 event_loop_metrics=event_loop_metrics,
                 agent=self,

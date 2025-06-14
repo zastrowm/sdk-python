@@ -343,9 +343,7 @@ def test_agent__call__passes_kwargs(mock_model, system_prompt, callback_handler,
     override_tool_execution_handler = unittest.mock.Mock()
     override_event_loop_metrics = unittest.mock.Mock()
     override_callback_handler = unittest.mock.Mock()
-    override_tool_handler = unittest.mock.Mock()
     override_messages = [{"role": "user", "content": [{"text": "override msg"}]}]
-    override_tool_config = {"test": "config"}
 
     def check_kwargs(some_value, **kwargs):
         assert some_value == "a_value"
@@ -355,9 +353,7 @@ def test_agent__call__passes_kwargs(mock_model, system_prompt, callback_handler,
         assert kwargs["tool_execution_handler"] == override_tool_execution_handler
         assert kwargs["event_loop_metrics"] == override_event_loop_metrics
         assert kwargs["callback_handler"] == override_callback_handler
-        assert kwargs["tool_handler"] == override_tool_handler
         assert kwargs["messages"] == override_messages
-        assert kwargs["tool_config"] == override_tool_config
         assert kwargs["agent"] == agent
 
         # Return expected values from event_loop_cycle
@@ -373,9 +369,7 @@ def test_agent__call__passes_kwargs(mock_model, system_prompt, callback_handler,
         tool_execution_handler=override_tool_execution_handler,
         event_loop_metrics=override_event_loop_metrics,
         callback_handler=override_callback_handler,
-        tool_handler=override_tool_handler,
         messages=override_messages,
-        tool_config=override_tool_config,
     )
 
     mock_event_loop_cycle.assert_called_once()
@@ -702,7 +696,6 @@ def test_agent_tool_no_parameter_conflict(agent, tool_registry, mock_randint):
         model=unittest.mock.ANY,
         system_prompt="You are a helpful assistant.",
         messages=unittest.mock.ANY,
-        tool_config=unittest.mock.ANY,
         callback_handler=unittest.mock.ANY,
         tool_execution_handler=unittest.mock.ANY,
         event_loop_metrics=unittest.mock.ANY,
@@ -911,7 +904,6 @@ async def test_stream_async_can_be_invoked_twice(mock_event_loop_cycle):
     assert kwargs1.get("model") == agent1.model
     assert kwargs1.get("system_prompt") == agent1.system_prompt
     assert kwargs1.get("messages") == agent1.messages
-    assert kwargs1.get("tool_config") == agent1.tool_config
     assert "callback_handler" in kwargs1
 
     # Second call
@@ -919,7 +911,6 @@ async def test_stream_async_can_be_invoked_twice(mock_event_loop_cycle):
     assert kwargs2.get("model") == agent1.model
     assert kwargs2.get("system_prompt") == agent1.system_prompt
     assert kwargs2.get("messages") == agent1.messages
-    assert kwargs2.get("tool_config") == agent1.tool_config
     assert "callback_handler" in kwargs2
 
 

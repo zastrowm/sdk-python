@@ -54,7 +54,6 @@ def event_loop_cycle(
     model: Model,
     system_prompt: Optional[str],
     messages: Messages,
-    tool_config: Optional[ToolConfig],
     callback_handler: Callable[..., Any],
     tool_handler: Optional[ToolHandler],
     tool_execution_handler: Optional[ParallelToolExecutorInterface] = None,
@@ -105,6 +104,7 @@ def event_loop_cycle(
     kwargs["event_loop_cycle_id"] = uuid.uuid4()
 
     event_loop_metrics: EventLoopMetrics = kwargs.get("event_loop_metrics", EventLoopMetrics())
+    tool_config = tool_handler.get_tool_config() if tool_handler else None
 
     # Initialize state and get cycle trace
     kwargs = initialize_state(**kwargs)
@@ -219,7 +219,6 @@ def event_loop_cycle(
                 model,
                 system_prompt,
                 messages,
-                tool_config,
                 tool_handler,
                 callback_handler,
                 tool_execution_handler,
@@ -340,7 +339,6 @@ def _handle_tool_execution(
     model: Model,
     system_prompt: Optional[str],
     messages: Messages,
-    tool_config: ToolConfig,
     tool_handler: ToolHandler,
     callback_handler: Callable[..., Any],
     tool_execution_handler: Optional[ParallelToolExecutorInterface],
@@ -363,7 +361,6 @@ def _handle_tool_execution(
         model (Model): The model provider instance.
         system_prompt (Optional[str]): The system prompt instructions for the model.
         messages (Messages): The conversation history messages.
-        tool_config (ToolConfig): Configuration for available tools.
         tool_handler (ToolHandler): Handler for tool execution.
         callback_handler (Callable[..., Any]): Callback for processing events as they happen.
         tool_execution_handler (Optional[ParallelToolExecutorInterface]): Optional handler for parallel tool execution.
@@ -390,7 +387,6 @@ def _handle_tool_execution(
         messages=messages,
         model=model,
         system_prompt=system_prompt,
-        tool_config=tool_config,
         callback_handler=callback_handler,
         **kwargs,
     )
@@ -429,7 +425,6 @@ def _handle_tool_execution(
         model=model,
         system_prompt=system_prompt,
         messages=messages,
-        tool_config=tool_config,
         callback_handler=callback_handler,
         tool_handler=tool_handler,
         **kwargs,

@@ -241,6 +241,10 @@ class ToolHandler(ABC):
     """Abstract base class for handling tool execution within the agent framework."""
 
     @abstractmethod
+    def get_tool_config(self) -> ToolConfig:
+        ...
+
+    @abstractmethod
     # pragma: no cover
     def preprocess(
         self,
