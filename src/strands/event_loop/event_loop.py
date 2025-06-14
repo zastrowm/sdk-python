@@ -9,22 +9,22 @@ The event loop allows agents to:
 """
 
 import logging
+import time
 import uuid
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
+from .streaming import stream_messages
 from ..telemetry.metrics import EventLoopMetrics, Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.executor import run_tools, validate_and_prepare_tools
 from ..types.content import Message, Messages
-from ..types.event_loop import ParallelToolExecutorInterface
+from ..types.event_loop import ParallelToolExecutorInterface, Usage
 from ..types.exceptions import ContextWindowOverflowException, EventLoopException, ModelThrottledException
 from ..types.models import Model
 from ..types.streaming import Metrics, StopReason
 from ..types.tools import ToolConfig, ToolHandler, ToolResult, ToolUse
-from .error_handler import handle_throttling_error
 from .message_processor import clean_orphaned_empty_tool_uses
-from .streaming import stream_messages
 
 logger = logging.getLogger(__name__)
 
@@ -129,56 +129,61 @@ def event_loop_cycle(
     # Clean up orphaned empty tool uses
     clean_orphaned_empty_tool_uses(messages)
 
-    # Process messages with exponential backoff for throttling
-    message: Message
-    stop_reason: StopReason
-    usage: Any
-    metrics: Metrics
+    def stream_messages_with_retry() -> Tuple[StopReason, Message, Any, Metrics, Any]:
+        """
+        Retry loop for handling throttling exceptions
+        """
 
-    # Retry loop for handling throttling exceptions
-    for attempt in range(MAX_ATTEMPTS):
         model_id = model.config.get("model_id") if hasattr(model, "config") else None
-        model_invoke_span = tracer.start_model_invoke_span(
-            parent_span=cycle_span,
-            messages=messages,
-            model_id=model_id,
-        )
+        current_delay = INITIAL_DELAY
+        attempt = -1
 
-        try:
-            stop_reason, message, usage, metrics, kwargs["request_state"] = stream_messages(
-                model,
-                system_prompt,
-                messages,
-                tool_config,
-                callback_handler,
-                **kwargs,
+        while True:
+            attempt += 1
+            model_invoke_span = tracer.start_model_invoke_span(
+                parent_span=cycle_span,
+                messages=messages,
+                model_id=model_id,
             )
-            if model_invoke_span:
-                tracer.end_model_invoke_span(model_invoke_span, message, usage)
-            break  # Success! Break out of retry loop
 
-        except ContextWindowOverflowException as e:
-            if model_invoke_span:
-                tracer.end_span_with_error(model_invoke_span, str(e), e)
-            raise e
+            try:
+                result = stream_messages(
+                    model,
+                    system_prompt,
+                    messages,
+                    tool_config,
+                    callback_handler,
+                    **kwargs,
+                )
+                if model_invoke_span:
+                    _, message, usage, _, _ = result
+                    tracer.end_model_invoke_span(model_invoke_span, message, usage)
 
-        except ModelThrottledException as e:
-            if model_invoke_span:
-                tracer.end_span_with_error(model_invoke_span, str(e), e)
+                return result  # Success! Break out of retry loop
 
-            # Handle throttling errors with exponential backoff
-            should_retry, current_delay = handle_throttling_error(
-                e, attempt, MAX_ATTEMPTS, INITIAL_DELAY, MAX_DELAY, callback_handler, kwargs
-            )
-            if should_retry:
-                continue
+            except Exception as e:
+                if model_invoke_span:
+                    tracer.end_span_with_error(model_invoke_span, str(e), e)
 
-            # If not a throttling error or out of retries, re-raise
-            raise e
-        except Exception as e:
-            if model_invoke_span:
-                tracer.end_span_with_error(model_invoke_span, str(e), e)
-            raise e
+                if isinstance(e, ModelThrottledException):
+                    # Handle throttling errors with exponential backoff
+                    if attempt < MAX_ATTEMPTS - 1:  # Don't sleep on last attempt
+                        logger.debug(
+                            "retry_delay_seconds=<%s>, max_attempts=<%s>, current_attempt=<%s> "
+                            "| throttling exception encountered "
+                            "| delaying before next retry",
+                            current_delay,
+                            MAX_ATTEMPTS,
+                            attempt + 1,
+                            )
+                        callback_handler(event_loop_throttled_delay=current_delay, **kwargs)
+                        time.sleep(current_delay)
+                        current_delay = min(current_delay * 2, MAX_DELAY)  # Double delay each retry
+                        continue # Retry again
+
+                raise e
+
+    stop_reason, message, usage, metrics, kwargs["request_state"] = stream_messages_with_retry()
 
     try:
         # Add message in trace and mark the end of the stream messages trace
