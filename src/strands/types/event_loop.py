@@ -4,7 +4,6 @@ from typing import Any, Callable, Iterable, Iterator, Literal, Optional, Protoco
 
 from typing_extensions import TypedDict, runtime_checkable
 
-
 class Usage(TypedDict):
     """Token usage information for model interactions.
 
@@ -109,3 +108,5 @@ class ParallelToolExecutorInterface(Protocol):
         Args:
             wait: If True, shutdown will not return until all running futures have finished executing.
         """
+
+

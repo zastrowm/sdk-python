@@ -49,11 +49,6 @@ def event_loop_metrics():
 
 
 @pytest.fixture
-def request_state():
-    return {}
-
-
-@pytest.fixture
 def invalid_tool_use_ids(request):
     return request.param if hasattr(request, "param") else []
 
@@ -81,27 +76,33 @@ def parallel_tool_executor(request):
     with unittest.mock.patch.object(wrapper, "as_completed", side_effect=as_completed):
         yield wrapper
 
+@pytest.fixture
+def sequential_strategy():
+    return strands.tools.executor_strategy.SequentialToolExecutorStrategy()
+
+@pytest.fixture
+def parallel_strategy(parallel_tool_executor):
+    return strands.tools.executor_strategy.ParallelToolExecutorStrategy(parallel_tool_executor)
+
 
 def test_run_tools(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    parallel_strategy,
 ):
     tool_results = []
 
     failed = strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        parallel_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
-        parallel_tool_executor,
     )
     assert not failed
 
@@ -126,22 +127,20 @@ def test_run_tools_invalid_tool(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    parallel_strategy,
 ):
     tool_results = []
 
     failed = strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        parallel_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
-        parallel_tool_executor,
     )
     assert failed
 
@@ -156,22 +155,20 @@ def test_run_tools_failed_tool(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    parallel_strategy,
 ):
     tool_results = []
 
     failed = strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        parallel_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
-        parallel_tool_executor,
     )
     assert failed
 
@@ -216,21 +213,20 @@ def test_run_tools_sequential(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
+    sequential_strategy,
 ):
     tool_results = []
 
     failed = strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        sequential_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
-        None,  # parallel_tool_executor
     )
     assert failed
 
@@ -304,10 +300,9 @@ def test_run_tools_creates_and_ends_span_on_success(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    parallel_strategy,
 ):
     """Test that run_tools creates and ends a span on successful execution."""
     # Setup mock tracer and span
@@ -325,13 +320,12 @@ def test_run_tools_creates_and_ends_span_on_success(
     strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        parallel_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
         parent_span,
-        parallel_tool_executor,
     )
 
     # Verify span was created with the parent span
@@ -352,10 +346,9 @@ def test_run_tools_creates_and_ends_span_on_failure(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    parallel_strategy,
 ):
     """Test that run_tools creates and ends a span on tool failure."""
     # Setup mock tracer and span
@@ -373,13 +366,12 @@ def test_run_tools_creates_and_ends_span_on_failure(
     strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        parallel_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
         parent_span,
-        parallel_tool_executor,
     )
 
     # Verify span was created with the parent span
@@ -398,10 +390,9 @@ def test_run_tools_handles_exception_in_tool_execution(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    sequential_strategy,
 ):
     """Test that run_tools properly handles exceptions during tool execution."""
     # Setup mock tracer and span
@@ -421,13 +412,12 @@ def test_run_tools_handles_exception_in_tool_execution(
     failed = strands.tools.executor.run_tools(
         mock_handler,
         tool_uses,
+        sequential_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
         None,
-        parallel_tool_executor,
     )
 
     # Tool execution should have failed
@@ -446,9 +436,8 @@ def test_run_tools_with_invalid_tool_use_id_still_creates_span(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     cycle_trace,
-    parallel_tool_executor,
+    sequential_strategy,
 ):
     """Test that run_tools creates a span even when the tool use ID is invalid."""
     # Setup mock tracer and span
@@ -466,13 +455,12 @@ def test_run_tools_with_invalid_tool_use_id_still_creates_span(
     strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        sequential_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
         None,
-        parallel_tool_executor,
     )
 
     # Verify span was created
@@ -509,10 +497,9 @@ def test_run_tools_parallel_execution_with_spans(
     tool_handler,
     tool_uses,
     event_loop_metrics,
-    request_state,
     invalid_tool_use_ids,
     cycle_trace,
-    parallel_tool_executor,
+    parallel_strategy,
 ):
     """Test that spans are created and ended for each tool in parallel execution."""
     # Setup mock tracer and spans
@@ -531,13 +518,12 @@ def test_run_tools_parallel_execution_with_spans(
     strands.tools.executor.run_tools(
         tool_handler,
         tool_uses,
+        parallel_strategy,
         event_loop_metrics,
-        request_state,
         invalid_tool_use_ids,
         tool_results,
         cycle_trace,
         parent_span,
-        parallel_tool_executor,
     )
 
     # Verify spans were created for both tools

@@ -27,6 +27,7 @@ from ..handlers.tool_handler import AgentToolHandler
 from ..models.bedrock import BedrockModel
 from ..telemetry.metrics import EventLoopMetrics
 from ..telemetry.tracer import get_tracer
+from ..tools.executor_strategy import ParallelToolExecutorStrategy, SequentialToolExecutorStrategy
 from ..tools.registry import ToolRegistry
 from ..tools.thread_pool_executor import ThreadPoolExecutorWrapper
 from ..tools.watcher import ToolWatcher
@@ -505,6 +506,8 @@ class Agent:
         messages = kwargs.pop("messages", self.messages)
         tool_config = kwargs.pop("tool_config", self.tool_config)
         kwargs.pop("agent", None)  # Remove agent to avoid conflicts
+
+        tool_execution_handler = ParallelToolExecutorStrategy(tool_execution_handler) if tool_execution_handler is not None else SequentialToolExecutorStrategy()
 
         try:
             # Execute the main event loop cycle
