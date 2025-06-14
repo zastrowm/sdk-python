@@ -307,34 +307,3 @@ def process_stream(
             handle_redact_content(chunk["redactContent"], messages, state)
 
     return stop_reason, state["message"], usage, metrics, kwargs["request_state"]
-
-
-def stream_messages(
-    model: Model,
-    system_prompt: Optional[str],
-    messages: Messages,
-    tool_config: Optional[ToolConfig],
-    callback_handler: Any,
-    **kwargs: Any,
-) -> Tuple[StopReason, Message, Usage, Metrics, Any]:
-    """Streams messages to the model and processes the response.
-
-    Args:
-        model: Model provider.
-        system_prompt: The system prompt to send.
-        messages: List of messages to send.
-        tool_config: Configuration for the tools to use.
-        callback_handler: Callback for processing events as they happen.
-        **kwargs: Additional keyword arguments that will be passed to the callback handler.
-            And also returned in the request_state.
-
-    Returns:
-        The reason for stopping, the final message, the usage metrics, and updated request state.
-    """
-    logger.debug("model=<%s> | streaming messages", model)
-
-    messages = remove_blank_messages_content_text(messages)
-    tool_specs = [tool["toolSpec"] for tool in tool_config.get("tools", [])] or None if tool_config else None
-
-    chunks = model.converse(messages, tool_specs, system_prompt)
-    return process_stream(chunks, callback_handler, messages, **kwargs)

@@ -104,27 +104,6 @@ def mock_tracer():
     return tracer
 
 
-@pytest.mark.parametrize(
-    ("kwargs", "exp_state"),
-    [
-        (
-            {"request_state": {"key1": "value1"}},
-            {"key1": "value1"},
-        ),
-        (
-            {},
-            {},
-        ),
-    ],
-)
-def test_initialize_state(kwargs, exp_state):
-    kwargs = strands.event_loop.event_loop.initialize_state(**kwargs)
-
-    tru_state = kwargs["request_state"]
-
-    assert tru_state == exp_state
-
-
 def test_event_loop_cycle_text_response(
     model,
     model_id,
@@ -458,19 +437,6 @@ def test_event_loop_cycle_stop(
     exp_request_state = {"stop_event_loop": True}
 
     assert tru_stop_reason == exp_stop_reason and tru_message == exp_message and tru_request_state == exp_request_state
-
-
-def test_prepare_next_cycle():
-    kwargs = {"event_loop_cycle_id": "c1"}
-    event_loop_metrics = strands.telemetry.metrics.EventLoopMetrics()
-    tru_result = strands.event_loop.event_loop.prepare_next_cycle(kwargs, event_loop_metrics)
-    exp_result = {
-        "event_loop_cycle_id": "c1",
-        "event_loop_parent_cycle_id": "c1",
-        "event_loop_metrics": event_loop_metrics,
-    }
-
-    assert tru_result == exp_result
 
 
 def test_cycle_exception(
