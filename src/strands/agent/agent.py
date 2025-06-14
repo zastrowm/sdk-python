@@ -522,6 +522,7 @@ class Agent:
                 system_prompt=system_prompt,
                 messages=messages,  # will be modified by event_loop_cycle
                 callback_handler=callback_handler_override,
+                tool_config=tool_config,
                 tool_handler=tool_handler,
                 tool_execution_handler=tool_execution_handler,
                 event_loop_metrics=event_loop_metrics,
