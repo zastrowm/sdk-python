@@ -297,7 +297,7 @@ class Agent:
             for hook in hooks:
                 self.hooks.add(hook)
 
-        self.hooks.get_hook(AgentInitialized)(agent=self)
+        self.hooks[AgentInitialized](agent=self)
 
     @property
     def tool(self) -> ToolCaller:
@@ -500,7 +500,6 @@ class Agent:
                 model=model,
                 system_prompt=system_prompt,
                 messages=messages,  # will be modified by event_loop_cycle
-                tool_config=tool_config,
                 callback_handler=callback_handler_override,
                 tool_handler=tool_handler,
                 tool_execution_handler=tool_execution_handler,

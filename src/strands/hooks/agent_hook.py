@@ -23,12 +23,17 @@ class AgentHook(Protocol):
 
 
 class AgentHookManager:
+    registered_hooks: Dict[Type, List[Any]]
 
-    registered_hooks: Dict[Type, List[Any]] = {}
-
-    def __init__(self, agent: "Agent",  hooks: Optional[List[AgentHook]] = None) -> None:
+    def __init__(self, agent: "Agent", hooks: Optional[List[AgentHook]] = None) -> None:
         self.agent = agent
-        self.hooks = hooks
+        self.registered_hooks = {}
+
+        for hook in hooks or []:
+            self.add(hook)
+
+    def __getitem__(self, hook_type: Type[T]) -> T:
+        return self.get_hook(hook_type)
 
     def add(self, hook: AgentHook):
         hook.register_hooks(hooks=self, agent=self.agent)
