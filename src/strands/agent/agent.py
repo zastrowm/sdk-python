@@ -24,7 +24,7 @@ from opentelemetry import trace
 from ..event_loop.event_loop import event_loop_cycle
 from ..handlers.callback_handler import CompositeCallbackHandler, PrintingCallbackHandler, null_callback_handler
 from ..handlers.tool_handler import AgentToolHandler
-from ..hooks.agent_hook import AgentHook, AgentHookManager, AgentInitialized
+from ..hooks.agent_hook import AgentHook, AgentHookManager, AgentInitializedHookEvent
 from ..models.bedrock import BedrockModel
 from ..telemetry.metrics import EventLoopMetrics
 from ..telemetry.tracer import get_tracer
@@ -316,7 +316,7 @@ class Agent:
             for hook in hooks:
                 self.hooks.add(hook)
 
-        self.hooks[AgentInitialized](agent=self)
+        self.hooks.invoke_hooks(AgentInitializedHookEvent(agent=self))
 
     @property
     def tool(self) -> ToolCaller:
