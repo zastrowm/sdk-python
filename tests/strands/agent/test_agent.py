@@ -1194,3 +1194,22 @@ def test_event_loop_cycle_includes_parent_span(mock_get_tracer, mock_event_loop_
     kwargs = mock_event_loop_cycle.call_args[1]
     assert "event_loop_parent_span" in kwargs
     assert kwargs["event_loop_parent_span"] == mock_span
+
+
+def test_agent__init__nested_tools_flattening(tool_decorated, tool_module, tool_imported, tool_registry):
+    _ = tool_registry
+    # Nested structure: [tool_decorated, [tool_module, [tool_imported]]]
+    agent = Agent(tools=[tool_decorated, [tool_module, [tool_imported]]])
+    tru_tool_names = sorted(tool_spec["toolSpec"]["name"] for tool_spec in agent.tool_config["tools"])
+    exp_tool_names = ["tool_decorated", "tool_imported", "tool_module"]
+    assert tru_tool_names == exp_tool_names
+
+
+def test_agent__init__deeply_nested_tools(tool_decorated, tool_module, tool_imported, tool_registry):
+    _ = tool_registry
+    # Deeply nested structure
+    nested_tools = [[[[tool_decorated]], [[tool_module]], tool_imported]]
+    agent = Agent(tools=nested_tools)
+    tru_tool_names = sorted(tool_spec["toolSpec"]["name"] for tool_spec in agent.tool_config["tools"])
+    exp_tool_names = ["tool_decorated", "tool_imported", "tool_module"]
+    assert tru_tool_names == exp_tool_names

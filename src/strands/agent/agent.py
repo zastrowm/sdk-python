@@ -296,7 +296,8 @@ class Agent:
 
         # Process tool list if provided
         if tools is not None:
-            self.tool_registry.process_tools(tools)
+            flat_tools = self._flatten_tools(tools)
+            self.tool_registry.process_tools(flat_tools)
 
         # Initialize tools and configuration
         self.tool_registry.initialize_tools(self.load_tools_from_directory)
@@ -624,3 +625,15 @@ class Agent:
                 trace_attributes["error"] = error
 
             self.tracer.end_agent_span(**trace_attributes)
+
+    def _flatten_tools(self, tools):
+        """Recursively flatten a nested list of tools."""
+        if tools is None:
+            return []
+        flat = []
+        for item in tools:
+            if isinstance(item, (list, tuple)):
+                flat.extend(self._flatten_tools(item))
+            else:
+                flat.append(item)
+        return flat
