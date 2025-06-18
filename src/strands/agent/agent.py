@@ -314,9 +314,9 @@ class Agent:
 
         if hooks is not None:
             for hook in hooks:
-                self.hooks.add(hook)
+                self.hooks.register_hook(hook)
 
-        self.hooks.invoke_hooks(AgentInitializedHookEvent(agent=self))
+        self.hooks.trigger_event(AgentInitializedHookEvent(agent=self))
 
     @property
     def tool(self) -> ToolCaller:
