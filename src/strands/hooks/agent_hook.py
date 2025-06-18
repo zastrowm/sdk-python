@@ -28,9 +28,22 @@ class HookEvent(Protocol):
 class AgentInitializedHookEvent(HookEvent):
     ...
 
+@dataclass
+class TextDiffsHookEvent(HookEvent):
+    data: str
+
+@dataclass
+class ToolCallHookEvent(HookEvent):
+    tool: AgentTool
+    tool_input: str
+    tool_response: str
+    tool_response_metadata: dict[str, Any]
+
 TEvent = TypeVar('TEvent', bound=HookEvent)
 
-type HookCallback[TEvent] = Callable[[TEvent], None]
+
+class HookCallback(Protocol, Generic(TEvent)):
+    def __call__(self, event: TEvent) -> None: ...
 
 OrderedHookCallback = namedtuple('OrderedHookCallback', ['callback', 'order'])
 
@@ -51,7 +64,7 @@ class AgentHookManager:
     def add(self, hook: AgentHook):
         hook.register_hooks(hooks=self, agent=self._agent)
 
-    def hook_into(self, hook_type: T, callback: T, order: int = 0):
+    def hook_into(self, hook_type: Type[T], callback: HookCallback[T], order: int = 0):
         if hook_type not in self._registered_hooks:
             self._registered_hooks[hook_type] = []
 
@@ -79,3 +92,20 @@ class AgentHookManager:
 
         for hook_callback in self.get_hook_callbacks(hook_type):
             hook_callback(event)
+
+
+class TextPrinting(AgentHook):
+    def register_hooks(self, hooks: "AgentHookManager", agent: "Agent") -> None:
+        hooks.hook_into(TextDiffsHookEvent, self._handle_text_diffs)
+        hooks.hook_into(ToolCallHookEvent, self._handle_tool_calls)
+
+    def _handle_text_diffs(self, event: TextDiffsHookEvent) -> None:
+        print(event.data)
+
+    def _handle_tool_calls(self, event: ToolCallHookEvent) -> None:
+        print(f"Tool call: {event.tool.tool_name} with input: {event.tool_input}")
+
+# printer = TextPrinting()
+# storage = DdbStorageProvider()
+#
+# >>> agent = Agent(hooks=[printer, storage])
