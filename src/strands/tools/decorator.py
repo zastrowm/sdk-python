@@ -306,6 +306,18 @@ class DecoratedFunctionTool(AgentTool, Generic[P, R]):
         Returns:
             A new DecoratedFunctionTool with the instance bound to the function if accessed through an instance,
             otherwise returns self.
+
+        Example:
+            ```python
+            class MyClass:
+                @tool
+                def my_tool():
+                    ...
+
+            instance = MyClass()
+            # instance of DecoratedFunctionTool that works as you'd expect
+            tool = instance.my_tool
+            ```
         """
         if instance is not None:
 
