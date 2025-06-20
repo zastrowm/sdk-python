@@ -51,16 +51,17 @@ from typing import (
     ParamSpec,
     Type,
     TypeVar,
+    Union,
     cast,
     get_type_hints,
     overload,
-    override,
 )
 
 import docstring_parser
 from pydantic import BaseModel, Field, create_model
+from typing_extensions import override
 
-from strands.types.tools import AgentTool, ToolResult, ToolSpec, ToolUse
+from strands.types.tools import AgentTool, JSONSchema, ToolResult, ToolSpec, ToolUse
 
 # Type for wrapped function
 T = TypeVar("T", bound=Callable[..., Any])
@@ -253,7 +254,7 @@ P = ParamSpec("P")  # Captures all parameters
 R = TypeVar("R")  # Return type
 
 
-class DecoratedFunctionTool(Generic[P, R], AgentTool):
+class DecoratedFunctionTool(AgentTool, Generic[P, R]):
     """An AgentTool that wraps a function that was decorated with @tool.
 
     This class adapts Python functions decorated with @tool to the AgentTool interface. It handles both direct
@@ -292,7 +293,7 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
 
         functools.update_wrapper(wrapper=self, wrapped=self.original_function)
 
-    def __get__(self, instance: Any, obj_type=None) -> "DecoratedFunctionTool[P, R]":
+    def __get__(self, instance: Any, obj_type: Optional[Type] = None) -> "DecoratedFunctionTool[P, R]":
         """Descriptor protocol implementation for proper method binding.
 
         This method enables the decorated function to work correctly when used as a class method.
@@ -396,7 +397,8 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
             if "agent" in kwargs and "agent" in self._metadata.signature.parameters:
                 validated_input["agent"] = kwargs.get("agent")
 
-            result = self.original_function(**validated_input)
+            # We get "too few arguments here" but because that's because fof the way we're calling it
+            result = self.original_function(**validated_input)  # type: ignore
 
             # FORMAT THE RESULT for Strands Agent
             if isinstance(result, dict) and "status" in result and "content" in result:
@@ -456,8 +458,19 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
 def tool(__func: Callable[P, R]) -> DecoratedFunctionTool[P, R]: ...
 # Handle @decorator()
 @overload
-def tool(**tool_kwargs: Any) -> Callable[[Callable[P, R]], DecoratedFunctionTool[P, R]]: ...
-def tool(func: Optional[Callable[P, R]] = None, **tool_kwargs: Any) -> DecoratedFunctionTool[P, R]:
+def tool(
+    description: Optional[str] = None,
+    inputSchema: Optional[JSONSchema] = None,
+    name: Optional[str] = None,
+) -> Callable[[Callable[P, R]], DecoratedFunctionTool[P, R]]: ...
+# Suppressing the type error because we want callers to be able to use both `tool` and `tool()` at the
+# call site, but the actual implementation handles that and it's not representable via the type-system
+def tool(  # type: ignore
+    func: Optional[Callable[P, R]] = None,
+    description: Optional[str] = None,
+    inputSchema: Optional[JSONSchema] = None,
+    name: Optional[str] = None,
+) -> Union[DecoratedFunctionTool[P, R], Callable[[Callable[P, R]], DecoratedFunctionTool[P, R]]]:
     """Decorator that transforms a Python function into a Strands tool.
 
     This decorator seamlessly enables a function to be called both as a regular Python function and as a Strands tool.
@@ -472,13 +485,19 @@ def tool(func: Optional[Callable[P, R]] = None, **tool_kwargs: Any) -> Decorated
     4. Formats return values according to the expected Strands tool result format
     5. Provides automatic error handling and reporting
 
+    The decorator can be used in two ways:
+    - As a simple decorator: `@tool`
+    - With parameters: `@tool(name="custom_name", description="Custom description")`
+
     Args:
-        func: The function to decorate.
-        **tool_kwargs: Additional tool specification options to override extracted values.
-            E.g., `name="custom_name", description="Custom description"`.
+        func: The function to decorate. When used as a simple decorator, this is the function being decorated.
+            When used with parameters, this will be None.
+        description: Optional custom description to override the function's docstring.
+        inputSchema: Optional custom JSON schema to override the automatically generated schema.
+        name: Optional custom name to override the function's name.
 
     Returns:
-        The decorated function with attached tool specifications.
+        An AgentTool that also mimics the original function when invoked
 
     Example:
         ```python
@@ -486,11 +505,11 @@ def tool(func: Optional[Callable[P, R]] = None, **tool_kwargs: Any) -> Decorated
         def my_tool(name: str, count: int = 1) -> str:
             '''Does something useful with the provided parameters.
 
-            "Args:
+    Args:
                 name: The name to process
                 count: Number of times to process (default: 1)
 
-            "Returns:
+    Returns:
                 A message with the result
             '''
             return f"Processed {name} {count} times"
@@ -503,13 +522,25 @@ def tool(func: Optional[Callable[P, R]] = None, **tool_kwargs: Any) -> Decorated
         #   "content": [{"text": "Processed example 3 times"}]
         # }
         ```
+
+    Example with parameters:
+        ```python
+        @tool(name="custom_tool", description="A tool with a custom name and description")
+        def my_tool(name: str, count: int = 1) -> str:
+            return f"Processed {name} {count} times"
+        ```
     """
 
     def decorator(f: T) -> "DecoratedFunctionTool[P, R]":
         # Create function tool metadata
         tool_meta = FunctionToolMetadata(f)
         tool_spec = tool_meta.extract_metadata()
-        tool_spec.update(tool_kwargs)
+        if name is not None:
+            tool_spec["name"] = name
+        if description is not None:
+            tool_spec["description"] = description
+        if inputSchema is not None:
+            tool_spec["inputSchema"] = inputSchema
 
         tool_name = tool_spec.get("name", f.__name__)
 
@@ -520,6 +551,8 @@ def tool(func: Optional[Callable[P, R]] = None, **tool_kwargs: Any) -> Decorated
 
     # Handle both @tool and @tool() syntax
     if func is None:
+        # Need to ignore type-checking here since it's hard to represent the support
+        # for both flows using the type system
         return decorator
 
     return decorator(func)

@@ -58,14 +58,7 @@ Args:
 
     # Make sure these are set properly
     assert test_tool.__wrapped__ is not None
-    assert test_tool.__doc__ == (
-        "Test tool function.\n"
-        "\n"
-        "        Args:\n"
-        "            param1: First parameter\n"
-        "            param2: Second parameter\n"
-        "        "
-    )
+    assert test_tool.__doc__ == test_tool.original_function.__doc__
 
 
 def test_tool_with_custom_name_description():

@@ -6,7 +6,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from ..types.tools import AgentTool
 from .decorator import DecoratedFunctionTool
@@ -141,7 +141,8 @@ class ToolLoader:
                         logger.debug(
                             "tool_name=<%s>, module_path=<%s> | found function-based tool", function_name, module_path
                         )
-                        return func
+                        # mypy has problems converting between DecoratedFunctionTool <-> AgentTool
+                        return cast(AgentTool, func)
                     else:
                         raise ValueError(
                             f"Function {function_name} in {module_path} is not a valid tool (missing @tool decorator)"
@@ -174,8 +175,8 @@ class ToolLoader:
                     logger.debug(
                         "tool_name=<%s>, tool_path=<%s> | found function-based tool in path", attr_name, tool_path
                     )
-                    # Return as DecoratedFunctionTool
-                    return attr
+                    # mypy has problems converting between DecoratedFunctionTool <-> AgentTool
+                    return cast(AgentTool, attr)
 
             # If no function-based tools found, fall back to traditional module-level tool
             tool_spec = getattr(module, "TOOL_SPEC", None)
