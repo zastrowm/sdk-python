@@ -47,7 +47,6 @@ def scan_module_for_tools(module: Any) -> List[DecoratedFunctionTool]:
     tools = []
 
     for name, obj in inspect.getmembers(module):
-        # Check if this is a function with TOOL_SPEC attached
         if isinstance(obj, DecoratedFunctionTool):
             # Create a function tool with correct name
             try:
@@ -136,7 +135,6 @@ class ToolLoader:
 
                     func = getattr(module, function_name)
 
-                    # Check if the function has a TOOL_SPEC (from @tool decorator)
                     if isinstance(func, DecoratedFunctionTool):
                         logger.debug(
                             "tool_name=<%s>, module_path=<%s> | found function-based tool", function_name, module_path
@@ -170,7 +168,6 @@ class ToolLoader:
             # First, check for function-based tools with @tool decorator
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                # Check if this is a function with TOOL_SPEC attached (from @tool decorator)
                 if isinstance(attr, DecoratedFunctionTool):
                     logger.debug(
                         "tool_name=<%s>, tool_path=<%s> | found function-based tool in path", attr_name, tool_path

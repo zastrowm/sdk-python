@@ -1,7 +1,6 @@
 """
 Tests for the function-based tool decorator pattern.
 """
-# mypy: ignore-errors
 
 from typing import Any, Dict, Optional, Union
 from unittest.mock import MagicMock
