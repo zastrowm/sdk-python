@@ -42,7 +42,20 @@ Example:
 
 import functools
 import inspect
-from typing import Any, Callable, Dict, Generic, Optional, ParamSpec, Type, TypeVar, cast, get_type_hints, overload
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Optional,
+    ParamSpec,
+    Type,
+    TypeVar,
+    cast,
+    get_type_hints,
+    overload,
+    override,
+)
 
 import docstring_parser
 from pydantic import BaseModel, Field, create_model
@@ -241,10 +254,10 @@ R = TypeVar("R")  # Return type
 
 
 class DecoratedFunctionTool(Generic[P, R], AgentTool):
-    """A Strands Agent tool that wraps a function that was decorated with @tool.
+    """An AgentTool that wraps a function that was decorated with @tool.
 
-    This class implements the AgentTool interface and provides the bridge between Python functions and the Strands
-    Agent tool system. It handles both direct function calls and tool use invocations, maintaining the function's
+    This class adapts Python functions decorated with @tool to the AgentTool interface. It handles both direct
+    function calls and tool use invocations, maintaining the function's
     original behavior while adding tool capabilities.
 
     The class is generic over the function's parameter types (P) and return type (R) to maintain type safety.
@@ -253,6 +266,7 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
     _tool_name: str
     _tool_spec: ToolSpec
     _metadata: FunctionToolMetadata
+    original_function: Callable[P, R]
 
     def __init__(
         self,
@@ -271,14 +285,14 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
         """
         super().__init__()
 
-        self._function = function
+        self.original_function = function
         self._tool_spec = tool_spec
         self._metadata = metadata
         self._tool_name = tool_name
 
-        functools.update_wrapper(wrapper=self, wrapped=self._function)
+        functools.update_wrapper(wrapper=self, wrapped=self.original_function)
 
-    def __get__(self, instance, obj_type=None) -> "DecoratedFunctionTool[P, R]":
+    def __get__(self, instance: Any, obj_type=None) -> "DecoratedFunctionTool[P, R]":
         """Descriptor protocol implementation for proper method binding.
 
         This method enables the decorated function to work correctly when used as a class method.
@@ -297,7 +311,7 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 # insert the instance method
                 args = instance, *args
-                func = self._function
+                func = self.original_function
                 return func(*args, **kwargs)
 
             return DecoratedFunctionTool(
@@ -318,7 +332,7 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
         Returns:
             The result of the original function call.
         """
-        return self._function(*args, **kwargs)
+        return self.original_function(*args, **kwargs)
 
     @property
     def tool_name(self) -> str:
@@ -343,9 +357,9 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
         """Get the type of the tool.
 
         Returns:
-            The string "decorated-function" indicating this is a function-based tool.
+            The string "function" indicating this is a function-based tool.
         """
-        return "decorated-function"
+        return "function"
 
     def invoke(self, tool: ToolUse, *args: Any, **kwargs: dict[str, Any]) -> ToolResult:
         """Invoke the tool with a tool use specification.
@@ -382,7 +396,7 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
             if "agent" in kwargs and "agent" in self._metadata.signature.parameters:
                 validated_input["agent"] = kwargs.get("agent")
 
-            result = self._function(**validated_input)
+            result = self.original_function(**validated_input)
 
             # FORMAT THE RESULT for Strands Agent
             if isinstance(result, dict) and "status" in result and "content" in result:
@@ -415,6 +429,26 @@ class DecoratedFunctionTool(Generic[P, R], AgentTool):
                 "status": "error",
                 "content": [{"text": f"Error: {error_type} - {error_msg}"}],
             }
+
+    @property
+    def supports_hot_reload(self) -> bool:
+        """Check if this tool supports automatic reloading when modified.
+
+        Returns:
+            Always true for function-based tools.
+        """
+        return True
+
+    @override
+    def get_display_properties(self) -> dict[str, str]:
+        """Get properties to display in UI representations.
+
+        Returns:
+            Function properties (e.g., function name).
+        """
+        properties = super().get_display_properties()
+        properties["Function"] = self.original_function.__name__
+        return properties
 
 
 # Handle @decorator
