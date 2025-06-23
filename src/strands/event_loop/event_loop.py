@@ -88,11 +88,11 @@ def event_loop_cycle(
     kwargs["event_loop_cycle_id"] = uuid.uuid4()
 
     event_loop_metrics: EventLoopMetrics = kwargs.get("event_loop_metrics", EventLoopMetrics())
-
     # Initialize state and get cycle trace
     if "request_state" not in kwargs:
         kwargs["request_state"] = {}
-    cycle_start_time, cycle_trace = event_loop_metrics.start_cycle()
+    attributes = {"event_loop_cycle_id": str(kwargs.get("event_loop_cycle_id"))}
+    cycle_start_time, cycle_trace = event_loop_metrics.start_cycle(attributes=attributes)
     kwargs["event_loop_cycle_trace"] = cycle_trace
 
     callback_handler(start=True)
@@ -130,14 +130,19 @@ def event_loop_cycle(
         )
 
         try:
-            stop_reason, message, usage, metrics, kwargs["request_state"] = stream_messages(
-                model,
-                system_prompt,
-                messages,
-                tool_config,
-                callback_handler,
-                **kwargs,
-            )
+            # TODO: As part of the migration to async-iterator, we will continue moving callback_handler calls up the
+            #       call stack. At this point, we converted all events that were previously passed to the handler in
+            #       `stream_messages` into yielded events that now have the "callback" key. To maintain backwards
+            #       compatability, we need to combine the event with kwargs before passing to the handler. This we will
+            #       revisit when migrating to strongly typed events.
+            for event in stream_messages(model, system_prompt, messages, tool_config):
+                if "callback" in event:
+                    inputs = {**event["callback"], **(kwargs if "delta" in event["callback"] else {})}
+                    callback_handler(**inputs)
+            else:
+                stop_reason, message, usage, metrics = event["stop"]
+                kwargs.setdefault("request_state", {})
+
             if model_invoke_span:
                 tracer.end_model_invoke_span(model_invoke_span, message, usage)
             break  # Success! Break out of retry loop
@@ -211,7 +216,7 @@ def event_loop_cycle(
             )
 
         # End the cycle and return results
-        event_loop_metrics.end_cycle(cycle_start_time, cycle_trace)
+        event_loop_metrics.end_cycle(cycle_start_time, cycle_trace, attributes)
         if cycle_span:
             tracer.end_event_loop_cycle_span(
                 span=cycle_span,
@@ -334,7 +339,7 @@ def _handle_tool_execution(
         kwargs (Dict[str, Any]): Additional keyword arguments, including request state.
 
     Returns:
-        Tuple[StopReason, Message, EventLoopMetrics, Dict[str, Any]]: 
+        Tuple[StopReason, Message, EventLoopMetrics, Dict[str, Any]]:
             - The stop reason,
             - The updated message,
             - The updated event loop metrics,
@@ -344,7 +349,6 @@ def _handle_tool_execution(
 
     if not tool_uses:
         return stop_reason, message, event_loop_metrics, kwargs["request_state"]
-
     tool_handler_process = partial(
         tool_handler.process,
         messages=messages,
