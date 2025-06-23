@@ -185,6 +185,29 @@ def test_agent_parameter_passing():
     assert "test" in result["content"][0]["text"]
 
 
+def test_agent_backwards_compatability_parameter_passing():
+    """Test passing agent parameter to tool function."""
+    mock_agent = MagicMock()
+
+    @tool
+    def test_tool(param: str, agent=None) -> str:
+        """Test tool with agent parameter."""
+        if agent:
+            return f"Agent: {agent}, Param: {param}"
+        return f"Param: {param}"
+
+    tool_use = {"toolUseId": "test-id", "input": {"param": "test"}}
+
+    # Test without agent
+    result = test_tool(tool_use)
+    assert result["content"][0]["text"] == "Param: test"
+
+    # Test with agent
+    result = test_tool(tool_use, agent=mock_agent)
+    assert "Agent:" in result["content"][0]["text"]
+    assert "test" in result["content"][0]["text"]
+
+
 def test_tool_decorator_with_different_return_values():
     """Test tool decorator with different return value types."""
 
@@ -256,6 +279,43 @@ def test_class_method_handling():
     tool_use = {"toolUseId": "test-id", "input": {"param": "tool-value"}}
     result = instance.test_method.invoke(tool_use)
     assert "Test: tool-value" in result["content"][0]["text"]
+
+
+def test_tool_as_adhoc_field():
+    @tool
+    def test_method(param: str) -> str:
+        return f"param: {param}"
+
+    class MyThing: ...
+
+    instance: Any = MyThing()
+    instance.field = test_method
+
+    result = instance.field("example")
+    assert result == "param: example"
+
+    result2 = instance.field.invoke({"toolUseId": "test-id", "input": {"param": "example"}})
+    assert result2 == {"content": [{"text": "param: example"}], "status": "success", "toolUseId": "test-id"}
+
+
+def test_tool_as_instance_field():
+    """Make sure that class instance properties operate correctly."""
+
+    class MyThing:
+        def __init__(self):
+            @tool
+            def test_method(param: str) -> str:
+                return f"param: {param}"
+
+            self.field = test_method
+
+    instance = MyThing()
+
+    result = instance.field("example")
+    assert result == "param: example"
+
+    result2 = instance.field.invoke({"toolUseId": "test-id", "input": {"param": "example"}})
+    assert result2 == {"content": [{"text": "param: example"}], "status": "success", "toolUseId": "test-id"}
 
 
 def test_default_parameter_handling():

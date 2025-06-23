@@ -42,6 +42,7 @@ Example:
 
 import functools
 import inspect
+import logging
 from typing import (
     Any,
     Callable,
@@ -62,6 +63,9 @@ from pydantic import BaseModel, Field, create_model
 from typing_extensions import override
 
 from strands.types.tools import AgentTool, JSONSchema, ToolResult, ToolSpec, ToolUse
+
+logger = logging.getLogger(__name__)
+
 
 # Type for wrapped function
 T = TypeVar("T", bound=Callable[..., Any])
@@ -319,17 +323,13 @@ class DecoratedFunctionTool(AgentTool, Generic[P, R]):
             tool = instance.my_tool
             ```
         """
-        if instance is not None:
-
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                # insert the instance method
-                args = instance, *args
-                func = self.original_function
-                return func(*args, **kwargs)
-
+        if instance is not None and not inspect.ismethod(self.original_function):
+            # Create a bound method
+            new_callback = self.original_function.__get__(instance, instance.__class__)
             return DecoratedFunctionTool(
-                function=wrapper, tool_name=self.tool_name, tool_spec=self.tool_spec, metadata=self._metadata
+                function=new_callback, tool_name=self.tool_name, tool_spec=self.tool_spec, metadata=self._metadata
             )
+
         return self
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -345,6 +345,21 @@ class DecoratedFunctionTool(AgentTool, Generic[P, R]):
         Returns:
             The result of the original function call.
         """
+        if (
+            len(args) > 0
+            and isinstance(args[0], dict)
+            and (not args[0] or "toolUseId" in args[0] or "input" in args[0])
+        ):
+            # This block is only for backwards compatability so we cast as any for now
+            logger.warning(
+                "issue=<%s> | "
+                "passing tool use into a function instead of using .invoke will be removed in a future release",
+                "https://github.com/strands-agents/sdk-python/pull/258",
+            )
+            tool_use = cast(Any, args[0])
+
+            return cast(R, self.invoke(tool_use, **kwargs))
+
         return self.original_function(*args, **kwargs)
 
     @property
