@@ -11,12 +11,11 @@ import sys
 from importlib import import_module, util
 from os.path import expanduser
 from pathlib import Path
-from typing import Any, Dict, List, Optional, overload
+from typing import Any, Dict, List, Optional
 
 from typing_extensions import TypedDict, cast
 
 from ..types.tools import AgentTool, Tool, ToolChoice, ToolChoiceAuto, ToolConfig, ToolSpec
-from .decorator import DecoratedFunctionTool
 from .loader import scan_module_for_tools
 from .tools import PythonAgentTool, normalize_schema, normalize_tool_spec
 
@@ -170,11 +169,7 @@ class ToolRegistry:
         return tool_config
 
     # mypy has problems converting between DecoratedFunctionTool <-> AgentTool
-    @overload
-    def register_tool(self, tool: DecoratedFunctionTool) -> None: ...
-    @overload
-    def register_tool(self, tool: AgentTool) -> None: ...
-    def register_tool(self, tool: AgentTool) -> None:  # type: ignore
+    def register_tool(self, tool: AgentTool) -> None:
         """Register a tool function with the given name.
 
         Args:

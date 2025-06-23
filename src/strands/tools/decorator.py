@@ -62,7 +62,7 @@ import docstring_parser
 from pydantic import BaseModel, Field, create_model
 from typing_extensions import override
 
-from strands.types.tools import AgentTool, JSONSchema, ToolResult, ToolSpec, ToolUse
+from ..types.tools import AgentTool, JSONSchema, ToolResult, ToolSpec, ToolUse
 
 logger = logging.getLogger(__name__)
 
