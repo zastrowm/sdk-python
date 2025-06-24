@@ -510,6 +510,8 @@ def test_invoke_with_agent():
         return a, agent
 
     tool = FunctionTool(identity, tool_name="identity")
+    # FunctionTool is a pass through for AgentTool instances until we remove it in a future release (#258)
+    assert tool == identity
 
     exp_output = {"toolUseId": "unknown", "status": "success", "content": [{"text": "(2, {'state': 1})"}]}
 
