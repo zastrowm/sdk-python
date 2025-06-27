@@ -454,7 +454,6 @@ def test_structured_output_success(mistral_client, model, test_output_model_cls)
     messages = [{"role": "user", "content": [{"text": "Extract data"}]}]
 
     mock_response = unittest.mock.Mock()
-    mock_response.bloach = True
     mock_response.choices = [unittest.mock.Mock()]
     mock_response.choices[0].message.tool_calls = [unittest.mock.Mock()]
     mock_response.choices[0].message.tool_calls[0].function.arguments = '{"name": "John", "age": 30}'
