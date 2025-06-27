@@ -142,7 +142,7 @@ class BedrockModel(Model):
             region_name=resolved_region,
         )
 
-        logger.debug("region=<%s> | bedrock client created", resolved_region)
+        logger.debug("region=<%s> | bedrock client created", self.client.meta.region_name)
 
     @override
     def update_config(self, **model_config: Unpack[BedrockConfig]) -> None:  # type: ignore
