@@ -134,11 +134,15 @@ class BedrockModel(Model):
         else:
             client_config = BotocoreConfig(user_agent_extra="strands-agents")
 
+        resolved_region = region_name or session.region_name or os.environ.get("AWS_REGION") or DEFAULT_BEDROCK_REGION
+
         self.client = session.client(
             service_name="bedrock-runtime",
             config=client_config,
-            region_name=region_name or session.region_name or os.environ.get("AWS_REGION") or DEFAULT_BEDROCK_REGION,
+            region_name=resolved_region,
         )
+
+        logger.debug("region=<%s> | bedrock client created", resolved_region)
 
     @override
     def update_config(self, **model_config: Unpack[BedrockConfig]) -> None:  # type: ignore
