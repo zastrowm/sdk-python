@@ -5,7 +5,6 @@ from pydantic import BaseModel
 
 import strands
 from strands import Agent, tool
-from strands.models import BedrockModel
 
 if "OPENAI_API_KEY" not in os.environ:
     pytest.skip(allow_module_level=True, reason="OPENAI_API_KEY environment variable missing")

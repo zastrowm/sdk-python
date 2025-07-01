@@ -408,8 +408,7 @@ def function():
 
 @pytest.fixture
 def tool(function):
-    tool_function = strands.tools.tool(function)
-    return tool_function
+    return strands.tools.tool(function)
 
 
 def test__init__invalid_name():
