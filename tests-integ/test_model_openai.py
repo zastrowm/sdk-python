@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 import strands
 from strands import Agent, tool
+from strands.models import BedrockModel
 
 if "OPENAI_API_KEY" not in os.environ:
     pytest.skip(allow_module_level=True, reason="OPENAI_API_KEY environment variable missing")
@@ -67,9 +68,6 @@ def test_structured_output(model):
     assert result.weather == "sunny"
 
 
-@pytest.skip(
-    reason="OpenAI provider cannot use tools that return images - https://github.com/strands-agents/sdk-python/issues/320"
-)
 def test_tool_returning_images(model, test_image_path):
     @tool
     def tool_with_image_return():
@@ -88,7 +86,7 @@ def test_tool_returning_images(model, test_image_path):
             ],
         }
 
-    agent = Agent(model=model, tools=[tool_with_image_return])
+    agent = Agent(model=BedrockModel(), tools=[tool_with_image_return])
     # NOTE - this currently fails with: "Invalid 'messages[3]'. Image URLs are only allowed for messages with role
     # 'user', but this message with role 'tool' contains an image URL."
     # See https://github.com/strands-agents/sdk-python/issues/320 for additional details
