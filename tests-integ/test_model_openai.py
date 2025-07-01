@@ -86,7 +86,7 @@ def test_tool_returning_images(model, test_image_path):
             ],
         }
 
-    agent = Agent(model=BedrockModel(), tools=[tool_with_image_return])
+    agent = Agent(model, tools=[tool_with_image_return])
     # NOTE - this currently fails with: "Invalid 'messages[3]'. Image URLs are only allowed for messages with role
     # 'user', but this message with role 'tool' contains an image URL."
     # See https://github.com/strands-agents/sdk-python/issues/320 for additional details
