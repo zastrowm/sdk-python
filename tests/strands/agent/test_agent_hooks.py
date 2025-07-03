@@ -61,6 +61,13 @@ def agent(
 
     return agent
 
+@pytest.fixture
+def user():
+    class User(BaseModel):
+        name: str
+        age: int
+
+    return User(name="Jane Doe", age=30)
 
 # mock the User(name='Jane Doe', age=30)
 class User(BaseModel):
@@ -71,7 +78,7 @@ class User(BaseModel):
 
 
 @unittest.mock.patch("strands.experimental.hooks.registry.HookRegistry.invoke_callbacks")
-def test_agent_hooks__init__(mock_invoke_callbacks):
+def test_agent__init__hooks(mock_invoke_callbacks):
     """Verify that the AgentInitializedEvent is emitted on Agent construction."""
     agent = Agent()
 
@@ -80,7 +87,7 @@ def test_agent_hooks__init__(mock_invoke_callbacks):
     assert mock_invoke_callbacks.call_args == call(AgentInitializedEvent(agent=agent))
 
 
-def test_agent_hooks__call__(agent, hook_provider, agent_tool, tool_use):
+def test_agent__call__hooks(agent, hook_provider, agent_tool, tool_use):
     """Verify that the correct hook events are emitted as part of __call__."""
 
     agent("test message")
@@ -93,7 +100,7 @@ def test_agent_hooks__call__(agent, hook_provider, agent_tool, tool_use):
 
 
 @pytest.mark.asyncio
-async def test_agent_hooks_stream_async(agent, hook_provider, agent_tool, tool_use):
+async def test_agent_stream_async_hooks(agent, hook_provider, agent_tool, tool_use):
     """Verify that the correct hook events are emitted as part of stream_async."""
     iterator = agent.stream_async("test message")
     await anext(iterator)
@@ -110,11 +117,19 @@ async def test_agent_hooks_stream_async(agent, hook_provider, agent_tool, tool_u
     assert events.popleft() == EndRequestEvent(agent=agent)
 
 
-def test_agent_hooks_structured_output(agent, hook_provider, agenerator):
+def test_agent_structured_output_hooks(agent, hook_provider, user, agenerator):
     """Verify that the correct hook events are emitted as part of structured_output."""
 
-    expected_user = User(name="Jane Doe", age=30)
-    agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": expected_user}]))
+    agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
     agent.structured_output(User, "example prompt")
+
+    assert hook_provider.events_received == [StartRequestEvent(agent=agent), EndRequestEvent(agent=agent)]
+
+@pytest.mark.asyncio
+async def test_agent_structured_async_output_hooks(agent, hook_provider, user, agenerator):
+    """Verify that the correct hook events are emitted as part of structured_output_async."""
+
+    agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
+    await agent.structured_output_async(User, "example prompt")
 
     assert hook_provider.events_received == [StartRequestEvent(agent=agent), EndRequestEvent(agent=agent)]
