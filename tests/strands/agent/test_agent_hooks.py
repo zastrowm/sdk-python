@@ -61,6 +61,7 @@ def agent(
 
     return agent
 
+
 @pytest.fixture
 def user():
     class User(BaseModel):
@@ -68,13 +69,6 @@ def user():
         age: int
 
     return User(name="Jane Doe", age=30)
-
-# mock the User(name='Jane Doe', age=30)
-class User(BaseModel):
-    """A user of the system."""
-
-    name: str
-    age: int
 
 
 @unittest.mock.patch("strands.experimental.hooks.registry.HookRegistry.invoke_callbacks")
@@ -121,15 +115,16 @@ def test_agent_structured_output_hooks(agent, hook_provider, user, agenerator):
     """Verify that the correct hook events are emitted as part of structured_output."""
 
     agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
-    agent.structured_output(User, "example prompt")
+    agent.structured_output(type(user), "example prompt")
 
     assert hook_provider.events_received == [StartRequestEvent(agent=agent), EndRequestEvent(agent=agent)]
+
 
 @pytest.mark.asyncio
 async def test_agent_structured_async_output_hooks(agent, hook_provider, user, agenerator):
     """Verify that the correct hook events are emitted as part of structured_output_async."""
 
     agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
-    await agent.structured_output_async(User, "example prompt")
+    await agent.structured_output_async(type(user), "example prompt")
 
     assert hook_provider.events_received == [StartRequestEvent(agent=agent), EndRequestEvent(agent=agent)]
