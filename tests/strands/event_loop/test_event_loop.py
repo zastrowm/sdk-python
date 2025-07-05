@@ -1,15 +1,15 @@
 import concurrent
 import unittest.mock
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
 
 import strands
 import strands.telemetry
-from strands.handlers.tool_handler import AgentToolHandler
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.tools.registry import ToolRegistry
 from strands.types.exceptions import ContextWindowOverflowException, EventLoopException, ModelThrottledException
+from strands.types.tools import ToolUse
 
 
 @pytest.fixture
@@ -79,6 +79,20 @@ def tool_stream(tool):
 
 
 @pytest.fixture
+def tool_handler(alist):
+    def callback(tool_use: ToolUse):
+        ret = {
+            "toolUseId": tool_use.get("toolUseId"),
+            "status": "success",
+            "content": [{"text": "abcdEfghI123"}],
+        }
+        yield ret
+        return ret
+
+    return callback
+
+
+@pytest.fixture
 def agent(model, system_prompt, messages, tool_config, tool_registry, thread_pool):
     mock = unittest.mock.Mock(name="agent")
     mock.config.cache_points = []
@@ -87,7 +101,6 @@ def agent(model, system_prompt, messages, tool_config, tool_registry, thread_poo
     mock.messages = messages
     mock.tool_config = tool_config
     mock.tool_registry = tool_registry
-    mock.tool_handler = AgentToolHandler(mock)
     mock.thread_pool = thread_pool
     mock.event_loop_metrics = EventLoopMetrics()
 
@@ -118,6 +131,7 @@ async def test_event_loop_cycle_text_response(
 
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=ANY,
         kwargs={},
     )
     events = await alist(stream)
@@ -150,6 +164,7 @@ async def test_event_loop_cycle_text_response_throttling(
 
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=ANY,
         kwargs={},
     )
     events = await alist(stream)
@@ -188,6 +203,7 @@ async def test_event_loop_cycle_exponential_backoff(
 
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=ANY,
         kwargs={},
     )
     events = await alist(stream)
@@ -223,6 +239,7 @@ async def test_event_loop_cycle_text_response_throttling_exceeded(
     with pytest.raises(ModelThrottledException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -249,6 +266,7 @@ async def test_event_loop_cycle_text_response_error(
     with pytest.raises(RuntimeError):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -261,6 +279,7 @@ async def test_event_loop_cycle_tool_result(
     system_prompt,
     messages,
     tool_stream,
+    tool_handler,
     agenerator,
     alist,
 ):
@@ -276,6 +295,7 @@ async def test_event_loop_cycle_tool_result(
 
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=tool_handler,
         kwargs={},
     )
     events = await alist(stream)
@@ -334,6 +354,7 @@ async def test_event_loop_cycle_tool_result_error(
     with pytest.raises(EventLoopException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -354,6 +375,7 @@ async def test_event_loop_cycle_tool_result_no_tool_handler(
     with pytest.raises(EventLoopException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -374,6 +396,7 @@ async def test_event_loop_cycle_tool_result_no_tool_config(
     with pytest.raises(EventLoopException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -384,6 +407,7 @@ async def test_event_loop_cycle_stop(
     agent,
     model,
     tool,
+    tool_handler,
     agenerator,
     alist,
 ):
@@ -408,6 +432,7 @@ async def test_event_loop_cycle_stop(
 
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=tool_handler,
         kwargs={"request_state": {"stop_event_loop": True}},
     )
     events = await alist(stream)
@@ -436,6 +461,7 @@ async def test_cycle_exception(
     agent,
     model,
     tool_stream,
+    tool_handler,
     agenerator,
 ):
     model.converse.side_effect = [
@@ -451,6 +477,7 @@ async def test_cycle_exception(
     with pytest.raises(EventLoopException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=tool_handler,
             kwargs={},
         )
         async for event in stream:
@@ -486,6 +513,7 @@ async def test_event_loop_cycle_creates_spans(
     # Call event_loop_cycle
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=ANY,
         kwargs={},
     )
     await alist(stream)
@@ -521,6 +549,7 @@ async def test_event_loop_tracing_with_model_error(
     with pytest.raises(ContextWindowOverflowException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -536,6 +565,7 @@ async def test_event_loop_tracing_with_tool_execution(
     agent,
     model,
     tool_stream,
+    tool_handler,
     mock_tracer,
     agenerator,
     alist,
@@ -561,6 +591,7 @@ async def test_event_loop_tracing_with_tool_execution(
     # Call event_loop_cycle which should execute a tool
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=tool_handler,
         kwargs={},
     )
     await alist(stream)
@@ -603,6 +634,7 @@ async def test_event_loop_tracing_with_throttling_exception(
     with patch("strands.event_loop.event_loop.time.sleep"):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=ANY,
             kwargs={},
         )
         await alist(stream)
@@ -644,6 +676,7 @@ async def test_event_loop_cycle_with_parent_span(
     # Call event_loop_cycle with a parent span
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=agent,
+        tool_handler=ANY,
         kwargs={},
     )
     await alist(stream)
@@ -663,6 +696,7 @@ async def test_request_state_initialization(alist):
     # Call without providing request_state
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=mock_agent,
+        tool_handler=ANY,
         kwargs={},
     )
     events = await alist(stream)
@@ -675,6 +709,7 @@ async def test_request_state_initialization(alist):
     initial_request_state = {"key": "value"}
     stream = strands.event_loop.event_loop.event_loop_cycle(
         agent=mock_agent,
+        tool_handler=ANY,
         kwargs={"request_state": initial_request_state},
     )
     events = await alist(stream)
@@ -685,7 +720,7 @@ async def test_request_state_initialization(alist):
 
 
 @pytest.mark.asyncio
-async def test_prepare_next_cycle_in_tool_execution(agent, model, tool_stream, agenerator, alist):
+async def test_prepare_next_cycle_in_tool_execution(agent, model, tool_stream, tool_handler, agenerator, alist):
     """Test that cycle ID and metrics are properly updated during tool execution."""
     model.converse.side_effect = [
         agenerator(tool_stream),
@@ -713,6 +748,7 @@ async def test_prepare_next_cycle_in_tool_execution(agent, model, tool_stream, a
         # Call event_loop_cycle which should execute a tool and then call recurse_event_loop
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
+            tool_handler=tool_handler,
             kwargs={},
         )
         await alist(stream)

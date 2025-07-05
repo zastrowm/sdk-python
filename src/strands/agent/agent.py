@@ -15,6 +15,7 @@ import logging
 import os
 import random
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Any, AsyncGenerator, AsyncIterator, Callable, Mapping, Optional, Type, TypeVar, Union, cast
 
 from opentelemetry import trace
@@ -23,7 +24,6 @@ from pydantic import BaseModel
 from ..event_loop.event_loop import event_loop_cycle
 from ..experimental.hooks import AgentInitializedEvent, EndRequestEvent, HookRegistry, StartRequestEvent
 from ..handlers.callback_handler import PrintingCallbackHandler, null_callback_handler
-from ..handlers.tool_handler import AgentToolHandler
 from ..models.bedrock import BedrockModel
 from ..telemetry.metrics import EventLoopMetrics
 from ..telemetry.tracer import get_tracer
@@ -32,7 +32,7 @@ from ..tools.watcher import ToolWatcher
 from ..types.content import ContentBlock, Message, Messages
 from ..types.exceptions import ContextWindowOverflowException
 from ..types.models import Model
-from ..types.tools import ToolConfig, ToolResult, ToolUse
+from ..types.tools import ToolConfig, ToolGenerator, ToolResult, ToolUse
 from ..types.traces import AttributeValue
 from .agent_result import AgentResult
 from .conversation_manager import (
@@ -130,7 +130,7 @@ class Agent:
                 }
 
                 # Execute the tool
-                events = self._agent.tool_handler.run_tool(tool=tool_use, kwargs=kwargs)
+                events = self._agent._run_tool(tool=tool_use, kwargs=kwargs)
 
                 try:
                     while True:
@@ -276,7 +276,6 @@ class Agent:
         self.load_tools_from_directory = load_tools_from_directory
 
         self.tool_registry = ToolRegistry()
-        self.tool_handler = AgentToolHandler(agent=self)
 
         # Process tool list if provided
         if tools is not None:
@@ -557,6 +556,7 @@ class Agent:
             # Execute the main event loop cycle
             events = event_loop_cycle(
                 agent=self,
+                tool_handler=partial(self._run_tool, kwargs=kwargs),
                 kwargs=kwargs,
             )
             async for event in events:
@@ -568,6 +568,64 @@ class Agent:
             events = self._execute_event_loop_cycle(kwargs)
             async for event in events:
                 yield event
+
+    def _run_tool(self, tool: ToolUse, kwargs: dict[str, Any]) -> ToolGenerator:
+        """Process a tool invocation.
+
+        Looks up the tool in the registry and invokes it with the provided parameters.
+
+        Args:
+            tool: The tool object to process, containing name and parameters.
+            kwargs: Additional keyword arguments passed to the tool.
+
+        Yields:
+            Events of the tool invocation.
+
+        Returns:
+            The final tool result or an error response if the tool fails or is not found.
+        """
+        logger.debug("tool=<%s> | invoking", tool)
+        tool_use_id = tool["toolUseId"]
+        tool_name = tool["name"]
+
+        # Get the tool info
+        tool_info = self.tool_registry.dynamic_tools.get(tool_name)
+        tool_func = tool_info if tool_info is not None else self.tool_registry.registry.get(tool_name)
+
+        try:
+            # Check if tool exists
+            if not tool_func:
+                logger.error(
+                    "tool_name=<%s>, available_tools=<%s> | tool not found in registry",
+                    tool_name,
+                    list(self.tool_registry.registry.keys()),
+                )
+                return {
+                    "toolUseId": tool_use_id,
+                    "status": "error",
+                    "content": [{"text": f"Unknown tool: {tool_name}"}],
+                }
+            # Add standard arguments to kwargs for Python tools
+            kwargs.update(
+                {
+                    "model": self.model,
+                    "system_prompt": self.system_prompt,
+                    "messages": self.messages,
+                    "tool_config": self.tool_config,
+                }
+            )
+
+            result = tool_func.invoke(tool, **kwargs)
+            yield {"result": result}  # Placeholder until tool_func becomes a generator from which we can yield from
+            return result
+
+        except Exception as e:
+            logger.exception("tool_name=<%s> | failed to process tool", tool_name)
+            return {
+                "toolUseId": tool_use_id,
+                "status": "error",
+                "content": [{"text": f"Error: {str(e)}"}],
+            }
 
     def _record_tool_execution(
         self,

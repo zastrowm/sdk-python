@@ -6,7 +6,7 @@ These types are modeled after the Bedrock API.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Generator, Literal, Union
+from typing import Any, Callable, Generator, Literal, Union
 
 from typing_extensions import TypedDict
 
@@ -130,6 +130,8 @@ Configuration for how the model should choose tools.
 - "tool": The model must use the specified tool
 """
 
+RunToolHandler = Callable[[ToolUse], Generator[dict[str, Any], None, ToolResult]]
+"""Callback that runs a single tool and streams back results."""
 
 ToolGenerator = Generator[dict[str, Any], None, ToolResult]
 """Generator of tool events and a returned tool result."""

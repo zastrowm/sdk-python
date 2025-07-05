@@ -11,7 +11,6 @@ The event loop allows agents to:
 import logging
 import time
 import uuid
-from functools import partial
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from ..telemetry.metrics import Trace
@@ -20,7 +19,7 @@ from ..tools.executor import run_tools, validate_and_prepare_tools
 from ..types.content import Message
 from ..types.exceptions import ContextWindowOverflowException, EventLoopException, ModelThrottledException
 from ..types.streaming import Metrics, StopReason
-from ..types.tools import ToolResult, ToolUse
+from ..types.tools import RunToolHandler, ToolResult, ToolUse
 from .message_processor import clean_orphaned_empty_tool_uses
 from .streaming import stream_messages
 
@@ -36,6 +35,7 @@ MAX_DELAY = 240  # 4 minutes
 
 async def event_loop_cycle(
     agent: "Agent",
+    tool_handler: RunToolHandler,
     kwargs: dict[str, Any],
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Execute a single cycle of the event loop.
@@ -53,6 +53,7 @@ async def event_loop_cycle(
 
     Args:
         agent: The agent for which the cycle is being executed.
+        tool_handler: Callback that runs a single tool.
         kwargs: Additional arguments including:
 
             - request_state: State maintained across cycles
@@ -174,12 +175,6 @@ async def event_loop_cycle(
 
         # If the model is requesting to use tools
         if stop_reason == "tool_use":
-            if not agent.tool_handler:
-                raise EventLoopException(
-                    Exception("Model requested tool use but no tool handler provided"),
-                    kwargs["request_state"],
-                )
-
             if agent.tool_config is None:
                 raise EventLoopException(
                     Exception("Model requested tool use but no tool config provided"),
@@ -191,6 +186,7 @@ async def event_loop_cycle(
                 stop_reason,
                 message,
                 agent=agent,
+                tool_handler=tool_handler,
                 cycle_trace=cycle_trace,
                 cycle_span=cycle_span,
                 cycle_start_time=cycle_start_time,
@@ -231,13 +227,16 @@ async def event_loop_cycle(
     yield {"stop": (stop_reason, message, agent.event_loop_metrics, kwargs["request_state"])}
 
 
-async def recurse_event_loop(agent: "Agent", kwargs: dict[str, Any]) -> AsyncGenerator[dict[str, Any], None]:
+async def recurse_event_loop(
+    agent: "Agent", tool_handler: RunToolHandler, kwargs: dict[str, Any]
+) -> AsyncGenerator[dict[str, Any], None]:
     """Make a recursive call to event_loop_cycle with the current state.
 
     This function is used when the event loop needs to continue processing after tool execution.
 
     Args:
         agent: Agent for which the recursive call is being made.
+        tool_handler: Callback that runs a single tool.
         kwargs: Arguments to pass through event_loop_cycle
 
 
@@ -257,7 +256,7 @@ async def recurse_event_loop(agent: "Agent", kwargs: dict[str, Any]) -> AsyncGen
 
     yield {"callback": {"start": True}}
 
-    events = event_loop_cycle(agent=agent, kwargs=kwargs)
+    events = event_loop_cycle(agent=agent, tool_handler=tool_handler, kwargs=kwargs)
     async for event in events:
         yield event
 
@@ -268,6 +267,7 @@ async def _handle_tool_execution(
     stop_reason: StopReason,
     message: Message,
     agent: "Agent",
+    tool_handler: RunToolHandler,
     cycle_trace: Trace,
     cycle_span: Any,
     cycle_start_time: float,
@@ -304,10 +304,8 @@ async def _handle_tool_execution(
         yield {"stop": (stop_reason, message, agent.event_loop_metrics, kwargs["request_state"])}
         return
 
-    handler = partial(agent.tool_handler.run_tool, kwargs=kwargs)
-
     tool_events = run_tools(
-        handler=handler,
+        handler=tool_handler,
         tool_uses=tool_uses,
         event_loop_metrics=agent.event_loop_metrics,
         invalid_tool_use_ids=invalid_tool_use_ids,
@@ -339,6 +337,6 @@ async def _handle_tool_execution(
         yield {"stop": (stop_reason, message, agent.event_loop_metrics, kwargs["request_state"])}
         return
 
-    events = recurse_event_loop(agent=agent, kwargs=kwargs)
+    events = recurse_event_loop(agent=agent, tool_handler=tool_handler, kwargs=kwargs)
     async for event in events:
         yield event
