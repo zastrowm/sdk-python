@@ -59,15 +59,14 @@ def mock_event_loop_cycle():
 
 
 @pytest.fixture
-def tool_registry():
-    return strands.tools.registry.ToolRegistry()
+def mock_run_tool():
+    with unittest.mock.patch("strands.agent.agent.run_tool") as mock:
+        yield mock
 
 
 @pytest.fixture
-def run_tool_spy(agent):
-    spy = unittest.mock.Mock(wraps=agent._run_tool)
-    agent._run_tool = spy
-    return spy
+def tool_registry():
+    return strands.tools.registry.ToolRegistry()
 
 
 @pytest.fixture
@@ -839,8 +838,8 @@ def test_agent_init_with_no_model_or_model_id():
     assert agent.model.get_config().get("model_id") == DEFAULT_BEDROCK_MODEL_ID
 
 
-def test_agent_tool_no_parameter_conflict(agent, run_tool_spy, tool_registry, mock_randint):
-    run_tool_spy.return_value = iter([])
+def test_agent_tool_no_parameter_conflict(agent, tool_registry, mock_randint, mock_run_tool):
+    mock_run_tool.return_value = iter([])
 
     @strands.tools.tool(name="system_prompter")
     def function(system_prompt: str) -> str:
@@ -852,7 +851,8 @@ def test_agent_tool_no_parameter_conflict(agent, run_tool_spy, tool_registry, mo
 
     agent.tool.system_prompter(system_prompt="tool prompt")
 
-    run_tool_spy.assert_called_with(
+    mock_run_tool.assert_called_with(
+        agent=agent,
         tool={
             "toolUseId": "tooluse_system_prompter_1",
             "name": "system_prompter",
@@ -862,8 +862,8 @@ def test_agent_tool_no_parameter_conflict(agent, run_tool_spy, tool_registry, mo
     )
 
 
-def test_agent_tool_with_name_normalization(agent, run_tool_spy, tool_registry, mock_randint):
-    run_tool_spy.return_value = iter([])
+def test_agent_tool_with_name_normalization(agent, tool_registry, mock_randint, mock_run_tool):
+    mock_run_tool.return_value = iter([])
 
     tool_name = "system-prompter"
 
@@ -878,8 +878,8 @@ def test_agent_tool_with_name_normalization(agent, run_tool_spy, tool_registry, 
     agent.tool.system_prompter(system_prompt="tool prompt")
 
     # Verify the correct tool was invoked
-    assert run_tool_spy.call_count == 1
-    tool_call = run_tool_spy.call_args.kwargs.get("tool")
+    assert mock_run_tool.call_count == 1
+    tool_call = mock_run_tool.call_args.kwargs.get("tool")
 
     assert tool_call == {
         # Note that the tool-use uses the "python safe" name
@@ -1323,31 +1323,3 @@ def test_agent_state_get_breaks_deep_dict_reference():
 
     # This will fail if AgentState reflects the updated reference
     json.dumps(agent.state.get())
-
-
-def test_agent_run_tool(agent, tool_decorated, generate):
-    process = agent._run_tool(
-        {"toolUseId": "identity", "name": tool_decorated.tool_name, "input": {"random_string": "a_string"}},
-        kwargs={},
-    )
-
-    _, tru_result = generate(process)
-    exp_result = {"toolUseId": "identity", "status": "success", "content": [{"text": "a_string"}]}
-
-    assert tru_result == exp_result
-
-
-def test_agent_run_tool_missing_tool(agent, generate):
-    process = agent._run_tool(
-        tool={"toolUseId": "missing", "name": "missing", "input": {}},
-        kwargs={},
-    )
-
-    _, tru_result = generate(process)
-    exp_result = {
-        "toolUseId": "missing",
-        "status": "error",
-        "content": [{"text": "Unknown tool: missing"}],
-    }
-
-    assert tru_result == exp_result

@@ -19,7 +19,7 @@ from ..tools.executor import run_tools, validate_and_prepare_tools
 from ..types.content import Message
 from ..types.exceptions import ContextWindowOverflowException, EventLoopException, ModelThrottledException
 from ..types.streaming import Metrics, StopReason
-from ..types.tools import RunToolHandler, ToolResult, ToolUse
+from ..types.tools import ToolGenerator, ToolResult, ToolUse
 from .message_processor import clean_orphaned_empty_tool_uses
 from .streaming import stream_messages
 
@@ -33,11 +33,7 @@ INITIAL_DELAY = 4
 MAX_DELAY = 240  # 4 minutes
 
 
-async def event_loop_cycle(
-    agent: "Agent",
-    tool_handler: RunToolHandler,
-    kwargs: dict[str, Any],
-) -> AsyncGenerator[dict[str, Any], None]:
+async def event_loop_cycle(agent: "Agent", kwargs: dict[str, Any]) -> AsyncGenerator[dict[str, Any], None]:
     """Execute a single cycle of the event loop.
 
     This core function processes a single conversation turn, handling model inference, tool execution, and error
@@ -53,7 +49,6 @@ async def event_loop_cycle(
 
     Args:
         agent: The agent for which the cycle is being executed.
-        tool_handler: Callback that runs a single tool.
         kwargs: Additional arguments including:
 
             - request_state: State maintained across cycles
@@ -186,7 +181,6 @@ async def event_loop_cycle(
                 stop_reason,
                 message,
                 agent=agent,
-                tool_handler=tool_handler,
                 cycle_trace=cycle_trace,
                 cycle_span=cycle_span,
                 cycle_start_time=cycle_start_time,
@@ -227,16 +221,13 @@ async def event_loop_cycle(
     yield {"stop": (stop_reason, message, agent.event_loop_metrics, kwargs["request_state"])}
 
 
-async def recurse_event_loop(
-    agent: "Agent", tool_handler: RunToolHandler, kwargs: dict[str, Any]
-) -> AsyncGenerator[dict[str, Any], None]:
+async def recurse_event_loop(agent: "Agent", kwargs: dict[str, Any]) -> AsyncGenerator[dict[str, Any], None]:
     """Make a recursive call to event_loop_cycle with the current state.
 
     This function is used when the event loop needs to continue processing after tool execution.
 
     Args:
         agent: Agent for which the recursive call is being made.
-        tool_handler: Callback that runs a single tool.
         kwargs: Arguments to pass through event_loop_cycle
 
 
@@ -256,18 +247,77 @@ async def recurse_event_loop(
 
     yield {"callback": {"start": True}}
 
-    events = event_loop_cycle(agent=agent, tool_handler=tool_handler, kwargs=kwargs)
+    events = event_loop_cycle(agent=agent, kwargs=kwargs)
     async for event in events:
         yield event
 
     recursive_trace.end()
 
 
+def run_tool(agent: "Agent", kwargs: dict[str, Any], tool: ToolUse) -> ToolGenerator:
+    """Process a tool invocation.
+
+    Looks up the tool in the registry and invokes it with the provided parameters.
+
+    Args:
+        agent: The agent for which the tool is being executed.
+        tool: The tool object to process, containing name and parameters.
+        kwargs: Additional keyword arguments passed to the tool.
+
+    Yields:
+        Events of the tool invocation.
+
+    Returns:
+        The final tool result or an error response if the tool fails or is not found.
+    """
+    logger.debug("tool=<%s> | invoking", tool)
+    tool_use_id = tool["toolUseId"]
+    tool_name = tool["name"]
+
+    # Get the tool info
+    tool_info = agent.tool_registry.dynamic_tools.get(tool_name)
+    tool_func = tool_info if tool_info is not None else agent.tool_registry.registry.get(tool_name)
+
+    try:
+        # Check if tool exists
+        if not tool_func:
+            logger.error(
+                "tool_name=<%s>, available_tools=<%s> | tool not found in registry",
+                tool_name,
+                list(agent.tool_registry.registry.keys()),
+            )
+            return {
+                "toolUseId": tool_use_id,
+                "status": "error",
+                "content": [{"text": f"Unknown tool: {tool_name}"}],
+            }
+        # Add standard arguments to kwargs for Python tools
+        kwargs.update(
+            {
+                "model": agent.model,
+                "system_prompt": agent.system_prompt,
+                "messages": agent.messages,
+                "tool_config": agent.tool_config,
+            }
+        )
+
+        result = tool_func.invoke(tool, **kwargs)
+        yield {"result": result}  # Placeholder until tool_func becomes a generator from which we can yield from
+        return result
+
+    except Exception as e:
+        logger.exception("tool_name=<%s> | failed to process tool", tool_name)
+        return {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [{"text": f"Error: {str(e)}"}],
+        }
+
+
 async def _handle_tool_execution(
     stop_reason: StopReason,
     message: Message,
     agent: "Agent",
-    tool_handler: RunToolHandler,
     cycle_trace: Trace,
     cycle_span: Any,
     cycle_start_time: float,
@@ -304,6 +354,9 @@ async def _handle_tool_execution(
         yield {"stop": (stop_reason, message, agent.event_loop_metrics, kwargs["request_state"])}
         return
 
+    def tool_handler(tool_use: ToolUse) -> ToolGenerator:
+        return run_tool(agent=agent, kwargs=kwargs, tool=tool_use)
+
     tool_events = run_tools(
         handler=tool_handler,
         tool_uses=tool_uses,
@@ -337,6 +390,6 @@ async def _handle_tool_execution(
         yield {"stop": (stop_reason, message, agent.event_loop_metrics, kwargs["request_state"])}
         return
 
-    events = recurse_event_loop(agent=agent, tool_handler=tool_handler, kwargs=kwargs)
+    events = recurse_event_loop(agent=agent, kwargs=kwargs)
     async for event in events:
         yield event
