@@ -13,6 +13,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
+from ..experimental.hooks import AfterToolInvocationEvent, BeforeToolInvocationEvent
 from ..telemetry.metrics import Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.executor import run_tools, validate_and_prepare_tools
@@ -271,46 +272,75 @@ def run_tool(agent: "Agent", tool_use: ToolUse, kwargs: dict[str, Any]) -> ToolG
         The final tool result or an error response if the tool fails or is not found.
     """
     logger.debug("tool_use=<%s> | streaming", tool_use)
-    tool_use_id = tool_use["toolUseId"]
     tool_name = tool_use["name"]
 
     # Get the tool info
     tool_info = agent.tool_registry.dynamic_tools.get(tool_name)
     tool_func = tool_info if tool_info is not None else agent.tool_registry.registry.get(tool_name)
 
+    # Add standard arguments to kwargs for Python tools
+    kwargs.update(
+        {
+            "model": agent.model,
+            "system_prompt": agent.system_prompt,
+            "messages": agent.messages,
+            "tool_config": agent.tool_config,
+        }
+    )
+
+    before_event = BeforeToolInvocationEvent(
+        agent=agent,
+        selected_tool=tool_func,
+        tool_use=tool_use,
+        kwargs=kwargs,
+    )
+    agent._hooks.invoke_callbacks(before_event)
+
     try:
+        selected_tool = before_event.selected_tool
+        tool_use = before_event.tool_use
+
         # Check if tool exists
-        if not tool_func:
+        if not selected_tool:
             logger.error(
                 "tool_name=<%s>, available_tools=<%s> | tool not found in registry",
                 tool_name,
                 list(agent.tool_registry.registry.keys()),
             )
             return {
-                "toolUseId": tool_use_id,
+                "toolUseId": str(tool_use.get("toolUseId")),
                 "status": "error",
                 "content": [{"text": f"Unknown tool: {tool_name}"}],
             }
-        # Add standard arguments to kwargs for Python tools
-        kwargs.update(
-            {
-                "model": agent.model,
-                "system_prompt": agent.system_prompt,
-                "messages": agent.messages,
-                "tool_config": agent.tool_config,
-            }
-        )
 
-        result = yield from tool_func.stream(tool_use, **kwargs)
-        return result
+        result = yield from selected_tool.stream(tool_use, **kwargs)
+        after_event = AfterToolInvocationEvent(
+            agent=agent,
+            selected_tool=selected_tool,
+            tool_use=tool_use,
+            kwargs=kwargs,
+            result=result,
+        )
+        agent._hooks.invoke_callbacks(after_event)
+        return after_event.result
 
     except Exception as e:
         logger.exception("tool_name=<%s> | failed to process tool", tool_name)
-        return {
-            "toolUseId": tool_use_id,
+        error_result: ToolResult = {
+            "toolUseId": str(tool_use.get("toolUseId")),
             "status": "error",
             "content": [{"text": f"Error: {str(e)}"}],
         }
+        after_event = AfterToolInvocationEvent(
+            agent=agent,
+            selected_tool=selected_tool,
+            tool_use=tool_use,
+            kwargs=kwargs,
+            result=error_result,
+            exception=e,
+        )
+        agent._hooks.invoke_callbacks(after_event)
+        return after_event.result
 
 
 async def _handle_tool_execution(
