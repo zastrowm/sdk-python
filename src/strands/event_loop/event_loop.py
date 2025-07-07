@@ -14,6 +14,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from ..experimental.hooks import AfterToolInvocationEvent, BeforeToolInvocationEvent
+from ..experimental.hooks.registry import get_registry
 from ..telemetry.metrics import Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.executor import run_tools, validate_and_prepare_tools
@@ -288,13 +289,14 @@ def run_tool(agent: "Agent", tool_use: ToolUse, kwargs: dict[str, Any]) -> ToolG
         }
     )
 
-    before_event = BeforeToolInvocationEvent(
-        agent=agent,
-        selected_tool=tool_func,
-        tool_use=tool_use,
-        kwargs=kwargs,
+    before_event = get_registry(agent).invoke_callbacks(
+        BeforeToolInvocationEvent(
+            agent=agent,
+            selected_tool=tool_func,
+            tool_use=tool_use,
+            kwargs=kwargs,
+        )
     )
-    agent._hooks.invoke_callbacks(before_event)
 
     try:
         selected_tool = before_event.selected_tool
@@ -302,26 +304,46 @@ def run_tool(agent: "Agent", tool_use: ToolUse, kwargs: dict[str, Any]) -> ToolG
 
         # Check if tool exists
         if not selected_tool:
-            logger.error(
-                "tool_name=<%s>, available_tools=<%s> | tool not found in registry",
-                tool_name,
-                list(agent.tool_registry.registry.keys()),
-            )
-            return {
+            if tool_func == selected_tool:
+                logger.error(
+                    "tool_name=<%s>, available_tools=<%s> | tool not found in registry",
+                    tool_name,
+                    list(agent.tool_registry.registry.keys()),
+                )
+            else:
+                logger.debug(
+                    "tool_name=<%s>, tool_use_id=<%s> | a hook resulted in a non-existing tool call",
+                    tool_name,
+                    tool_use,
+                )
+
+            result: ToolResult = {
                 "toolUseId": str(tool_use.get("toolUseId")),
                 "status": "error",
                 "content": [{"text": f"Unknown tool: {tool_name}"}],
             }
+            # for every Before event call, we need to have an AfterEvent call
+            after_event = get_registry(agent).invoke_callbacks(
+                AfterToolInvocationEvent(
+                    agent=agent,
+                    selected_tool=selected_tool,
+                    tool_use=tool_use,
+                    kwargs=kwargs,
+                    result=result,
+                )
+            )
+            return after_event.result
 
         result = yield from selected_tool.stream(tool_use, **kwargs)
-        after_event = AfterToolInvocationEvent(
-            agent=agent,
-            selected_tool=selected_tool,
-            tool_use=tool_use,
-            kwargs=kwargs,
-            result=result,
+        after_event = get_registry(agent).invoke_callbacks(
+            AfterToolInvocationEvent(
+                agent=agent,
+                selected_tool=selected_tool,
+                tool_use=tool_use,
+                kwargs=kwargs,
+                result=result,
+            )
         )
-        agent._hooks.invoke_callbacks(after_event)
         return after_event.result
 
     except Exception as e:
@@ -331,15 +353,16 @@ def run_tool(agent: "Agent", tool_use: ToolUse, kwargs: dict[str, Any]) -> ToolG
             "status": "error",
             "content": [{"text": f"Error: {str(e)}"}],
         }
-        after_event = AfterToolInvocationEvent(
-            agent=agent,
-            selected_tool=selected_tool,
-            tool_use=tool_use,
-            kwargs=kwargs,
-            result=error_result,
-            exception=e,
+        after_event = get_registry(agent).invoke_callbacks(
+            AfterToolInvocationEvent(
+                agent=agent,
+                selected_tool=selected_tool,
+                tool_use=tool_use,
+                kwargs=kwargs,
+                result=error_result,
+                exception=e,
+            )
         )
-        agent._hooks.invoke_callbacks(after_event)
         return after_event.result
 
 

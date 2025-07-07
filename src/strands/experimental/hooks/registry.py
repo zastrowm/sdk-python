@@ -72,6 +72,9 @@ class HookEvent:
 T = TypeVar("T", bound=Callable)
 TEvent = TypeVar("TEvent", bound=HookEvent, contravariant=True)
 
+# Non-contravariant generic for when invoking events
+TInvokeEvent = TypeVar("TInvokeEvent", bound=HookEvent)
+
 
 class HookProvider(Protocol):
     """Protocol for objects that provide hook callbacks to an agent.
@@ -178,7 +181,7 @@ class HookRegistry:
         """
         hook.register_hooks(self)
 
-    def invoke_callbacks(self, event: TEvent) -> None:
+    def invoke_callbacks(self, event: TInvokeEvent) -> TInvokeEvent:
         """Invoke all registered callbacks for the given event.
 
         This method finds all callbacks registered for the event's type and
@@ -191,6 +194,9 @@ class HookRegistry:
         Raises:
             Any exceptions raised by callback functions will propagate to the caller.
 
+        Returns:
+            The event dispatched to registered callbacks.
+
         Example:
             ```python
             event = StartRequestEvent(agent=my_agent)
@@ -199,6 +205,8 @@ class HookRegistry:
         """
         for callback in self.get_callbacks_for(event):
             callback(event)
+
+        return event
 
     def get_callbacks_for(self, event: TEvent) -> Generator[HookCallback[TEvent], None, None]:
         """Get callbacks registered for the given event in the appropriate order.
@@ -227,3 +235,18 @@ class HookRegistry:
             yield from reversed(callbacks)
         else:
             yield from callbacks
+
+
+def get_registry(agent: "Agent") -> HookRegistry:
+    """*Experimental*: Get the hooks registry for the provided agent.
+
+    This function is available while hooks are in experimental preview.
+
+    Args:
+        agent: The agent whose hook registry should be returned.
+
+    Returns:
+        The HookRegistry for the given agent.
+
+    """
+    return agent._hooks
