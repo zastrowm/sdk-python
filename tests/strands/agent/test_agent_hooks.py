@@ -93,21 +93,21 @@ def test_agent__call__hooks(agent, hook_provider, agent_tool, tool_use):
 
     agent("test message")
 
-    events = hook_provider.get_events()
+    length, events = hook_provider.get_events()
 
-    assert len(events) == 4
-    assert events.popleft() == StartRequestEvent(agent=agent)
-    assert events.popleft() == BeforeToolInvocationEvent(
+    assert length == 4
+    assert next(events) == StartRequestEvent(agent=agent)
+    assert next(events) == BeforeToolInvocationEvent(
         agent=agent, selected_tool=agent_tool, tool_use=tool_use, kwargs=ANY
     )
-    assert events.popleft() == AfterToolInvocationEvent(
+    assert next(events) == AfterToolInvocationEvent(
         agent=agent,
         selected_tool=agent_tool,
         tool_use=tool_use,
         kwargs=ANY,
         result={"content": [{"text": "!loot a dekovni I"}], "status": "success", "toolUseId": "123"},
     )
-    assert events.popleft() == EndRequestEvent(agent=agent)
+    assert next(events) == EndRequestEvent(agent=agent)
 
 
 @pytest.mark.asyncio
@@ -121,21 +121,22 @@ async def test_agent_stream_async_hooks(agent, hook_provider, agent_tool, tool_u
     async for _ in iterator:
         pass
 
-    events = hook_provider.get_events()
+    length, events = hook_provider.get_events()
 
-    assert len(events) == 4
-    assert events.popleft() == StartRequestEvent(agent=agent)
-    assert events.popleft() == BeforeToolInvocationEvent(
+    assert length == 4
+
+    assert next(events) == StartRequestEvent(agent=agent)
+    assert next(events) == BeforeToolInvocationEvent(
         agent=agent, selected_tool=agent_tool, tool_use=tool_use, kwargs=ANY
     )
-    assert events.popleft() == AfterToolInvocationEvent(
+    assert next(events) == AfterToolInvocationEvent(
         agent=agent,
         selected_tool=agent_tool,
         tool_use=tool_use,
         kwargs=ANY,
         result={"content": [{"text": "!loot a dekovni I"}], "status": "success", "toolUseId": "123"},
     )
-    assert events.popleft() == EndRequestEvent(agent=agent)
+    assert next(events) == EndRequestEvent(agent=agent)
 
 
 def test_agent_structured_output_hooks(agent, hook_provider, user, agenerator):

@@ -1,5 +1,4 @@
-from collections import deque
-from typing import Type
+from typing import Iterator, Tuple, Type
 
 from strands.experimental.hooks import HookEvent, HookProvider, HookRegistry
 
@@ -9,8 +8,8 @@ class MockHookProvider(HookProvider):
         self.events_received = []
         self.events_types = event_types
 
-    def get_events(self) -> deque[HookEvent]:
-        return deque(self.events_received)
+    def get_events(self) -> Tuple[int, Iterator[HookEvent]]:
+        return len(self.events_received), iter(self.events_received)
 
     def register_hooks(self, registry: HookRegistry) -> None:
         for event_type in self.events_types:
