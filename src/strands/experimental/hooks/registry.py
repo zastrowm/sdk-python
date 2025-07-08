@@ -8,7 +8,7 @@ via hook provider objects.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Protocol, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Generator, Generic, Protocol, Type, TypeVar
 
 if TYPE_CHECKING:
     from ...agent import Agent
@@ -33,9 +33,6 @@ class HookEvent:
             invoke callbacks in reverse order (e.g., cleanup/teardown events).
         """
         return False
-
-    ### Code below is infrastructure for disallowing updates to properties ###
-    ### that aren't expected to be updated from hook callbacks.            ###
 
     def _can_write(self, name: str) -> bool:
         """Check if the given property can be written to.
@@ -69,11 +66,11 @@ class HookEvent:
         raise AttributeError(f"Property {name} is not writable")
 
 
-T = TypeVar("T", bound=Callable)
 TEvent = TypeVar("TEvent", bound=HookEvent, contravariant=True)
+"""Generic for adding callback handlers - contravariant to allow adding handlers which take in base classes."""
 
-# Non-contravariant generic for when invoking events
 TInvokeEvent = TypeVar("TInvokeEvent", bound=HookEvent)
+"""Generic for invoking events - non-contravariant to enable returning events."""
 
 
 class HookProvider(Protocol):

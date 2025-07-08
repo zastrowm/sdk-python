@@ -1008,6 +1008,6 @@ def test_run_tool_hook_update_result_with_missing_tool(agent, generate, tool_reg
         call(
             "tool_name=<%s>, tool_use_id=<%s> | a hook resulted in a non-existing tool call",
             "test_quota",
-            {"toolUseId": "test", "name": "test_quota", "input": {"x": 5}},
+            "test",
         ),
     ]

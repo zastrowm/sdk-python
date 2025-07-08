@@ -314,7 +314,7 @@ def run_tool(agent: "Agent", tool_use: ToolUse, kwargs: dict[str, Any]) -> ToolG
                 logger.debug(
                     "tool_name=<%s>, tool_use_id=<%s> | a hook resulted in a non-existing tool call",
                     tool_name,
-                    tool_use,
+                    str(tool_use.get("toolUseId")),
                 )
 
             result: ToolResult = {
