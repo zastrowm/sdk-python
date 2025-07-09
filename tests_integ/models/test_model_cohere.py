@@ -5,6 +5,10 @@ import pytest
 import strands
 from strands import Agent
 from strands.models.openai import OpenAIModel
+from tests_integ.models import providers
+
+# these tests only run if we have the cohere api key
+pytestmark = providers.cohere.mark
 
 
 @pytest.fixture
@@ -37,10 +41,6 @@ def agent(model, tools):
     return Agent(model=model, tools=tools)
 
 
-@pytest.mark.skipif(
-    "CO_API_KEY" not in os.environ,
-    reason="CO_API_KEY environment variable missing",
-)
 def test_agent(agent):
     result = agent("What is the time and weather in New York?")
     text = result.message["content"][0]["text"].lower()

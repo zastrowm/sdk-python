@@ -6,6 +6,10 @@ from pydantic import BaseModel
 import strands
 from strands import Agent
 from strands.models.writer import WriterModel
+from tests_integ.models import providers
+
+# these tests only run if we have the writer api key
+pytestmark = providers.writer.mark
 
 
 @pytest.fixture
@@ -40,7 +44,6 @@ def agent(model, tools, system_prompt):
     return Agent(model=model, tools=tools, system_prompt=system_prompt, load_tools_from_directory=False)
 
 
-@pytest.mark.skipif("WRITER_API_KEY" not in os.environ, reason="WRITER_API_KEY environment variable missing")
 def test_agent(agent):
     result = agent("What is the time and weather in New York?")
     text = result.message["content"][0]["text"].lower()
@@ -49,7 +52,6 @@ def test_agent(agent):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif("WRITER_API_KEY" not in os.environ, reason="WRITER_API_KEY environment variable missing")
 async def test_agent_async(agent):
     result = await agent.invoke_async("What is the time and weather in New York?")
     text = result.message["content"][0]["text"].lower()
@@ -58,7 +60,6 @@ async def test_agent_async(agent):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif("WRITER_API_KEY" not in os.environ, reason="WRITER_API_KEY environment variable missing")
 async def test_agent_stream_async(agent):
     stream = agent.stream_async("What is the time and weather in New York?")
     async for event in stream:
@@ -70,7 +71,6 @@ async def test_agent_stream_async(agent):
     assert all(string in text for string in ["12:00", "sunny"])
 
 
-@pytest.mark.skipif("WRITER_API_KEY" not in os.environ, reason="WRITER_API_KEY environment variable missing")
 def test_structured_output(agent):
     class Weather(BaseModel):
         time: str
@@ -84,7 +84,6 @@ def test_structured_output(agent):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif("WRITER_API_KEY" not in os.environ, reason="WRITER_API_KEY environment variable missing")
 async def test_structured_output_async(agent):
     class Weather(BaseModel):
         time: str
