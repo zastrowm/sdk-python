@@ -96,7 +96,7 @@ async def test_agent_structured_output_async(agent, weather):
     assert tru_weather == exp_weather
 
 
-@pytest.skip("https://github.com/strands-agents/sdk-python/issues/320")
+@pytest.mark.skip("https://github.com/strands-agents/sdk-python/issues/320")
 def test_tool_returning_images(model, test_image_path):
     @tool
     def tool_with_image_return():

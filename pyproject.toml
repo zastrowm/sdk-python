@@ -195,7 +195,7 @@ test = [
     "hatch test --cover --cov-report html --cov-report xml {args}"
 ]
 test-integ = [
-    "hatch test tests-integ {args}"
+    "hatch test tests_integ {args}"
 ]
 prepare = [
     "hatch fmt --linter",
