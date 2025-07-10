@@ -435,12 +435,12 @@ def test_validate_tool_use_with_valid_input():
         ),
         # Name - Empty
         (
-                {
-                    "name": "",
-                    "toolUseId": "123",
-                    "input": {},
-                },
-                strands.tools.InvalidToolUseNameException,
+            {
+                "name": "",
+                "toolUseId": "123",
+                "input": {},
+            },
+            strands.tools.InvalidToolUseNameException,
         ),
     ],
 )
