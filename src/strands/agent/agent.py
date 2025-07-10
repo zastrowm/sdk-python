@@ -21,11 +21,11 @@ from pydantic import BaseModel
 
 from ..event_loop.event_loop import event_loop_cycle, run_tool
 from ..experimental.hooks import (
-    AgentInitializedEvent,
     AfterInvocationEvent,
+    AgentInitializedEvent,
+    BeforeInvocationEvent,
     HookRegistry,
     MessageAddedEvent,
-    BeforeInvocationEvent,
 )
 from ..handlers.callback_handler import PrintingCallbackHandler, null_callback_handler
 from ..models.bedrock import BedrockModel
