@@ -11,9 +11,9 @@ from strands.experimental.hooks import (
     AgentInitializedEvent,
     BeforeModelInvocationEvent,
     BeforeToolInvocationEvent,
-    EndRequestEvent,
+    AfterInvocationEvent,
     MessageAddedEvent,
-    StartRequestEvent,
+    BeforeInvocationEvent,
     get_registry,
 )
 from strands.types.content import Messages
@@ -27,8 +27,8 @@ def hook_provider():
     return MockHookProvider(
         [
             AgentInitializedEvent,
-            StartRequestEvent,
-            EndRequestEvent,
+            BeforeInvocationEvent,
+            AfterInvocationEvent,
             AfterToolInvocationEvent,
             BeforeToolInvocationEvent,
             BeforeModelInvocationEvent,
@@ -149,7 +149,7 @@ def test_agent__call__hooks(agent, hook_provider, agent_tool, mock_model, tool_u
 
     assert length == 12
 
-    assert next(events) == StartRequestEvent(agent=agent)
+    assert next(events) == BeforeInvocationEvent(agent=agent)
     assert next(events) == MessageAddedEvent(
         agent=agent,
         message=agent.messages[0],
@@ -190,7 +190,7 @@ def test_agent__call__hooks(agent, hook_provider, agent_tool, mock_model, tool_u
     )
     assert next(events) == MessageAddedEvent(agent=agent, message=agent.messages[3])
 
-    assert next(events) == EndRequestEvent(agent=agent)
+    assert next(events) == AfterInvocationEvent(agent=agent)
 
     assert len(agent.messages) == 4
 
@@ -200,7 +200,7 @@ async def test_agent_stream_async_hooks(agent, hook_provider, agent_tool, mock_m
     """Verify that the correct hook events are emitted as part of stream_async."""
     iterator = agent.stream_async("test message")
     await anext(iterator)
-    assert hook_provider.events_received == [StartRequestEvent(agent=agent)]
+    assert hook_provider.events_received == [BeforeInvocationEvent(agent=agent)]
 
     # iterate the rest
     async for _ in iterator:
@@ -210,7 +210,7 @@ async def test_agent_stream_async_hooks(agent, hook_provider, agent_tool, mock_m
 
     assert length == 12
 
-    assert next(events) == StartRequestEvent(agent=agent)
+    assert next(events) == BeforeInvocationEvent(agent=agent)
     assert next(events) == MessageAddedEvent(
         agent=agent,
         message=agent.messages[0],
@@ -251,7 +251,7 @@ async def test_agent_stream_async_hooks(agent, hook_provider, agent_tool, mock_m
     )
     assert next(events) == MessageAddedEvent(agent=agent, message=agent.messages[3])
 
-    assert next(events) == EndRequestEvent(agent=agent)
+    assert next(events) == AfterInvocationEvent(agent=agent)
 
     assert len(agent.messages) == 4
 
@@ -266,9 +266,9 @@ def test_agent_structured_output_hooks(agent, hook_provider, user, agenerator):
 
     assert length == 3
 
-    assert next(events) == StartRequestEvent(agent=agent)
+    assert next(events) == BeforeInvocationEvent(agent=agent)
     assert next(events) == MessageAddedEvent(agent=agent, message=agent.messages[0])
-    assert next(events) == EndRequestEvent(agent=agent)
+    assert next(events) == AfterInvocationEvent(agent=agent)
 
     assert len(agent.messages) == 1
 
@@ -284,8 +284,8 @@ async def test_agent_structured_async_output_hooks(agent, hook_provider, user, a
 
     assert length == 3
 
-    assert next(events) == StartRequestEvent(agent=agent)
+    assert next(events) == BeforeInvocationEvent(agent=agent)
     assert next(events) == MessageAddedEvent(agent=agent, message=agent.messages[0])
-    assert next(events) == EndRequestEvent(agent=agent)
+    assert next(events) == AfterInvocationEvent(agent=agent)
 
     assert len(agent.messages) == 1

@@ -25,10 +25,10 @@ class AgentInitializedEvent(HookEvent):
 
 
 @dataclass
-class StartRequestEvent(HookEvent):
+class BeforeInvocationEvent(HookEvent):
     """Event triggered at the beginning of a new agent request.
 
-    This event is fired when the agent begins processing a new user request,
+    This event is fired before the agent begins processing a new user request,
     before any model inference or tool execution occurs. Hook providers can
     use this event to perform request-level setup, logging, or validation.
 
@@ -42,7 +42,7 @@ class StartRequestEvent(HookEvent):
 
 
 @dataclass
-class EndRequestEvent(HookEvent):
+class AfterInvocationEvent(HookEvent):
     """Event triggered at the end of an agent request.
 
     This event is fired after the agent has completed processing a request,
