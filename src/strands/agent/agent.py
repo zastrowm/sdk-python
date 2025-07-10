@@ -25,6 +25,7 @@ from ..hooks import (
     AfterInvocationEvent,
     AgentInitializedEvent,
     BeforeInvocationEvent,
+    HookProvider,
     HookRegistry,
     MessageAddedEvent,
 )
@@ -202,6 +203,7 @@ class Agent:
         name: Optional[str] = None,
         description: Optional[str] = None,
         state: Optional[Union[AgentState, dict]] = None,
+        hooks: Optional[list[HookProvider]] = None,
     ):
         """Initialize the Agent with the specified configuration.
 
@@ -238,6 +240,8 @@ class Agent:
                 Defaults to None.
             state: stateful information for the agent. Can be either an AgentState object, or a json serializable dict.
                 Defaults to an empty AgentState object.
+            hooks: hooks to be added to the agent hook registry
+                Defaults to None.
         """
         self.model = BedrockModel() if not model else BedrockModel(model_id=model) if isinstance(model, str) else model
         self.messages = messages if messages is not None else []
@@ -302,6 +306,9 @@ class Agent:
         self.description = description
 
         self.hooks = HookRegistry()
+        if hooks:
+            for hook in hooks:
+                self.hooks.add_hook(hook)
         self.hooks.invoke_callbacks(AgentInitializedEvent(agent=self))
 
     @property
