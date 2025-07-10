@@ -87,7 +87,7 @@ litellm = ProviderInfo(
     id="litellm", factory=lambda: LiteLLMModel(model_id="bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 )
 llama = ProviderInfo(
-    id="cohere",
+    id="llama",
     environment_variable="LLAMA_API_KEY",
     factory=lambda: LlamaAPIModel(
         model_id="Llama-4-Maverick-17B-128E-Instruct-FP8",
