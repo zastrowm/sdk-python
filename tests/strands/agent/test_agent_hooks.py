@@ -6,15 +6,16 @@ from pydantic import BaseModel
 import strands
 from strands import Agent
 from strands.experimental.hooks import (
-    AfterInvocationEvent,
     AfterModelInvocationEvent,
     AfterToolInvocationEvent,
-    AgentInitializedEvent,
-    BeforeInvocationEvent,
     BeforeModelInvocationEvent,
     BeforeToolInvocationEvent,
+)
+from strands.hooks import (
+    AfterInvocationEvent,
+    AgentInitializedEvent,
+    BeforeInvocationEvent,
     MessageAddedEvent,
-    get_registry,
 )
 from strands.types.content import Messages
 from strands.types.tools import ToolResult, ToolUse
@@ -77,7 +78,7 @@ def agent(
         tools=[agent_tool],
     )
 
-    hooks = get_registry(agent)
+    hooks = agent.hooks
     hooks.add_hook(hook_provider)
 
     def assert_message_is_last_message_added(event: MessageAddedEvent):
@@ -102,7 +103,7 @@ def user():
     return User(name="Jane Doe", age=30)
 
 
-@patch("strands.experimental.hooks.registry.HookRegistry.invoke_callbacks")
+@patch("strands.hooks.registry.HookRegistry.invoke_callbacks")
 def test_agent__init__hooks(mock_invoke_callbacks):
     """Verify that the AgentInitializedEvent is emitted on Agent construction."""
     agent = Agent()
