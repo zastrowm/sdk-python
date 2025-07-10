@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from ...types.content import Message
+from ...types.streaming import StopReason
 from ...types.tools import AgentTool, ToolResult, ToolUse
 from .registry import HookEvent
 
@@ -114,6 +115,59 @@ class AfterToolInvocationEvent(HookEvent):
 
     def _can_write(self, name: str) -> bool:
         return name == "result"
+
+    @property
+    def should_reverse_callbacks(self) -> bool:
+        """True to invoke callbacks in reverse order."""
+        return True
+
+
+@dataclass
+class BeforeModelInvocationEvent(HookEvent):
+    """Event triggered before the model is invoked.
+
+    This event is fired just before the agent calls the model for inference,
+    allowing hook providers to inspect or modify the messages and configuration
+    that will be sent to the model.
+
+    Note: This event is not fired for invocations to structured_output.
+    """
+
+    pass
+
+
+@dataclass
+class AfterModelInvocationEvent(HookEvent):
+    """Event triggered after the model invocation completes.
+
+    This event is fired after the agent has finished calling the model,
+    regardless of whether the invocation was successful or resulted in an error.
+    Hook providers can use this event for cleanup, logging, or post-processing.
+
+    Note: This event uses reverse callback ordering, meaning callbacks registered
+    later will be invoked first during cleanup.
+
+    Note: This event is not fired for invocations to structured_output.
+
+    Attributes:
+        stop_response: The model response data if invocation was successful, None if failed.
+        exception: Exception if the model invocation failed, None if successful.
+    """
+
+    @dataclass
+    class ModelStopResponse:
+        """Model response data from successful invocation.
+
+        Attributes:
+            stop_reason: The reason the model stopped generating.
+            message: The generated message from the model.
+        """
+
+        message: Message
+        stop_reason: StopReason
+
+    stop_response: Optional[ModelStopResponse] = None
+    exception: Optional[Exception] = None
 
     @property
     def should_reverse_callbacks(self) -> bool:

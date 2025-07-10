@@ -7,7 +7,14 @@ import pytest
 import strands
 import strands.telemetry
 from strands.event_loop.event_loop import run_tool
-from strands.experimental.hooks import AfterToolInvocationEvent, BeforeToolInvocationEvent, HookProvider, HookRegistry
+from strands.experimental.hooks import (
+    AfterModelInvocationEvent,
+    AfterToolInvocationEvent,
+    BeforeModelInvocationEvent,
+    BeforeToolInvocationEvent,
+    HookProvider,
+    HookRegistry,
+)
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.tools.registry import ToolRegistry
 from strands.types.exceptions import ContextWindowOverflowException, EventLoopException, ModelThrottledException
@@ -104,7 +111,14 @@ def hook_registry():
 
 @pytest.fixture
 def hook_provider(hook_registry):
-    provider = MockHookProvider(event_types=[BeforeToolInvocationEvent, AfterToolInvocationEvent])
+    provider = MockHookProvider(
+        event_types=[
+            BeforeToolInvocationEvent,
+            AfterToolInvocationEvent,
+            BeforeModelInvocationEvent,
+            AfterModelInvocationEvent,
+        ]
+    )
     hook_registry.add_hook(provider)
     return provider
 
@@ -381,26 +395,6 @@ async def test_event_loop_cycle_tool_result_no_tool_handler(
     model.converse.side_effect = [agenerator(tool_stream)]
     # Set tool_handler to None for this test
     agent.tool_handler = None
-
-    with pytest.raises(EventLoopException):
-        stream = strands.event_loop.event_loop.event_loop_cycle(
-            agent=agent,
-            kwargs={},
-        )
-        await alist(stream)
-
-
-@pytest.mark.asyncio
-async def test_event_loop_cycle_tool_result_no_tool_config(
-    agent,
-    model,
-    tool_stream,
-    agenerator,
-    alist,
-):
-    model.converse.side_effect = [agenerator(tool_stream)]
-    # Set tool_config to None for this test
-    agent.tool_config = None
 
     with pytest.raises(EventLoopException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
@@ -1008,3 +1002,53 @@ async def test_run_tool_hook_update_result_with_missing_tool(agent, tool_registr
             "test",
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_event_loop_cycle_exception_model_hooks(mock_time, agent, model, agenerator, alist, hook_provider):
+    """Test that model hooks are correctly emitted even when throttled."""
+    # Set up the model to raise throttling exceptions multiple times before succeeding
+    exception = ModelThrottledException("ThrottlingException | ConverseStream")
+    model.converse.side_effect = [
+        exception,
+        exception,
+        exception,
+        agenerator(
+            [
+                {"contentBlockDelta": {"delta": {"text": "test text"}}},
+                {"contentBlockStop": {}},
+            ]
+        ),
+    ]
+
+    stream = strands.event_loop.event_loop.event_loop_cycle(
+        agent=agent,
+        kwargs={},
+    )
+    await alist(stream)
+
+    count, events = hook_provider.get_events()
+
+    assert count == 8
+
+    # 1st call - throttled
+    assert next(events) == BeforeModelInvocationEvent(agent=agent)
+    assert next(events) == AfterModelInvocationEvent(agent=agent, stop_response=None, exception=exception)
+
+    # 2nd call - throttled
+    assert next(events) == BeforeModelInvocationEvent(agent=agent)
+    assert next(events) == AfterModelInvocationEvent(agent=agent, stop_response=None, exception=exception)
+
+    # 3rd call - throttled
+    assert next(events) == BeforeModelInvocationEvent(agent=agent)
+    assert next(events) == AfterModelInvocationEvent(agent=agent, stop_response=None, exception=exception)
+
+    # 4th call - successful
+    assert next(events) == BeforeModelInvocationEvent(agent=agent)
+    assert next(events) == AfterModelInvocationEvent(
+        agent=agent,
+        stop_response=AfterModelInvocationEvent.ModelStopResponse(
+            message={"content": [{"text": "test text"}], "role": "assistant"}, stop_reason="end_turn"
+        ),
+        exception=None,
+    )
