@@ -1,3 +1,4 @@
+import json
 from typing import Literal, Optional
 
 import pytest
@@ -226,3 +227,45 @@ def test_convert_pydantic_with_empty_docstring():
 
     tool_spec = convert_pydantic_to_tool_spec(EmptyDocUser)
     assert tool_spec["description"] == "EmptyDocUser structured output tool"
+
+
+def test_convert_pydantic_with_items_refs():
+    """Test that no $refs exist after lists of different components."""
+
+    class Address(BaseModel):
+        postal_code: Optional[str] = None
+
+    class Person(BaseModel):
+        """Complete person information."""
+
+        list_of_items: list[Address]
+        list_of_items_nullable: Optional[list[Address]]
+        list_of_item_or_nullable: list[Optional[Address]]
+
+    tool_spec = convert_pydantic_to_tool_spec(Person)
+    raw_json = json.dumps(tool_spec, indent=2)
+
+    assert "$ref" not in raw_json
+
+
+def test_convert_pydantic_with_refs():
+    """Test that no $refs exist after processing complex hierarchies."""
+
+    class Address(BaseModel):
+        street: str
+        city: str
+        country: str
+        postal_code: Optional[str] = None
+
+    class Contact(BaseModel):
+        address: Address
+
+    class Person(BaseModel):
+        """Complete person information."""
+
+        contact: Contact = Field(description="Contact methods")
+
+    tool_spec = convert_pydantic_to_tool_spec(Person)
+    raw_json = json.dumps(tool_spec, indent=2)
+
+    assert "$ref" not in raw_json
