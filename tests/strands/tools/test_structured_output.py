@@ -1,4 +1,3 @@
-import json
 from typing import Literal, Optional
 
 import pytest
@@ -243,9 +242,53 @@ def test_convert_pydantic_with_items_refs():
         list_of_item_or_nullable: list[Optional[Address]]
 
     tool_spec = convert_pydantic_to_tool_spec(Person)
-    raw_json = json.dumps(tool_spec, indent=2)
 
-    assert "$ref" not in raw_json
+    expected_spec = {
+        "description": "Complete person information.",
+        "inputSchema": {
+            "json": {
+                "description": "Complete person information.",
+                "properties": {
+                    "list_of_item_or_nullable": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "properties": {"postal_code": {"type": ["string", "null"]}},
+                                    "title": "Address",
+                                    "type": "object",
+                                },
+                                {"type": "null"},
+                            ]
+                        },
+                        "title": "List Of Item Or Nullable",
+                        "type": "array",
+                    },
+                    "list_of_items": {
+                        "items": {
+                            "properties": {"postal_code": {"type": ["string", "null"]}},
+                            "title": "Address",
+                            "type": "object",
+                        },
+                        "title": "List Of Items",
+                        "type": "array",
+                    },
+                    "list_of_items_nullable": {
+                        "items": {
+                            "properties": {"postal_code": {"type": ["string", "null"]}},
+                            "title": "Address",
+                            "type": "object",
+                        },
+                        "type": ["array", "null"],
+                    },
+                },
+                "required": ["list_of_items", "list_of_item_or_nullable"],
+                "title": "Person",
+                "type": "object",
+            }
+        },
+        "name": "Person",
+    }
+    assert tool_spec == expected_spec
 
 
 def test_convert_pydantic_with_refs():
@@ -266,6 +309,37 @@ def test_convert_pydantic_with_refs():
         contact: Contact = Field(description="Contact methods")
 
     tool_spec = convert_pydantic_to_tool_spec(Person)
-    raw_json = json.dumps(tool_spec, indent=2)
 
-    assert "$ref" not in raw_json
+    expected_spec = {
+        "description": "Complete person information.",
+        "inputSchema": {
+            "json": {
+                "description": "Complete person information.",
+                "properties": {
+                    "contact": {
+                        "description": "Contact methods",
+                        "properties": {
+                            "address": {
+                                "properties": {
+                                    "city": {"title": "City", "type": "string"},
+                                    "country": {"title": "Country", "type": "string"},
+                                    "postal_code": {"type": ["string", "null"]},
+                                    "street": {"title": "Street", "type": "string"},
+                                },
+                                "required": ["street", "city", "country"],
+                                "title": "Address",
+                                "type": "object",
+                            }
+                        },
+                        "required": ["address"],
+                        "type": "object",
+                    }
+                },
+                "required": ["contact"],
+                "title": "Person",
+                "type": "object",
+            }
+        },
+        "name": "Person",
+    }
+    assert tool_spec == expected_spec
