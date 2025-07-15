@@ -47,6 +47,8 @@ class MockedModelProvider(Model):
         self,
         output_model: Type[T],
         prompt: Messages,
+        system_prompt: Optional[str] = None,
+        **kwargs: Any,
     ) -> AsyncGenerator[Any, None]:
         pass
 

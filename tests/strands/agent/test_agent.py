@@ -960,7 +960,7 @@ def test_agent_callback_handler_custom_handler_used():
     assert agent.callback_handler is custom_handler
 
 
-def test_agent_structured_output(agent, user, agenerator):
+def test_agent_structured_output(agent, system_prompt, user, agenerator):
     agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
 
     prompt = "Jane Doe is 30 years old and her email is jane@doe.com"
@@ -969,10 +969,12 @@ def test_agent_structured_output(agent, user, agenerator):
     exp_result = user
     assert tru_result == exp_result
 
-    agent.model.structured_output.assert_called_once_with(type(user), [{"role": "user", "content": [{"text": prompt}]}])
+    agent.model.structured_output.assert_called_once_with(
+        type(user), [{"role": "user", "content": [{"text": prompt}]}], system_prompt=system_prompt
+    )
 
 
-def test_agent_structured_output_multi_modal_input(agent, user, agenerator):
+def test_agent_structured_output_multi_modal_input(agent, system_prompt, user, agenerator):
     agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
 
     prompt = [
@@ -991,7 +993,9 @@ def test_agent_structured_output_multi_modal_input(agent, user, agenerator):
     exp_result = user
     assert tru_result == exp_result
 
-    agent.model.structured_output.assert_called_once_with(type(user), [{"role": "user", "content": prompt}])
+    agent.model.structured_output.assert_called_once_with(
+        type(user), [{"role": "user", "content": prompt}], system_prompt=system_prompt
+    )
 
 
 @pytest.mark.asyncio
@@ -1006,7 +1010,7 @@ async def test_agent_structured_output_in_async_context(agent, user, agenerator)
 
 
 @pytest.mark.asyncio
-async def test_agent_structured_output_async(agent, user, agenerator):
+async def test_agent_structured_output_async(agent, system_prompt, user, agenerator):
     agent.model.structured_output = unittest.mock.Mock(return_value=agenerator([{"output": user}]))
 
     prompt = "Jane Doe is 30 years old and her email is jane@doe.com"
@@ -1015,7 +1019,9 @@ async def test_agent_structured_output_async(agent, user, agenerator):
     exp_result = user
     assert tru_result == exp_result
 
-    agent.model.structured_output.assert_called_once_with(type(user), [{"role": "user", "content": [{"text": prompt}]}])
+    agent.model.structured_output.assert_called_once_with(
+        type(user), [{"role": "user", "content": [{"text": prompt}]}], system_prompt=system_prompt
+    )
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,7 @@ class TestModel(SAModel):
     def get_config(self):
         return
 
-    async def structured_output(self, output_model):
+    async def structured_output(self, output_model, prompt=None, system_prompt=None, **kwargs):
         yield {"output": output_model(name="test", age=20)}
 
     async def stream(self, messages, tool_specs=None, system_prompt=None):
@@ -95,7 +95,7 @@ async def test_stream(model, messages, tool_specs, system_prompt, alist):
 
 @pytest.mark.asyncio
 async def test_structured_output(model, alist):
-    response = model.structured_output(Person)
+    response = model.structured_output(Person, prompt=messages, system_prompt=system_prompt)
     events = await alist(response)
 
     tru_output = events[-1]["output"]

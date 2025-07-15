@@ -457,7 +457,7 @@ class Agent:
                 content: list[ContentBlock] = [{"text": prompt}] if isinstance(prompt, str) else prompt
                 self._append_message({"role": "user", "content": content})
 
-            events = self.model.structured_output(output_model, self.messages)
+            events = self.model.structured_output(output_model, self.messages, system_prompt=self.system_prompt)
             async for event in events:
                 if "callback" in event:
                     self.callback_handler(**cast(dict, event["callback"]))

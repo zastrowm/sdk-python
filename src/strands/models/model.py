@@ -45,13 +45,14 @@ class Model(abc.ABC):
     @abc.abstractmethod
     # pragma: no cover
     def structured_output(
-        self, output_model: Type[T], prompt: Messages, **kwargs: Any
+        self, output_model: Type[T], prompt: Messages, system_prompt: Optional[str] = None, **kwargs: Any
     ) -> AsyncGenerator[dict[str, Union[T, Any]], None]:
         """Get structured output from the model.
 
         Args:
             output_model: The output model to use for the agent.
             prompt: The prompt messages to use for the agent.
+            system_prompt: System prompt to provide context to the model.
             **kwargs: Additional keyword arguments for future extensibility.
 
         Yields:

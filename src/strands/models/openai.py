@@ -401,13 +401,14 @@ class OpenAIModel(Model):
 
     @override
     async def structured_output(
-        self, output_model: Type[T], prompt: Messages, **kwargs: Any
+        self, output_model: Type[T], prompt: Messages, system_prompt: Optional[str] = None, **kwargs: Any
     ) -> AsyncGenerator[dict[str, Union[T, Any]], None]:
         """Get structured output from the model.
 
         Args:
             output_model: The output model to use for the agent.
             prompt: The prompt messages to use for the agent.
+            system_prompt: System prompt to provide context to the model.
             **kwargs: Additional keyword arguments for future extensibility.
 
         Yields:
@@ -415,7 +416,7 @@ class OpenAIModel(Model):
         """
         response: ParsedChatCompletion = await self.client.beta.chat.completions.parse(  # type: ignore
             model=self.get_config()["model_id"],
-            messages=self.format_request(prompt)["messages"],
+            messages=self.format_request(prompt, system_prompt=system_prompt)["messages"],
             response_format=output_model,
         )
 
