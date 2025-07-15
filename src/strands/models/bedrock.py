@@ -25,7 +25,7 @@ from .model import Model
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
 DEFAULT_BEDROCK_REGION = "us-west-2"
 
 BEDROCK_CONTEXT_WINDOW_OVERFLOW_MESSAGES = [
@@ -67,7 +67,7 @@ class BedrockModel(Model):
             guardrail_redact_output: Flag to redact output if guardrail is triggered. Defaults to False.
             guardrail_redact_output_message: If a Bedrock Output guardrail triggers, replace output with this message.
             max_tokens: Maximum number of tokens to generate in the response
-            model_id: The Bedrock model ID (e.g., "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+            model_id: The Bedrock model ID (e.g., "us.anthropic.claude-sonnet-4-20250514-v1:0")
             stop_sequences: List of sequences that will stop generation when encountered
             streaming: Flag to enable/disable streaming. Defaults to True.
             temperature: Controls randomness in generation (higher = more random)
@@ -432,7 +432,7 @@ class BedrockModel(Model):
                 ):
                     e.add_note(
                         "└ For more information see "
-                        "https://strandsagents.com/user-guide/concepts/model-providers/amazon-bedrock/#model-access-issue"
+                        "https://strandsagents.com/latest/user-guide/concepts/model-providers/amazon-bedrock/#model-access-issue"
                     )
 
                 if (
