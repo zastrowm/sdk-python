@@ -231,6 +231,25 @@ def test_agent__init__with_string_model_id():
     assert agent.model.config["model_id"] == "nonsense"
 
 
+def test_agent__init__nested_tools_flattening(tool_decorated, tool_module, tool_imported, tool_registry):
+    _ = tool_registry
+    # Nested structure: [tool_decorated, [tool_module, [tool_imported]]]
+    agent = Agent(tools=[tool_decorated, [tool_module, [tool_imported]]])
+    tru_tool_names = sorted(agent.tool_names)
+    exp_tool_names = ["tool_decorated", "tool_imported", "tool_module"]
+    assert tru_tool_names == exp_tool_names
+
+
+def test_agent__init__deeply_nested_tools(tool_decorated, tool_module, tool_imported, tool_registry):
+    _ = tool_registry
+    # Deeply nested structure
+    nested_tools = [[[[tool_decorated]], [[tool_module]], tool_imported]]
+    agent = Agent(tools=nested_tools)
+    tru_tool_names = sorted(agent.tool_names)
+    exp_tool_names = ["tool_decorated", "tool_imported", "tool_module"]
+    assert tru_tool_names == exp_tool_names
+
+
 def test_agent__call__(
     mock_model,
     system_prompt,
