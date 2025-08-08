@@ -458,7 +458,7 @@ class Agent:
 
             # Create temporary messages array if prompt is provided
             if prompt:
-                temp_messages = self.messages + self._standardize_prompt(prompt)
+                temp_messages = self.messages + [self._standardize_prompt(prompt)]
             else:
                 temp_messages = self.messages
 
