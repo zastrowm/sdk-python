@@ -28,6 +28,7 @@ from ..telemetry.metrics import Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.executor import run_tools, validate_and_prepare_tools
 from ..types.content import Message
+from ..types.event_loop import StartEventLoop, StartEventLoopEvent, MessageEvent, ForceStopEvent, EventLoopThrottleDelay
 from ..types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
@@ -93,8 +94,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
     cycle_start_time, cycle_trace = agent.event_loop_metrics.start_cycle(attributes=attributes)
     invocation_state["event_loop_cycle_trace"] = cycle_trace
 
-    yield {"callback": {"start": True}}
-    yield {"callback": {"start_event_loop": True}}
+    yield StartEventLoopEvent()
 
     # Create tracer span for this event loop cycle
     tracer = get_tracer()
@@ -177,7 +177,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
 
                 if isinstance(e, ModelThrottledException):
                     if attempt + 1 == MAX_ATTEMPTS:
-                        yield {"callback": {"force_stop": True, "force_stop_reason": str(e)}}
+                        yield ForceStopEvent(e)
                         raise e
 
                     logger.debug(
@@ -191,7 +191,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                     time.sleep(current_delay)
                     current_delay = min(current_delay * 2, MAX_DELAY)
 
-                    yield {"callback": {"event_loop_throttled_delay": current_delay, **invocation_state}}
+                    yield EventLoopThrottleDelay(delay=current_delay)
                 else:
                     raise e
 
@@ -203,7 +203,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
         # Add the response message to the conversation
         agent.messages.append(message)
         agent.hooks.invoke_callbacks(MessageAddedEvent(agent=agent, message=message))
-        yield {"callback": {"message": message}}
+        yield MessageEvent(message=message)
 
         # Update metrics
         agent.event_loop_metrics.update_usage(usage)

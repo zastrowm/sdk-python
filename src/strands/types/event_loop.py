@@ -1,8 +1,10 @@
 """Event loop-related type definitions for the SDK."""
-
-from typing import Literal
+from dataclasses import dataclass
+from typing import Literal, Any
 
 from typing_extensions import TypedDict
+
+from .content import Message
 
 
 class Usage(TypedDict):
@@ -46,3 +48,42 @@ StopReason = Literal[
 - "stop_sequence": Stop sequence encountered
 - "tool_use": Model requested to use a tool
 """
+
+class TypedEvent(dict):
+    pass
+
+
+@dataclass
+class StartEventLoopEvent(TypedEvent):
+
+    def as_callback(self) -> list[dict[str, Any]]:
+        return [{"start": True},
+        {"start_event_loop": True}]
+
+@dataclass
+class InitEventLoopEvent(TypedEvent):
+
+    def as_callback(self) -> dict[str, Any]:
+        return {"init_event_loop": True}
+
+@dataclass
+class ForceStopEvent(TypedEvent):
+
+    reason: str | Exception
+
+    def as_callback(self) -> dict[str, Any]:
+        return {"force_stop": True, "force_stop_reason": str(self.reason)}
+
+@dataclass
+class MessageEvent(TypedEvent):
+    message: Message
+
+    def as_callback(self) -> dict[str, Any]:
+        return {"message": self.message}
+
+@dataclass
+class EventLoopThrottleDelay(TypedEvent):
+    delay: int
+
+    def as_callback(self) -> dict[str, Any]:
+        return {"event_loop_throttled_delay": self.delay}
