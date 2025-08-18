@@ -122,11 +122,11 @@ def handle_content_block_delta(
             state["current_tool_use"]["input"] = ""
 
         state["current_tool_use"]["input"] += delta_content["toolUse"]["input"]
-        callback_event["callback"] = {"delta": delta_content, "current_tool_use": state["current_tool_use"]}
+        callback_event = {"delta": delta_content, "current_tool_use": state["current_tool_use"]}
 
     elif "text" in delta_content:
         state["text"] += delta_content["text"]
-        callback_event["callback"] = {"data": delta_content["text"], "delta": delta_content}
+        callback_event = {"data": delta_content["text"], "delta": delta_content}
 
     elif "reasoningContent" in delta_content:
         if "text" in delta_content["reasoningContent"]:
@@ -134,7 +134,7 @@ def handle_content_block_delta(
                 state["reasoningText"] = ""
 
             state["reasoningText"] += delta_content["reasoningContent"]["text"]
-            callback_event["callback"] = {
+            callback_event = {
                 "reasoningText": delta_content["reasoningContent"]["text"],
                 "delta": delta_content,
                 "reasoning": True,
@@ -145,7 +145,7 @@ def handle_content_block_delta(
                 state["signature"] = ""
 
             state["signature"] += delta_content["reasoningContent"]["signature"]
-            callback_event["callback"] = {
+            callback_event= {
                 "reasoning_signature": delta_content["reasoningContent"]["signature"],
                 "delta": delta_content,
                 "reasoning": True,
@@ -271,7 +271,7 @@ async def process_stream(chunks: AsyncIterable[StreamEvent]) -> AsyncGenerator[d
     metrics: Metrics = Metrics(latencyMs=0)
 
     async for chunk in chunks:
-        yield {"callback": {"event": chunk}}
+        yield {"event": chunk}
 
         if "messageStart" in chunk:
             state["message"] = handle_message_start(chunk["messageStart"], state["message"])

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, cast
 
 from opentelemetry import trace as trace_api
 
+from experimental.hooks.test_events import tool_result
 from ..experimental.hooks import (
     AfterModelInvocationEvent,
     AfterToolInvocationEvent,
@@ -28,7 +29,8 @@ from ..telemetry.metrics import Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.executor import run_tools, validate_and_prepare_tools
 from ..types.content import Message
-from ..types.event_loop import StartEventLoop, StartEventLoopEvent, MessageEvent, ForceStopEvent, EventLoopThrottleDelay
+from ..types.event_loop import StartEventLoopEvent, MessageEvent, ForceStopEvent, EventLoopThrottleDelay, StopEvent, \
+    StartEvent, ToolResultMessageEvent, StreamStopEvent, StreamDeltaEvent, ToolResultEvent, TypedEvent
 from ..types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
@@ -94,6 +96,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
     cycle_start_time, cycle_trace = agent.event_loop_metrics.start_cycle(attributes=attributes)
     invocation_state["event_loop_cycle_trace"] = cycle_trace
 
+    yield StartEvent()
     yield StartEventLoopEvent()
 
     # Create tracer span for this event loop cycle
@@ -136,13 +139,9 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                 #       before yielding to the callback handler. This will be revisited when migrating to strongly
                 #       typed events.
                 async for event in stream_messages(agent.model, agent.system_prompt, agent.messages, tool_specs):
-                    if "callback" in event:
-                        yield {
-                            "callback": {
-                                **event["callback"],
-                                **(invocation_state if "delta" in event["callback"] else {}),
-                            }
-                        }
+                    # NEED TO DISCUSS - what events *shouldn't* be yield back?
+                    if "stop" not in event:
+                        yield StreamDeltaEvent(delta_data=event)
 
                 stop_reason, message, usage, metrics = event["stop"]
                 invocation_state.setdefault("request_state", {})
@@ -238,7 +237,16 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                 invocation_state=invocation_state,
             )
             async for event in events:
-                yield event
+                # Note: Once we allow streaming of tool results, we need to do a check here for it
+                if isinstance(event, TypedEvent):
+                    yield event
+                elif isinstance(event, dict):
+                    if "content" in event and "status" in event and "toolUseId" in event:
+                        yield ToolResultEvent(tool_result=event)
+                else:
+                    print("tool_use", event)
+                    yield event
+
 
             return
 
@@ -266,11 +274,16 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
             tracer.end_span_with_error(cycle_span, str(e), e)
 
         # Handle any other exceptions
-        yield {"callback": {"force_stop": True, "force_stop_reason": str(e)}}
+        yield ForceStopEvent(reason=str(e))
         logger.exception("cycle failed")
         raise EventLoopException(e, invocation_state["request_state"]) from e
 
-    yield {"stop": (stop_reason, message, agent.event_loop_metrics, invocation_state["request_state"])}
+    yield StopEvent(
+        stop_reason=stop_reason,
+        message=message,
+        metrics=agent.event_loop_metrics,
+        request_state=invocation_state["request_state"]
+    )
 
 
 async def recurse_event_loop(agent: "Agent", invocation_state: dict[str, Any]) -> AsyncGenerator[dict[str, Any], None]:
@@ -297,7 +310,7 @@ async def recurse_event_loop(agent: "Agent", invocation_state: dict[str, Any]) -
     recursive_trace = Trace("Recursive call", parent_id=cycle_trace.id)
     cycle_trace.add_child(recursive_trace)
 
-    yield {"callback": {"start": True}}
+    yield StartEvent()
 
     events = event_loop_cycle(agent=agent, invocation_state=invocation_state)
     async for event in events:
@@ -383,7 +396,7 @@ async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str
                     result=result,
                 )
             )
-            yield after_event.result
+            yield ToolResultEvent(tool_result=after_event.result)
             return
 
         async for event in selected_tool.stream(tool_use, invocation_state):
@@ -419,7 +432,7 @@ async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str
                 exception=e,
             )
         )
-        yield after_event.result
+        yield ToolResultEvent(tool_result=after_event.result)
 
 
 async def _handle_tool_execution(
@@ -459,7 +472,12 @@ async def _handle_tool_execution(
     validate_and_prepare_tools(message, tool_uses, tool_results, invalid_tool_use_ids)
 
     if not tool_uses:
-        yield {"stop": (stop_reason, message, agent.event_loop_metrics, invocation_state["request_state"])}
+        yield StopEvent(
+            stop_reason=stop_reason,
+            message=message,
+            metrics=agent.event_loop_metrics,
+            request_state=invocation_state["request_state"]
+        )
         return
 
     def tool_handler(tool_use: ToolUse) -> ToolGenerator:
@@ -487,7 +505,7 @@ async def _handle_tool_execution(
 
     agent.messages.append(tool_result_message)
     agent.hooks.invoke_callbacks(MessageAddedEvent(agent=agent, message=tool_result_message))
-    yield {"callback": {"message": tool_result_message}}
+    yield ToolResultMessageEvent(message=tool_result_message)
 
     if cycle_span:
         tracer = get_tracer()
@@ -495,7 +513,12 @@ async def _handle_tool_execution(
 
     if invocation_state["request_state"].get("stop_event_loop", False):
         agent.event_loop_metrics.end_cycle(cycle_start_time, cycle_trace)
-        yield {"stop": (stop_reason, message, agent.event_loop_metrics, invocation_state["request_state"])}
+        yield StopEvent(
+            stop_reason=stop_reason,
+            message=message,
+            metrics=agent.event_loop_metrics,
+            request_state=invocation_state["request_state"]
+        )
         return
 
     events = recurse_event_loop(agent=agent, invocation_state=invocation_state)

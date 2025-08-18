@@ -37,7 +37,7 @@ from ..telemetry.tracer import get_tracer, serialize
 from ..tools.registry import ToolRegistry
 from ..tools.watcher import ToolWatcher
 from ..types.content import ContentBlock, Message, Messages
-from ..types.event_loop import InitEventLoopEvent
+from ..types.event_loop import InitEventLoopEvent, StopEvent, StreamDeltaEvent, ResultEvent, StreamChunkEvent
 from ..types.exceptions import ContextWindowOverflowException
 from ..types.tools import ToolResult, ToolUse
 from ..types.traces import AttributeValue
@@ -479,8 +479,10 @@ class Agent:
                     )
                 events = self.model.structured_output(output_model, temp_messages, system_prompt=self.system_prompt)
                 async for event in events:
-                    if "callback" in event:
-                        self.callback_handler(**cast(dict, event["callback"]))
+                    if "stop" not in event:
+                        typed_event = StreamDeltaEvent(delta_data=event)
+                        typed_event._invoke_callback(self.callback_handler)
+
                 structured_output_span.add_event(
                     "gen_ai.choice", attributes={"message": serialize(event["output"].model_dump())}
                 )
@@ -528,15 +530,22 @@ class Agent:
         self.trace_span = self._start_agent_trace_span(message)
         with trace_api.use_span(self.trace_span):
             try:
-                events = self._run_loop(message, invocation_state=kwargs)
+                invocation_state = kwargs
+                events = self._run_loop(message, invocation_state=invocation_state)
                 async for event in events:
-                    if "callback" in event:
-                        callback_handler(**event["callback"])
-                        yield event["callback"]
+                    if not isinstance(event, StopEvent):
+                        event._invoke_callback(callback_handler, invocation_state=invocation_state)
+                        yield event
 
-                result = AgentResult(*event["stop"])
-                callback_handler(result=result)
-                yield {"result": result}
+                if not isinstance(event, StopEvent):
+                    raise ValueError(f"Last event was not a StopEvent; was: {event}")
+
+                event = cast(StopEvent, event)
+
+                result = event.result
+                result_event = ResultEvent(result=result)
+                result_event._invoke_callback(callback_handler, invocation_state=invocation_state)
+                yield result_event
 
                 self._end_agent_trace_span(response=result)
 
@@ -569,13 +578,13 @@ class Agent:
                 # Signal from the model provider that the message sent by the user should be redacted,
                 # likely due to a guardrail.
                 if (
-                    event.get("callback")
-                    and event["callback"].get("event")
-                    and event["callback"]["event"].get("redactContent")
-                    and event["callback"]["event"]["redactContent"].get("redactUserContentMessage")
+                    isinstance(event, StreamDeltaEvent)
+                    and event.delta_data.get("event")
+                    and event.delta_data["event"].get("redactContent")
+                    and event.delta_data["event"]["redactContent"].get("redactUserContentMessage")
                 ):
                     self.messages[-1]["content"] = [
-                        {"text": event["callback"]["event"]["redactContent"]["redactUserContentMessage"]}
+                        {"text": event.delta_data["event"]["redactContent"]["redactUserContentMessage"]}
                     ]
                     if self._session_manager:
                         self._session_manager.redact_latest_message(self.messages[-1], self)

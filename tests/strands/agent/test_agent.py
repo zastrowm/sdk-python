@@ -19,6 +19,7 @@ from strands.handlers.callback_handler import PrintingCallbackHandler, null_call
 from strands.models.bedrock import DEFAULT_BEDROCK_MODEL_ID, BedrockModel
 from strands.session.repository_session_manager import RepositorySessionManager
 from strands.types.content import Messages
+from strands.types.event_loop import StreamStopEvent, StopEvent, StreamDeltaEvent, InitEventLoopEvent, ResultEvent
 from strands.types.exceptions import ContextWindowOverflowException, EventLoopException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 from tests.fixtures.mock_session_repository import MockedSessionRepository
@@ -399,7 +400,12 @@ def test_agent__call__passes_invocation_state(mock_model, agent, tool, mock_even
         assert invocation_state["agent"] == agent
 
         # Return expected values from event_loop_cycle
-        yield {"stop": ("stop", {"role": "assistant", "content": [{"text": "Response"}]}, {}, {})}
+        yield StopEvent(
+            stop_reason="stop",
+            message={"role": "assistant", "content": [{"text": "Response"}]},
+            request_state={},
+            metrics={},
+        )
 
     mock_event_loop_cycle.side_effect = check_invocation_state
 
@@ -661,8 +667,7 @@ def test_agent__call__callback(mock_model, agent, callback_handler, agenerator):
     )
 
     agent("test")
-    callback_handler.assert_has_calls(
-        [
+    assert callback_handler.call_args_list == [
             unittest.mock.call(init_event_loop=True),
             unittest.mock.call(start=True),
             unittest.mock.call(start_event_loop=True),
@@ -726,8 +731,22 @@ def test_agent__call__callback(mock_model, agent, callback_handler, agenerator):
                     ],
                 },
             ),
-        ],
-    )
+            unittest.mock.call(
+                result=AgentResult(
+                    stop_reason="end_turn",
+                    message={
+                        "role": "assistant",
+                        "content": [
+                            {"toolUse": {"toolUseId": "123", "name": "test", "input": {}}},
+                            {"reasoningContent": {"reasoningText": {"text": "value", "signature": "value"}}},
+                            {"text": "value"},
+                        ],
+                    },
+                    metrics=unittest.mock.ANY,
+                    state=unittest.mock.ANY,
+                ),
+            )
+        ]
 
 
 @pytest.mark.asyncio
@@ -1140,20 +1159,38 @@ async def test_stream_async_returns_all_events(mock_event_loop_cycle, alist):
 
     # Define the side effect to simulate callback handler being called multiple times
     async def test_event_loop(*args, **kwargs):
-        yield {"callback": {"data": "First chunk"}}
-        yield {"callback": {"data": "Second chunk"}}
-        yield {"callback": {"data": "Final chunk", "complete": True}}
+        yield StreamDeltaEvent(delta_data={"data": "First chunk"})
+        yield StreamDeltaEvent(delta_data={"data": "Second chunk"})
+        yield StreamDeltaEvent(delta_data={"data": "Final chunk", "complete": True})
 
         # Return expected values from event_loop_cycle
-        yield {"stop": ("stop", {"role": "assistant", "content": [{"text": "Response"}]}, {}, {})}
+        yield StopEvent(
+            stop_reason="stop",
+            message={"role": "assistant", "content": [{"text": "Response"}]},
+            metrics={},
+            request_state={},
+        )
 
     mock_event_loop_cycle.side_effect = test_event_loop
     mock_callback = unittest.mock.Mock()
 
     stream = agent.stream_async("test message", callback_handler=mock_callback)
 
+    # TODO
     tru_events = await alist(stream)
     exp_events = [
+        InitEventLoopEvent(),
+        StreamDeltaEvent(delta_data={"data": "First chunk"}),
+        StreamDeltaEvent(delta_data={"data": "Second chunk"}),
+        StreamDeltaEvent(delta_data={"data": "Final chunk", "complete": True}),
+        ResultEvent(result=AgentResult(stop_reason="stop",
+                message={"role": "assistant", "content": [{"text": "Response"}]},
+                metrics={},
+                state={}))
+    ]
+    assert tru_events == exp_events
+
+    assert [{**it} for it in tru_events] == [
         {"init_event_loop": True, "callback_handler": mock_callback},
         {"data": "First chunk"},
         {"data": "Second chunk"},
@@ -1167,10 +1204,9 @@ async def test_stream_async_returns_all_events(mock_event_loop_cycle, alist):
             ),
         },
     ]
-    assert tru_events == exp_events
 
-    exp_calls = [unittest.mock.call(**event) for event in exp_events]
-    mock_callback.assert_has_calls(exp_calls)
+    exp_calls = [unittest.mock.call(**event.get_callback_args()) for event in exp_events]
+    assert mock_callback.call_args_list == exp_calls
 
 
 @pytest.mark.asyncio
@@ -1230,7 +1266,12 @@ async def test_stream_async_passes_invocation_state(agent, mock_model, mock_even
         invocation_state = kwargs["invocation_state"]
         assert invocation_state["some_value"] == "a_value"
         # Return expected values from event_loop_cycle
-        yield {"stop": ("stop", {"role": "assistant", "content": [{"text": "Response"}]}, {}, {})}
+        yield StopEvent(
+            stop_reason="stop",
+            message={"role": "assistant", "content": [{"text": "Response"}]},
+            metrics={},
+            request_state={},
+        )
 
     mock_event_loop_cycle.side_effect = check_invocation_state
 
@@ -1362,7 +1403,12 @@ async def test_agent_stream_async_creates_and_ends_span_on_success(mock_get_trac
     mock_get_tracer.return_value = mock_tracer
 
     async def test_event_loop(*args, **kwargs):
-        yield {"stop": ("stop", {"role": "assistant", "content": [{"text": "Agent Response"}]}, {}, {})}
+        yield StopEvent(
+            stop_reason="stop",
+            message={"role": "assistant", "content": [{"text": "Agent Response"}]},
+            metrics={},
+            request_state={},
+        )
 
     mock_event_loop_cycle.side_effect = test_event_loop
 
