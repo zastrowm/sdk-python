@@ -19,6 +19,7 @@ from strands.hooks import (
 )
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.tools.registry import ToolRegistry
+from strands.types.event_loop import ForceStopEvent, ToolResultEvent
 from strands.types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
@@ -483,7 +484,7 @@ async def test_cycle_exception(
     ]
 
     tru_stop_event = None
-    exp_stop_event = {"callback": {"force_stop": True, "force_stop_reason": "Invalid error presented"}}
+    exp_stop_event = ForceStopEvent(reason="Invalid error presented")
 
     with pytest.raises(EventLoopException):
         stream = strands.event_loop.event_loop.event_loop_cycle(
@@ -836,11 +837,11 @@ async def test_run_tool_missing_tool(agent, alist):
 
     tru_events = await alist(process)
     exp_events = [
-        {
+        ToolResultEvent(tool_result={
             "toolUseId": "missing",
             "status": "error",
             "content": [{"text": "Unknown tool: missing"}],
-        },
+        })
     ]
 
     assert tru_events == exp_events
@@ -1009,7 +1010,7 @@ async def test_run_tool_hook_after_tool_invocation_updates_with_missing_tool(age
     )
 
     result = (await alist(process))[-1]
-    assert result == updated_result
+    assert result == ToolResultEvent(tool_result=updated_result)
 
 
 @pytest.mark.asyncio
@@ -1050,11 +1051,11 @@ async def test_run_tool_hook_update_result_with_missing_tool(agent, tool_registr
 
         result = (await alist(process))[-1]
 
-    assert result == {
+    assert result == ToolResultEvent(tool_result={
         "status": "error",
         "toolUseId": "test",
         "content": [{"text": "This tool has been used too many times!"}],
-    }
+    })
 
     assert mock_logger.debug.call_args_list == [
         call("tool_use=<%s> | streaming", {"toolUseId": "test", "name": "test_quota", "input": {"x": 5}}),

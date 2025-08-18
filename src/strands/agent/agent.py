@@ -37,7 +37,7 @@ from ..telemetry.tracer import get_tracer, serialize
 from ..tools.registry import ToolRegistry
 from ..tools.watcher import ToolWatcher
 from ..types.content import ContentBlock, Message, Messages
-from ..types.event_loop import InitEventLoopEvent, StopEvent, StreamDeltaEvent, ResultEvent, StreamChunkEvent
+from ..types.event_loop import InitEventLoopEvent, StopEvent, StreamDeltaEvent, ResultEvent
 from ..types.exceptions import ContextWindowOverflowException
 from ..types.tools import ToolResult, ToolUse
 from ..types.traces import AttributeValue

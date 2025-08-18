@@ -61,6 +61,9 @@ class TypedEvent(dict):
         if hasattr(self, "as_callback"):
             props = self.as_callback()
             self.update(**props)
+        elif hasattr(self, "as_dict"):
+            props = self.as_dict()
+            self.update(**props)
 
     def supports_callback(self):
         return hasattr(self, "as_callback")
@@ -134,14 +137,11 @@ class StopEvent(TypedEvent):
             state=self.request_state,
         )
 
-    # def as_callback(self) -> dict[str, Any]:
-    #     return { "stop": (self.stop_reason, self.message, self.metrics, self.request_state)}
+    def as_dict(self) -> dict[str, Any]:
+       return { "stop": (self.stop_reason, self.message, self.metrics, self.request_state)}
 
 @dataclass
 class StartEvent(TypedEvent):
-
-
-
     def as_callback(self) -> dict[str, Any]:
         return {"start": True}
 
@@ -155,13 +155,6 @@ class ToolResultMessageEvent(TypedEvent):
 
     def as_callback(self) -> dict[str, Any]:
         return {"message": self.message}
-
-@dataclass
-class StreamChunkEvent(TypedEvent):
-    chunk: Any
-
-    def as_callback(self) -> dict[str, Any]:
-        return {"event": self.chunk}
 
 @dataclass
 class StreamDeltaEvent(TypedEvent):
