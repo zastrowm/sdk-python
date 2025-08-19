@@ -11,7 +11,8 @@ from ..telemetry.metrics import EventLoopMetrics, Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.tools import InvalidToolUseNameException, validate_tool_use
 from ..types.content import Message
-from ..types.tools import RunToolHandler, ToolGenerator, ToolResult, ToolUse
+from ..types.events import ToolResultEvent, TypedToolGenerator
+from ..types.tools import RunToolHandler, ToolResult, ToolUse
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ async def run_tools(
     tool_results: list[ToolResult],
     cycle_trace: Trace,
     parent_span: Optional[trace_api.Span] = None,
-) -> ToolGenerator:
+) -> TypedToolGenerator:
     """Execute tools concurrently.
 
     Args:
@@ -60,19 +61,20 @@ async def run_tools(
                     await worker_event.wait()
                     worker_event.clear()
 
-                result = cast(ToolResult, event)
+                result_event = cast(ToolResultEvent, event)
             finally:
                 worker_queue.put_nowait((worker_id, stop_event))
 
-            tool_success = result.get("status") == "success"
+            tool_success = result_event.get("status") == "success"
+            tool_result = result_event.tool_result
             tool_duration = time.time() - tool_start_time
-            message = Message(role="user", content=[{"toolResult": result}])
+            message = Message(role="user", content=[{"toolResult": tool_result}])
             event_loop_metrics.add_tool_usage(tool_use, tool_duration, tool_trace, tool_success, message)
             cycle_trace.add_child(tool_trace)
 
-            tracer.end_tool_call_span(tool_call_span, result)
+            tracer.end_tool_call_span(tool_call_span, tool_result)
 
-        return result
+        return tool_result
 
     tool_uses = [tool_use for tool_use in tool_uses if tool_use.get("toolUseId") not in invalid_tool_use_ids]
     worker_queue: asyncio.Queue[tuple[int, Any]] = asyncio.Queue()

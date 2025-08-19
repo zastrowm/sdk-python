@@ -37,7 +37,7 @@ from ..telemetry.tracer import get_tracer, serialize
 from ..tools.registry import ToolRegistry
 from ..tools.watcher import ToolWatcher
 from ..types.content import ContentBlock, Message, Messages
-from ..types.event_loop import InitEventLoopEvent, StopEvent, StreamDeltaEvent, ResultEvent
+from ..types.events import InitEventLoopEvent, ResultEvent, StopEvent, StreamDeltaEvent, ToolResultEvent, TypedEvent
 from ..types.exceptions import ContextWindowOverflowException
 from ..types.tools import ToolResult, ToolUse
 from ..types.traces import AttributeValue
@@ -137,19 +137,19 @@ class Agent:
                     "input": kwargs.copy(),
                 }
 
-                async def acall() -> ToolResult:
+                async def acall() -> ToolResultEvent:
                     # Pass kwargs as invocation_state
                     async for event in run_tool(self._agent, tool_use, kwargs):
                         _ = event
 
-                    return cast(ToolResult, event)
+                    return cast(ToolResultEvent, event)
 
-                def tcall() -> ToolResult:
+                def tcall() -> ToolResultEvent:
                     return asyncio.run(acall())
 
                 with ThreadPoolExecutor() as executor:
                     future = executor.submit(tcall)
-                    tool_result = future.result()
+                    last_event = future.result()
 
                 if record_direct_tool_call is not None:
                     should_record_direct_tool_call = record_direct_tool_call
@@ -158,12 +158,12 @@ class Agent:
 
                 if should_record_direct_tool_call:
                     # Create a record of this tool execution in the message history
-                    self._agent._record_tool_execution(tool_use, tool_result, user_message_override)
+                    self._agent._record_tool_execution(tool_use, last_event, user_message_override)
 
                 # Apply window management
                 self._agent.conversation_manager.apply_management(self._agent)
 
-                return tool_result
+                return last_event.tool_result
 
             return caller
 
@@ -481,7 +481,7 @@ class Agent:
                 async for event in events:
                     if "stop" not in event:
                         typed_event = StreamDeltaEvent(delta_data=event)
-                        typed_event._invoke_callback(self.callback_handler)
+                        typed_event.prepare_and_invoke(invocation_state={}, callback_handler=self.callback_handler)
 
                 structured_output_span.add_event(
                     "gen_ai.choice", attributes={"message": serialize(event["output"].model_dump())}
@@ -534,7 +534,7 @@ class Agent:
                 events = self._run_loop(message, invocation_state=invocation_state)
                 async for event in events:
                     if not isinstance(event, StopEvent):
-                        event._invoke_callback(callback_handler, invocation_state=invocation_state)
+                        event.prepare_and_invoke(invocation_state, callback_handler)
                         yield event
 
                 if not isinstance(event, StopEvent):
@@ -544,7 +544,7 @@ class Agent:
 
                 result = event.result
                 result_event = ResultEvent(result=result)
-                result_event._invoke_callback(callback_handler, invocation_state=invocation_state)
+                result_event.prepare_and_invoke(invocation_state, callback_handler)
                 yield result_event
 
                 self._end_agent_trace_span(response=result)
@@ -553,9 +553,7 @@ class Agent:
                 self._end_agent_trace_span(error=e)
                 raise
 
-    async def _run_loop(
-        self, message: Message, invocation_state: dict[str, Any]
-    ) -> AsyncGenerator[dict[str, Any], None]:
+    async def _run_loop(self, message: Message, invocation_state: dict[str, Any]) -> AsyncGenerator[TypedEvent, None]:
         """Execute the agent's event loop with the given message and parameters.
 
         Args:

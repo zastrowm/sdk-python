@@ -6,6 +6,7 @@ import pytest
 import strands
 import strands.telemetry
 from strands.types.content import Message
+from strands.types.events import ToolResultEvent, ToolStreamEvent
 
 
 @pytest.fixture(autouse=True)
@@ -16,11 +17,13 @@ def moto_autouse(moto_env):
 @pytest.fixture
 def tool_handler(request):
     async def handler(tool_use):
-        yield {"event": "abc"}
-        yield {
-            **params,
-            "toolUseId": tool_use["toolUseId"],
-        }
+        yield ToolStreamEvent(tool_use, {"event": "abc"})
+        yield ToolResultEvent(
+            {
+                **params,
+                "toolUseId": tool_use["toolUseId"],
+            }
+        )
 
     params = {
         "content": [{"text": "test result"}],
@@ -86,22 +89,25 @@ async def test_run_tools(
 
     tru_events = await alist(stream)
     exp_events = [
-        {"event": "abc"},
-        {
-            "content": [
-                {
-                    "text": "test result",
-                },
-            ],
-            "status": "success",
-            "toolUseId": "t1",
-        },
+        ToolStreamEvent(tool_uses[0], {"event": "abc"}),
+        ToolResultEvent(
+            {
+                "content": [
+                    {
+                        "text": "test result",
+                    },
+                ],
+                "status": "success",
+                "toolUseId": "t1",
+            }
+        ),
     ]
 
     tru_results = tool_results
-    exp_results = [exp_events[-1]]
+    exp_results = [exp_events[-1].tool_result]
 
-    assert tru_events == exp_events and tru_results == exp_results
+    assert tru_events == exp_events
+    assert tru_results == exp_results
 
 
 @pytest.mark.parametrize("invalid_tool_use_ids", [["t1"]], indirect=True)
@@ -319,9 +325,16 @@ async def test_run_tools_creates_and_ends_span_on_success(
     # Verify span was ended with the tool result
     mock_tracer.end_tool_call_span.assert_called_once()
     args, _ = mock_tracer.end_tool_call_span.call_args
-    assert args[0] == mock_span
-    assert args[1]["status"] == "success"
-    assert args[1]["content"][0]["text"] == "test result"
+    assert args == (
+        mock_span,
+        {
+            "status": "success",
+            "content": [
+                {"text": "test result"},
+            ],
+            "toolUseId": "t1",
+        },
+    )
 
 
 @unittest.mock.patch("strands.tools.executor.get_tracer")

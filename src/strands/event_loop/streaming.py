@@ -145,7 +145,7 @@ def handle_content_block_delta(
                 state["signature"] = ""
 
             state["signature"] += delta_content["reasoningContent"]["signature"]
-            callback_event= {
+            callback_event = {
                 "reasoning_signature": delta_content["reasoningContent"]["signature"],
                 "delta": delta_content,
                 "reasoning": True,

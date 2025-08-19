@@ -19,7 +19,7 @@ from strands.hooks import (
 )
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.tools.registry import ToolRegistry
-from strands.types.event_loop import ForceStopEvent, ToolResultEvent
+from strands.types.events import ForceStopEvent, StopEvent, ToolResultEvent
 from strands.types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
@@ -786,11 +786,11 @@ async def test_prepare_next_cycle_in_tool_execution(agent, model, tool_stream, a
         # Set up mock to return a valid response
         mock_recurse.return_value = agenerator(
             [
-                (
-                    "end_turn",
-                    {"role": "assistant", "content": [{"text": "test text"}]},
-                    strands.telemetry.metrics.EventLoopMetrics(),
-                    {},
+                StopEvent(
+                    stop_reason="end_turn",
+                    message={"role": "assistant", "content": [{"text": "test text"}]},
+                    metrics=strands.telemetry.metrics.EventLoopMetrics(),
+                    request_state={},
                 ),
             ]
         )
@@ -822,7 +822,7 @@ async def test_run_tool(agent, tool, alist):
     )
 
     tru_result = (await alist(process))[-1]
-    exp_result = {"toolUseId": "tool_use_id", "status": "success", "content": [{"text": "a_string"}]}
+    exp_result = ToolResultEvent({"toolUseId": "tool_use_id", "status": "success", "content": [{"text": "a_string"}]})
 
     assert tru_result == exp_result
 
@@ -837,11 +837,13 @@ async def test_run_tool_missing_tool(agent, alist):
 
     tru_events = await alist(process)
     exp_events = [
-        ToolResultEvent(tool_result={
-            "toolUseId": "missing",
-            "status": "error",
-            "content": [{"text": "Unknown tool: missing"}],
-        })
+        ToolResultEvent(
+            tool_result={
+                "toolUseId": "missing",
+                "status": "error",
+                "content": [{"text": "Unknown tool: missing"}],
+            }
+        )
     ]
 
     assert tru_events == exp_events
@@ -957,7 +959,7 @@ async def test_run_tool_hook_before_tool_invocation_updates(agent, tool_times_5,
     result = (await alist(process))[-1]
 
     # Should use replacement_tool (5 * 3 = 15) instead of original_tool (1 * 2 = 2)
-    assert result == {"toolUseId": "modified", "status": "success", "content": [{"text": "15"}]}
+    assert result == ToolResultEvent({"toolUseId": "modified", "status": "success", "content": [{"text": "15"}]})
 
     assert hook_provider.events_received[1] == AfterToolInvocationEvent(
         agent=agent,
@@ -988,7 +990,7 @@ async def test_run_tool_hook_after_tool_invocation_updates(agent, tool_times_2, 
     )
 
     result = (await alist(process))[-1]
-    assert result == updated_result
+    assert result == ToolResultEvent(updated_result)
 
 
 @pytest.mark.asyncio
@@ -1051,11 +1053,13 @@ async def test_run_tool_hook_update_result_with_missing_tool(agent, tool_registr
 
         result = (await alist(process))[-1]
 
-    assert result == ToolResultEvent(tool_result={
-        "status": "error",
-        "toolUseId": "test",
-        "content": [{"text": "This tool has been used too many times!"}],
-    })
+    assert result == ToolResultEvent(
+        tool_result={
+            "status": "error",
+            "toolUseId": "test",
+            "content": [{"text": "This tool has been used too many times!"}],
+        }
+    )
 
     assert mock_logger.debug.call_args_list == [
         call("tool_use=<%s> | streaming", {"toolUseId": "test", "name": "test_quota", "input": {"x": 5}}),
