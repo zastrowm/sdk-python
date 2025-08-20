@@ -32,10 +32,10 @@ from ..types.events import (
     EventLoopThrottleDelay,
     ForceStopEvent,
     MessageEvent,
+    ModelStreamEvent,
     StartEvent,
     StartEventLoopEvent,
     StopEvent,
-    StreamDeltaEvent,
     ToolResultEvent,
     ToolResultMessageEvent,
     ToolStreamEvent,
@@ -146,13 +146,9 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
             )
 
             try:
-                # TODO: To maintain backwards compatibility, we need to combine the stream event with invocation_state
-                #       before yielding to the callback handler. This will be revisited when migrating to strongly
-                #       typed events.
                 async for event in stream_messages(agent.model, agent.system_prompt, agent.messages, tool_specs):
-                    # NEED TO DISCUSS - what events *shouldn't* be yield back?
                     if "stop" not in event:
-                        yield StreamDeltaEvent(delta_data=event)
+                        yield ModelStreamEvent(delta_data=event)
 
                 stop_reason, message, usage, metrics = event["stop"]
                 invocation_state.setdefault("request_state", {})
@@ -248,13 +244,11 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                 invocation_state=invocation_state,
             )
             async for event in events:
-                print("evloop", event)
                 # Note: Once we allow streaming of tool results, we need to do a check here for it
                 if isinstance(event, TypedEvent):
                     yield event
                 else:
-                    logger.warning(f"event=<{event} | non-typed event")
-                    raise ValueError("Event was not a subclass of TypedEvent")
+                    raise ValueError(f"Event was not a subclass of TypedEvent: {event}")
             return
 
         # End the cycle and return results

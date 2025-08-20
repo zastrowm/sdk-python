@@ -22,9 +22,8 @@ from strands.session.repository_session_manager import RepositorySessionManager
 from strands.types.content import Messages
 from strands.types.events import (
     InitEventLoopEvent,
-    ResultEvent,
+    ModelStreamEvent,
     StopEvent,
-    StreamDeltaEvent,
     ToolResultEvent,
 )
 from strands.types.exceptions import ContextWindowOverflowException, EventLoopException
@@ -1166,9 +1165,9 @@ async def test_stream_async_returns_all_events(mock_event_loop_cycle, alist):
 
     # Define the side effect to simulate callback handler being called multiple times
     async def test_event_loop(*args, **kwargs):
-        yield StreamDeltaEvent(delta_data={"data": "First chunk"})
-        yield StreamDeltaEvent(delta_data={"data": "Second chunk"})
-        yield StreamDeltaEvent(delta_data={"data": "Final chunk", "complete": True})
+        yield ModelStreamEvent(delta_data={"data": "First chunk"})
+        yield ModelStreamEvent(delta_data={"data": "Second chunk"})
+        yield ModelStreamEvent(delta_data={"data": "Final chunk", "complete": True})
 
         # Return expected values from event_loop_cycle
         yield StopEvent(
@@ -1190,16 +1189,14 @@ async def test_stream_async_returns_all_events(mock_event_loop_cycle, alist):
     tru_events = await alist(stream)
     exp_events = [
         init_event,
-        StreamDeltaEvent(delta_data={"data": "First chunk"}),
-        StreamDeltaEvent(delta_data={"data": "Second chunk"}),
-        StreamDeltaEvent(delta_data={"data": "Final chunk", "complete": True}),
-        ResultEvent(
-            result=AgentResult(
-                stop_reason="stop",
-                message={"role": "assistant", "content": [{"text": "Response"}]},
-                metrics={},
-                state={},
-            )
+        ModelStreamEvent(delta_data={"data": "First chunk"}),
+        ModelStreamEvent(delta_data={"data": "Second chunk"}),
+        ModelStreamEvent(delta_data={"data": "Final chunk", "complete": True}),
+        StopEvent(
+            stop_reason="stop",
+            message={"role": "assistant", "content": [{"text": "Response"}]},
+            metrics={},
+            request_state={},
         ),
     ]
     assert tru_events == exp_events
@@ -1278,7 +1275,7 @@ async def test_stream_async_e2e(alist):
     ]
     assert tru_events == exp_events
 
-    exp_calls = [unittest.mock.call(**event) for event in exp_events]
+    # exp_calls = [unittest.mock.call(**event) for event in exp_events]
     # mock_callback.assert_has_calls(exp_calls)
 
 

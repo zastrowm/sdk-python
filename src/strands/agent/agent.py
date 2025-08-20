@@ -37,7 +37,7 @@ from ..telemetry.tracer import get_tracer, serialize
 from ..tools.registry import ToolRegistry
 from ..tools.watcher import ToolWatcher
 from ..types.content import ContentBlock, Message, Messages
-from ..types.events import InitEventLoopEvent, ResultEvent, StopEvent, StreamDeltaEvent, ToolResultEvent, TypedEvent
+from ..types.events import InitEventLoopEvent, ModelStreamEvent, StopEvent, ToolResultEvent, TypedEvent
 from ..types.exceptions import ContextWindowOverflowException
 from ..types.tools import ToolResult, ToolUse
 from ..types.traces import AttributeValue
@@ -480,8 +480,10 @@ class Agent:
                 events = self.model.structured_output(output_model, temp_messages, system_prompt=self.system_prompt)
                 async for event in events:
                     if "stop" not in event:
-                        typed_event = StreamDeltaEvent(delta_data=event)
-                        typed_event.prepare_and_invoke(invocation_state={}, callback_handler=self.callback_handler)
+                        typed_event = ModelStreamEvent(delta_data=event)
+                        typed_event._prepare_and_invoke(
+                            agent=self, invocation_state={}, callback_handler=self.callback_handler
+                        )
 
                 structured_output_span.add_event(
                     "gen_ai.choice", attributes={"message": serialize(event["output"].model_dump())}
@@ -533,21 +535,15 @@ class Agent:
                 invocation_state = kwargs
                 events = self._run_loop(message, invocation_state=invocation_state)
                 async for event in events:
-                    if not isinstance(event, StopEvent):
-                        event.prepare_and_invoke(invocation_state, callback_handler)
-                        yield event
+                    event._prepare_and_invoke(
+                        agent=self, invocation_state=invocation_state, callback_handler=callback_handler
+                    )
+                    yield event
 
                 if not isinstance(event, StopEvent):
                     raise ValueError(f"Last event was not a StopEvent; was: {event}")
 
-                event = cast(StopEvent, event)
-
-                result = event.result
-                result_event = ResultEvent(result=result)
-                result_event.prepare_and_invoke(invocation_state, callback_handler)
-                yield result_event
-
-                self._end_agent_trace_span(response=result)
+                self._end_agent_trace_span(response=event.result)
 
             except Exception as e:
                 self._end_agent_trace_span(error=e)
@@ -576,7 +572,7 @@ class Agent:
                 # Signal from the model provider that the message sent by the user should be redacted,
                 # likely due to a guardrail.
                 if (
-                    isinstance(event, StreamDeltaEvent)
+                    isinstance(event, ModelStreamEvent)
                     and event.delta_data.get("event")
                     and event.delta_data["event"].get("redactContent")
                     and event.delta_data["event"]["redactContent"].get("redactUserContentMessage")
@@ -592,7 +588,7 @@ class Agent:
             self.conversation_manager.apply_management(self)
             self.hooks.invoke_callbacks(AfterInvocationEvent(agent=self))
 
-    async def _execute_event_loop_cycle(self, invocation_state: dict[str, Any]) -> AsyncGenerator[dict[str, Any], None]:
+    async def _execute_event_loop_cycle(self, invocation_state: dict[str, Any]) -> AsyncGenerator[TypedEvent, None]:
         """Execute the event loop cycle with retry logic for context window limits.
 
         This internal method handles the execution of the event loop cycle and implements

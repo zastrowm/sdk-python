@@ -6,6 +6,7 @@ import pytest
 
 import strands
 import strands.telemetry
+from strands.agent import AgentResult
 from strands.event_loop.event_loop import run_tool
 from strands.experimental.hooks import (
     AfterModelInvocationEvent,
@@ -173,13 +174,12 @@ async def test_event_loop_cycle_text_response(
         invocation_state={},
     )
     events = await alist(stream)
-    tru_stop_reason, tru_message, _, tru_request_state = events[-1]["stop"]
+    tru_result = events[-1]["result"]
+    exp_result = AgentResult(
+        stop_reason="end_turn", message={"role": "assistant", "content": [{"text": "test text"}]}, metrics=ANY, state={}
+    )
 
-    exp_stop_reason = "end_turn"
-    exp_message = {"role": "assistant", "content": [{"text": "test text"}]}
-    exp_request_state = {}
-
-    assert tru_stop_reason == exp_stop_reason and tru_message == exp_message and tru_request_state == exp_request_state
+    assert tru_result == exp_result
 
 
 @pytest.mark.asyncio
@@ -205,13 +205,13 @@ async def test_event_loop_cycle_text_response_throttling(
         invocation_state={},
     )
     events = await alist(stream)
-    tru_stop_reason, tru_message, _, tru_request_state = events[-1]["stop"]
 
-    exp_stop_reason = "end_turn"
-    exp_message = {"role": "assistant", "content": [{"text": "test text"}]}
-    exp_request_state = {}
+    tru_result = events[-1]["result"]
+    exp_result = AgentResult(
+        stop_reason="end_turn", message={"role": "assistant", "content": [{"text": "test text"}]}, metrics=ANY, state={}
+    )
 
-    assert tru_stop_reason == exp_stop_reason and tru_message == exp_message and tru_request_state == exp_request_state
+    assert tru_result == exp_result
     # Verify that sleep was called once with the initial delay
     mock_time.sleep.assert_called_once()
 
@@ -243,12 +243,12 @@ async def test_event_loop_cycle_exponential_backoff(
         invocation_state={},
     )
     events = await alist(stream)
-    tru_stop_reason, tru_message, _, tru_request_state = events[-1]["stop"]
+    tru_result = events[-1]["result"]
+    exp_result = AgentResult(
+        stop_reason="end_turn", message={"role": "assistant", "content": [{"text": "test text"}]}, metrics=ANY, state={}
+    )
 
-    # Verify the final response
-    assert tru_stop_reason == "end_turn"
-    assert tru_message == {"role": "assistant", "content": [{"text": "test text"}]}
-    assert tru_request_state == {}
+    assert tru_result == exp_result
 
     # Verify that sleep was called with increasing delays
     # Initial delay is 4, then 8, then 16
@@ -334,13 +334,13 @@ async def test_event_loop_cycle_tool_result(
         invocation_state={},
     )
     events = await alist(stream)
-    tru_stop_reason, tru_message, _, tru_request_state = events[-1]["stop"]
 
-    exp_stop_reason = "end_turn"
-    exp_message = {"role": "assistant", "content": [{"text": "test text"}]}
-    exp_request_state = {}
+    tru_result = events[-1]["result"]
+    exp_result = AgentResult(
+        stop_reason="end_turn", message={"role": "assistant", "content": [{"text": "test text"}]}, metrics=ANY, state={}
+    )
 
-    assert tru_stop_reason == exp_stop_reason and tru_message == exp_message and tru_request_state == exp_request_state
+    assert tru_result == exp_result
 
     # Verify that recover_message_on_max_tokens_reached was NOT called for tool_use stop reason
     mock_recover_message.assert_not_called()
@@ -449,24 +449,27 @@ async def test_event_loop_cycle_stop(
         invocation_state={"request_state": {"stop_event_loop": True}},
     )
     events = await alist(stream)
-    tru_stop_reason, tru_message, _, tru_request_state = events[-1]["stop"]
 
-    exp_stop_reason = "tool_use"
-    exp_message = {
-        "role": "assistant",
-        "content": [
-            {
-                "toolUse": {
-                    "input": {},
-                    "name": "tool_for_testing",
-                    "toolUseId": "t1",
+    tru_result = events[-1]["result"]
+    exp_result = AgentResult(
+        stop_reason="tool_use",
+        message={
+            "role": "assistant",
+            "content": [
+                {
+                    "toolUse": {
+                        "input": {},
+                        "name": "tool_for_testing",
+                        "toolUseId": "t1",
+                    }
                 }
-            }
-        ],
-    }
-    exp_request_state = {"stop_event_loop": True}
+            ],
+        },
+        metrics=ANY,
+        state={"stop_event_loop": True},
+    )
 
-    assert tru_stop_reason == exp_stop_reason and tru_message == exp_message and tru_request_state == exp_request_state
+    assert tru_result == exp_result
 
 
 @pytest.mark.asyncio
@@ -751,7 +754,7 @@ async def test_request_state_initialization(alist):
         invocation_state={},
     )
     events = await alist(stream)
-    _, _, _, tru_request_state = events[-1]["stop"]
+    tru_request_state = events[-1]["result"].state
 
     # Verify request_state was initialized to empty dict
     assert tru_request_state == {}
@@ -763,7 +766,7 @@ async def test_request_state_initialization(alist):
         invocation_state={"request_state": initial_request_state},
     )
     events = await alist(stream)
-    _, _, _, tru_request_state = events[-1]["stop"]
+    tru_request_state = events[-1]["result"].state
 
     # Verify existing request_state was preserved
     assert tru_request_state == initial_request_state
