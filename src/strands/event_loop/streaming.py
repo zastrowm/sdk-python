@@ -126,7 +126,7 @@ def handle_content_block_delta(
 
     delta_content = event["delta"]
 
-    callback_event: ModelStreamEvent
+    callback_event = ModelStreamEvent({})
 
     if "toolUse" in delta_content:
         if "input" not in state["current_tool_use"]:

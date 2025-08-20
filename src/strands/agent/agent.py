@@ -158,7 +158,7 @@ class Agent:
 
                 if should_record_direct_tool_call:
                     # Create a record of this tool execution in the message history
-                    self._agent._record_tool_execution(tool_use, last_event, user_message_override)
+                    self._agent._record_tool_execution(tool_use, last_event.tool_result, user_message_override)
 
                 # Apply window management
                 self._agent.conversation_manager.apply_management(self._agent)

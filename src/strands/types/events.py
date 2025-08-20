@@ -30,7 +30,7 @@ class TypedEvent(dict):
 
     invocation_state: dict[str, Any]
 
-    def __init__(self, data: dict[str, Any] = None) -> None:
+    def __init__(self, data: dict[str, Any] | None = None) -> None:
         """Initialize the typed event with optional data.
 
         Args:
@@ -152,7 +152,7 @@ class StartEventLoopEvent(TypedEvent):
 
 
 class MessageEvent(TypedEvent):
-    """Event emitted when a the model invocation has completed.
+    """Event emitted when the model invocation has completed.
 
     This event is fired whenever the model generates a response message that
     gets added to the conversation history.
@@ -169,7 +169,7 @@ class MessageEvent(TypedEvent):
     @property
     def message(self) -> Message:
         """The model-generated response message."""
-        return self.get("message")
+        return self.get("message")  # type: ignore[return-value]
 
     def _get_callback_fields(self) -> list[str]:
         return ["message"]
@@ -189,7 +189,7 @@ class EventLoopThrottleDelay(TypedEvent):
     @property
     def delay(self) -> int:
         """Delay in seconds before the next retry attempt."""
-        return self.get("event_loop_throttled_delay")
+        return self.get("event_loop_throttled_delay")  # type: ignore[return-value]
 
     def _get_callback_fields(self) -> list[str]:
         return ["event_loop_throttled_delay"]
@@ -206,7 +206,7 @@ class ForceStopEvent(TypedEvent):
     @property
     def reason(self) -> str:
         """Human-readable description of why execution was stopped."""
-        return self.get("force_stop_reason")
+        return self.get("force_stop_reason")  # type: ignore[return-value]
 
     @property
     def reason_exception(self) -> Exception | None:
@@ -255,7 +255,7 @@ class StopEvent(TypedEvent):
             metrics: Execution metrics and performance data
             request_state: Final state of the agent execution
         """
-        from strands.agent import AgentResult
+        from ..agent import AgentResult
 
         super().__init__(
             {
@@ -271,7 +271,7 @@ class StopEvent(TypedEvent):
     @property
     def result(self) -> "AgentResult":
         """Complete execution result with metrics and final state."""
-        return self.get("result")
+        return self.get("result")  # type: ignore[return-value]
 
     @override
     def _get_callback_fields(self) -> list[str]:
@@ -298,7 +298,7 @@ class ToolStreamEvent(TypedEvent):
     @property
     def tool_use(self) -> ToolUse:
         """The tool invocation that is producing streaming output."""
-        return self.get("tool_stream_tool_use")
+        return self.get("tool_stream_tool_use")  # type: ignore[return-value]
 
     @property
     def tool_stream_data(self) -> Any:
@@ -320,7 +320,7 @@ class ToolResultEvent(TypedEvent):
     @property
     def tool_result(self) -> ToolResult:
         """Final result from the completed tool execution."""
-        return self.get("tool_result")
+        return self.get("tool_result")  # type: ignore[return-value]
 
 
 class ToolResultMessageEvent(TypedEvent):
@@ -394,12 +394,12 @@ class ToolUseStreamEvent(ModelStreamEvent):
     @property
     def delta(self) -> ContentBlockDelta:
         """Delta data from the model response."""
-        return self.get("delta")
+        return self.get("delta")  # type: ignore[return-value]
 
     @property
     def current_tool_use(self) -> dict[str, Any]:
         """Current tool use state."""
-        return self.get("current_tool_use")
+        return self.get("current_tool_use")  # type: ignore[return-value]
 
 
 class TextStreamEvent(ModelStreamEvent):
@@ -412,48 +412,48 @@ class TextStreamEvent(ModelStreamEvent):
     @property
     def text(self) -> str:
         """Cumulative text content assembled from streaming deltas received thus far."""
-        return self.get("data")
+        return self.get("data")  # type: ignore[return-value]
 
     @property
     def delta(self) -> ContentBlockDelta:
         """Delta data from the model response."""
-        return self.get("delta")
+        return self.get("delta")  # type: ignore[return-value]
 
 
 class ReasoningTextStreamEvent(ModelStreamEvent):
     """Event emitted during reasoning text streaming."""
 
-    def __init__(self, delta: ContentBlockDelta, reasoning_text: str) -> None:
+    def __init__(self, delta: ContentBlockDelta, reasoning_text: str | None) -> None:
         """Initialize with delta and reasoning text."""
         super().__init__({"reasoningText": reasoning_text, "delta": delta, "reasoning": True})
 
     @property
     def reasoningText(self) -> str:
         """Cumulative reasoning text content assembled from streaming deltas received thus far."""
-        return self.get("reasoningText")
+        return self.get("reasoningText")  # type: ignore[return-value]
 
     @property
     def delta(self) -> ContentBlockDelta:
         """Delta data from the model response."""
-        return self.get("delta")
+        return self.get("delta")  # type: ignore[return-value]
 
 
 class ReasoningSignatureStreamEvent(ModelStreamEvent):
     """Event emitted during reasoning signature streaming."""
 
-    def __init__(self, delta: ContentBlockDelta, reasoning_signature: str) -> None:
+    def __init__(self, delta: ContentBlockDelta, reasoning_signature: str | None) -> None:
         """Initialize with delta and reasoning signature."""
         super().__init__({"reasoning_signature": reasoning_signature, "delta": delta, "reasoning": True})
 
     @property
     def reasoning_signature(self) -> str:
         """Cumulative reasoning signature content assembled from streaming deltas received thus far."""
-        return self.get("reasoning_signature")
+        return self.get("reasoning_signature")  # type: ignore[return-value]
 
     @property
     def delta(self) -> ContentBlockDelta:
         """Delta data from the model response."""
-        return self.get("delta")
+        return self.get("delta")  # type: ignore[return-value]
 
 
 AllTypedEvents = (
