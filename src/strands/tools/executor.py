@@ -11,7 +11,7 @@ from ..telemetry.metrics import EventLoopMetrics, Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.tools import InvalidToolUseNameException, validate_tool_use
 from ..types.content import Message
-from ..types.events import ToolResultEvent, TypedToolGenerator
+from ..types.signals import SignalToolGenerator, ToolResultSignal
 from ..types.tools import RunToolHandler, ToolResult, ToolUse
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ async def run_tools(
     tool_results: list[ToolResult],
     cycle_trace: Trace,
     parent_span: Optional[trace_api.Span] = None,
-) -> TypedToolGenerator:
+) -> SignalToolGenerator:
     """Execute tools concurrently.
 
     Args:
@@ -56,17 +56,17 @@ async def run_tools(
         tool_start_time = time.time()
         with trace_api.use_span(tool_call_span):
             try:
-                async for event in handler(tool_use):
-                    worker_queue.put_nowait((worker_id, event))
+                async for signal in handler(tool_use):
+                    worker_queue.put_nowait((worker_id, signal))
                     await worker_event.wait()
                     worker_event.clear()
 
-                result_event = cast(ToolResultEvent, event)
+                result_signal = cast(ToolResultSignal, signal)
             finally:
                 worker_queue.put_nowait((worker_id, stop_event))
 
-            tool_success = result_event.get("status") == "success"
-            tool_result = result_event.tool_result
+            tool_result = result_signal.tool_result
+            tool_success = tool_result.get("status") == "success"
             tool_duration = time.time() - tool_start_time
             message = Message(role="user", content=[{"toolResult": tool_result}])
             event_loop_metrics.add_tool_usage(tool_use, tool_duration, tool_trace, tool_success, message)
@@ -88,12 +88,12 @@ async def run_tools(
 
     worker_count = len(workers)
     while worker_count:
-        worker_id, event = await worker_queue.get()
-        if event is stop_event:
+        worker_id, signal = await worker_queue.get()
+        if signal is stop_event:
             worker_count -= 1
             continue
 
-        yield event
+        yield signal
         worker_events[worker_id].set()
 
     tool_results.extend([worker.result() for worker in workers])

@@ -1,9 +1,8 @@
-"""Event system for the Strands Agents framework.
+"""Signal system for the Strands Agents framework.
 
-This module defines the event types that are emitted during agent execution,
-providing a structured way to observe and respond to different stages of the
-agent lifecycle including initialization, model invocation, tool execution,
-and completion.
+This module defines the signal types that are emitted during agent execution,
+providing a structured way to observe to different events of the event loop and
+agent lifecycle.
 """
 
 from dataclasses import MISSING
@@ -21,27 +20,23 @@ if TYPE_CHECKING:
     from ..agent import Agent, AgentResult
 
 
-class TypedEvent(dict):
-    """Base class for all typed events in the agent system.
-
-    TypedEvent provides a framework for creating strongly-typed events that can be
-    processed by callback handlers.
-    """
+class TypedSignal(dict):
+    """Base class for all typed signals in the agent system."""
 
     invocation_state: dict[str, Any]
 
     def __init__(self, data: dict[str, Any] | None = None) -> None:
-        """Initialize the typed event with optional data.
+        """Initialize the typed signal with optional data.
 
         Args:
-            data: Optional dictionary of event data to initialize with
+            data: Optional dictionary of signal data to initialize with
         """
         super().__init__(data or {})
 
     def _get_callback_fields(self) -> list[str] | Literal["all"] | None:
-        """When invoking a callback with this event, which fields should be exposed.
+        """When invoking a callback with this signal, which fields should be exposed.
 
-        This is for **backwards compatability only** and should not be implemented for new events.
+        This is for **backwards compatability only** and should not be implemented for new signals.
 
         Can be an array of properties to pass to the callback handler, can be the literal "all" to
         include all properties in the dict, or None to indicate that the callback should not be invoked.
@@ -49,9 +44,9 @@ class TypedEvent(dict):
         return None
 
     def _set_invocation_state(self, invocation_state: dict) -> None:
-        """Sets the invocation state for this event instance.
+        """Sets the invocation state for this signal instance.
 
-        This is for **backwards compatability only** and should not be implemented for new events.
+        This is for **backwards compatability only** and should not be implemented for new signals.
 
         Args:
             invocation_state: Dictionary containing context and state information
@@ -60,21 +55,21 @@ class TypedEvent(dict):
         self.invocation_state = invocation_state
 
     def _prepare_and_invoke(self, *, agent: "Agent", invocation_state: dict, callback_handler: Callable) -> bool:
-        """Internal API: Prepares the event and invokes the callback handler if applicable.
+        """Internal API: Prepares the signal and invokes the callback handler if applicable.
 
-        This method sets the invocation state on the event and invokes the callback_handler with
-        the event if it is configured to be invoked
+        This method sets the invocation state on the signal and invokes the callback_handler with
+        the signal if it is configured to be invoked
 
         Args:
             agent: The agent instance (not currently used but will be in future versions)
             invocation_state: Context and state information for the current invocation
-            callback_handler: The callback function to invoke with event data
+            callback_handler: The callback function to invoke with signal data
 
         Returns:
             bool: True if the callback was invoked, False otherwise
         """
         self._set_invocation_state(invocation_state)
-        args = TypedEvent._get_callback_arguments(self)
+        args = TypedSignal._get_callback_arguments(self)
 
         if args:
             callback_handler(**args)
@@ -83,7 +78,7 @@ class TypedEvent(dict):
         return False
 
     @staticmethod
-    def _get_callback_arguments(event: "TypedEvent") -> dict[str, Any] | None:
+    def _get_callback_arguments(event: "TypedSignal") -> dict[str, Any] | None:
         allow_listed = event._get_callback_fields()
 
         if allow_listed is None:
@@ -95,15 +90,15 @@ class TypedEvent(dict):
                 return {k: v for k, v in event.items() if k in allow_listed}
 
 
-class InitEventLoopEvent(TypedEvent):
-    """Event emitted at the very beginning of agent execution.
+class InitSignalLoopSignal(TypedSignal):
+    """Signal emitted at the very beginning of agent execution.
 
-    This event is fired before any processing begins and provides access to the
+    This signal is fired before any processing begins and provides access to the
     initial invocation state.
     """
 
     def __init__(self) -> None:
-        """Initialize the event loop initialization event."""
+        """Initialize the event loop initialization signal."""
         super().__init__({"init_event_loop": True})
 
     @override
@@ -118,43 +113,43 @@ class InitEventLoopEvent(TypedEvent):
         return ["init_event_loop"]
 
 
-class StartEvent(TypedEvent):
-    """Event emitted at the start of each event loop cycle.
+class StartSignal(TypedSignal):
+    """Signal emitted at the start of each event loop cycle.
 
     ::deprecated::
-        Use StartEventLoopEvent instead.
+        Use StartSignalLoopSignal instead.
 
-    This event signals the beginning of a new processing cycle within the agent's
+    This signal signals the beginning of a new processing cycle within the agent's
     event loop. It's fired before model invocation and tool execution begin.
     """
 
     def __init__(self) -> None:
-        """Initialize the event loop start event."""
+        """Initialize the event loop start signal."""
         super().__init__({"start": True})
 
     def _get_callback_fields(self) -> list[str]:
         return ["start"]
 
 
-class StartEventLoopEvent(TypedEvent):
-    """Event emitted when the event loop cycle begins processing.
+class StartEventLoopSignal(TypedSignal):
+    """Signal emitted when the event loop cycle begins processing.
 
-    This event is fired after StartEvent and indicates that the event loop
+    This signal is fired after StartSignal and indicates that the event loop
     has begun its core processing logic, including model invocation preparation.
     """
 
     def __init__(self) -> None:
-        """Initialize the event loop processing start event."""
+        """Initialize the event loop processing start signal."""
         super().__init__({"start_event_loop": True})
 
     def _get_callback_fields(self) -> list[str]:
         return ["start_event_loop"]
 
 
-class MessageEvent(TypedEvent):
-    """Event emitted when the model invocation has completed.
+class MessageSignal(TypedSignal):
+    """Signal emitted when the model invocation has completed.
 
-    This event is fired whenever the model generates a response message that
+    This signal is fired whenever the model generates a response message that
     gets added to the conversation history.
     """
 
@@ -175,8 +170,8 @@ class MessageEvent(TypedEvent):
         return ["message"]
 
 
-class EventLoopThrottleDelay(TypedEvent):
-    """Event emitted when the event loop is throttled due to rate limiting."""
+class EventLoopThrottleSignal(TypedSignal):
+    """Signal emitted when the event loop is throttled due to rate limiting."""
 
     def __init__(self, delay: int) -> None:
         """Initialize with the throttle delay duration.
@@ -195,10 +190,10 @@ class EventLoopThrottleDelay(TypedEvent):
         return ["event_loop_throttled_delay"]
 
 
-class ForceStopEvent(TypedEvent):
-    """Event emitted when the agent execution is forcibly stopped, either by a tool or by an exception.
+class ForceStopSignal(TypedSignal):
+    """Signal emitted when the agent execution is forcibly stopped, either by a tool or by an exception.
 
-    This event is fired when an unrecoverable error occurs during execution,
+    This signal is fired when an unrecoverable error occurs during execution,
     such as repeated throttling failures or critical system errors. It provides
     the reason for the forced stop and any associated exception.
     """
@@ -231,14 +226,8 @@ class ForceStopEvent(TypedEvent):
         return ["force_stop", "force_stop_reason"]
 
 
-class StopEvent(TypedEvent):
-    """Event emitted when the agent execution completes normally.
-
-    This event is fired when the event loop cycle completes successfully,
-    providing the final result including the stop reason, final message,
-    execution metrics, and final state. It represents the successful
-    completion of an agent invocation.
-    """
+class StopSignal(TypedSignal):
+    """Signal emitted when the agent execution completes normally."""
 
     def __init__(
         self,
@@ -278,22 +267,17 @@ class StopEvent(TypedEvent):
         return ["result"]
 
 
-class ToolStreamEvent(TypedEvent):
-    """Event emitted during tool execution streaming.
+class ToolStreamSignal(TypedSignal):
+    """Signal emitted when a tool yields signals as part of tool execution."""
 
-    This event is fired when a tool produces streaming output during execution.
-    It provides access to the tool use information and the streaming data,
-    allowing callbacks to process tool execution progress in real-time.
-    """
-
-    def __init__(self, tool_use: ToolUse, stream_data: Any) -> None:
+    def __init__(self, tool_use: ToolUse, signal: Any) -> None:
         """Initialize with tool streaming data.
 
         Args:
             tool_use: The tool invocation producing the stream
-            stream_data: Incremental data from the tool execution
+            signal: The yielded signal from the tool execution
         """
-        super().__init__({"tool_stream_tool_use": tool_use, "tool_stream_data": stream_data})
+        super().__init__({"tool_stream_tool_use": tool_use, "tool_stream_signal": signal})
 
     @property
     def tool_use(self) -> ToolUse:
@@ -302,12 +286,12 @@ class ToolStreamEvent(TypedEvent):
 
     @property
     def tool_stream_data(self) -> Any:
-        """Incremental data chunk from the streaming tool execution."""
-        return self.get("tool_stream_data")
+        """The yielded signal from the tool execution."""
+        return self.get("tool_stream_signal")
 
 
-class ToolResultEvent(TypedEvent):
-    """Event emitted when a tool execution completes."""
+class ToolResultSignal(TypedSignal):
+    """Signal emitted when a tool execution completes."""
 
     def __init__(self, tool_result: ToolResult) -> None:
         """Initialize with the completed tool result.
@@ -323,10 +307,10 @@ class ToolResultEvent(TypedEvent):
         return self.get("tool_result")  # type: ignore[return-value]
 
 
-class ToolResultMessageEvent(TypedEvent):
-    """Event emitted when tool results are formatted as a message.
+class ToolResultMessageSignal(TypedSignal):
+    """Signal emitted when tool results are formatted as a message.
 
-    This event is fired when tool execution results are converted into a
+    This signal is fired when tool execution results are converted into a
     message format to be added to the conversation history. It provides
     access to the formatted message containing tool results.
     """
@@ -349,10 +333,10 @@ class ToolResultMessageEvent(TypedEvent):
         return ["message"]
 
 
-class ModelStreamEvent(TypedEvent):
-    """Event emitted during model response streaming.
+class ModelStreamSignal(TypedSignal):
+    """Signal emitted during model response streaming.
 
-    This event is fired when the model produces streaming output during response
+    This signal is fired when the model produces streaming output during response
     generation. It provides access to incremental delta data from the model,
     allowing callbacks to process and display streaming responses in real-time.
     """
@@ -384,8 +368,8 @@ class ModelStreamEvent(TypedEvent):
         return Any
 
 
-class ToolUseStreamEvent(ModelStreamEvent):
-    """Event emitted during tool use input streaming."""
+class ToolUseStreamSignal(ModelStreamSignal):
+    """Signal emitted during tool use input streaming."""
 
     def __init__(self, delta: ContentBlockDelta, current_tool_use: dict[str, Any]) -> None:
         """Initialize with delta and current tool use state."""
@@ -402,8 +386,8 @@ class ToolUseStreamEvent(ModelStreamEvent):
         return self.get("current_tool_use")  # type: ignore[return-value]
 
 
-class TextStreamEvent(ModelStreamEvent):
-    """Event emitted during text content streaming."""
+class TextStreamSignal(ModelStreamSignal):
+    """Signal emitted during text content streaming."""
 
     def __init__(self, delta: ContentBlockDelta, text: str) -> None:
         """Initialize with delta and text content."""
@@ -420,8 +404,8 @@ class TextStreamEvent(ModelStreamEvent):
         return self.get("delta")  # type: ignore[return-value]
 
 
-class ReasoningTextStreamEvent(ModelStreamEvent):
-    """Event emitted during reasoning text streaming."""
+class ReasoningTextStreamSignal(ModelStreamSignal):
+    """Signal emitted during reasoning text streaming."""
 
     def __init__(self, delta: ContentBlockDelta, reasoning_text: str | None) -> None:
         """Initialize with delta and reasoning text."""
@@ -438,8 +422,8 @@ class ReasoningTextStreamEvent(ModelStreamEvent):
         return self.get("delta")  # type: ignore[return-value]
 
 
-class ReasoningSignatureStreamEvent(ModelStreamEvent):
-    """Event emitted during reasoning signature streaming."""
+class ReasoningSignatureStreamSignal(ModelStreamSignal):
+    """Signal emitted during reasoning signature streaming."""
 
     def __init__(self, delta: ContentBlockDelta, reasoning_signature: str | None) -> None:
         """Initialize with delta and reasoning signature."""
@@ -456,24 +440,24 @@ class ReasoningSignatureStreamEvent(ModelStreamEvent):
         return self.get("delta")  # type: ignore[return-value]
 
 
-AllTypedEvents = (
-    InitEventLoopEvent
-    | StartEvent
-    | StartEventLoopEvent
-    | MessageEvent
-    | EventLoopThrottleDelay
-    | ForceStopEvent
-    | StopEvent
-    | ToolStreamEvent
-    | ToolResultEvent
-    | ToolResultMessageEvent
-    | ModelStreamEvent
-    | ToolUseStreamEvent
-    | TextStreamEvent
-    | ReasoningTextStreamEvent
-    | ReasoningSignatureStreamEvent
-    | TypedEvent
+AgentSignal = (
+    InitSignalLoopSignal
+    | StartSignal
+    | StartEventLoopSignal
+    | MessageSignal
+    | EventLoopThrottleSignal
+    | ForceStopSignal
+    | StopSignal
+    | ToolStreamSignal
+    | ToolResultSignal
+    | ToolResultMessageSignal
+    | ModelStreamSignal
+    | ToolUseStreamSignal
+    | TextStreamSignal
+    | ReasoningTextStreamSignal
+    | ReasoningSignatureStreamSignal
+    | TypedSignal
 )
 
-TypedToolGenerator = AsyncGenerator[TypedEvent, None]
-"""Generator of tool events where all events are typed as TypedEvents."""
+SignalToolGenerator = AsyncGenerator[TypedSignal, None]
+"""Generator of tool signals where all signals are typed as TypedSignals."""

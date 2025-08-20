@@ -37,8 +37,8 @@ from ..telemetry.tracer import get_tracer, serialize
 from ..tools.registry import ToolRegistry
 from ..tools.watcher import ToolWatcher
 from ..types.content import ContentBlock, Message, Messages
-from ..types.events import InitEventLoopEvent, ModelStreamEvent, StopEvent, ToolResultEvent, TypedEvent
 from ..types.exceptions import ContextWindowOverflowException
+from ..types.signals import AgentSignal, InitSignalLoopSignal, ModelStreamSignal, StopSignal, ToolResultSignal
 from ..types.tools import ToolResult, ToolUse
 from ..types.traces import AttributeValue
 from .agent_result import AgentResult
@@ -137,19 +137,19 @@ class Agent:
                     "input": kwargs.copy(),
                 }
 
-                async def acall() -> ToolResultEvent:
+                async def acall() -> ToolResultSignal:
                     # Pass kwargs as invocation_state
-                    async for event in run_tool(self._agent, tool_use, kwargs):
-                        _ = event
+                    async for signal in run_tool(self._agent, tool_use, kwargs):
+                        _ = signal
 
-                    return cast(ToolResultEvent, event)
+                    return cast(ToolResultSignal, signal)
 
-                def tcall() -> ToolResultEvent:
+                def tcall() -> ToolResultSignal:
                     return asyncio.run(acall())
 
                 with ThreadPoolExecutor() as executor:
                     future = executor.submit(tcall)
-                    last_event = future.result()
+                    last_signal = future.result()
 
                 if record_direct_tool_call is not None:
                     should_record_direct_tool_call = record_direct_tool_call
@@ -158,12 +158,12 @@ class Agent:
 
                 if should_record_direct_tool_call:
                     # Create a record of this tool execution in the message history
-                    self._agent._record_tool_execution(tool_use, last_event.tool_result, user_message_override)
+                    self._agent._record_tool_execution(tool_use, last_signal.tool_result, user_message_override)
 
                 # Apply window management
                 self._agent.conversation_manager.apply_management(self._agent)
 
-                return last_event.tool_result
+                return last_signal.tool_result
 
             return caller
 
@@ -395,11 +395,11 @@ class Agent:
                 - metrics: Performance metrics from the event loop
                 - state: The final state of the event loop
         """
-        events = self.stream_async(prompt, **kwargs)
-        async for event in events:
-            _ = event
+        signals = self.stream_async(prompt, **kwargs)
+        async for signal in signals:
+            _ = signal
 
-        return cast(AgentResult, event["result"])
+        return cast(AgentResult, signal["result"])
 
     def structured_output(self, output_model: Type[T], prompt: Optional[Union[str, list[ContentBlock]]] = None) -> T:
         """This method allows you to get structured output from the agent.
@@ -477,23 +477,23 @@ class Agent:
                         "gen_ai.system.message",
                         attributes={"role": "system", "content": serialize([{"text": self.system_prompt}])},
                     )
-                events = self.model.structured_output(output_model, temp_messages, system_prompt=self.system_prompt)
-                async for event in events:
-                    if "stop" not in event:
-                        typed_event = ModelStreamEvent(delta_data=event)
-                        typed_event._prepare_and_invoke(
+                signals = self.model.structured_output(output_model, temp_messages, system_prompt=self.system_prompt)
+                async for signal in signals:
+                    if "stop" not in signal:
+                        typed_signal = ModelStreamSignal(delta_data=signal)
+                        typed_signal._prepare_and_invoke(
                             agent=self, invocation_state={}, callback_handler=self.callback_handler
                         )
 
                 structured_output_span.add_event(
-                    "gen_ai.choice", attributes={"message": serialize(event["output"].model_dump())}
+                    "gen_ai.choice", attributes={"message": serialize(signal["output"].model_dump())}
                 )
-                return event["output"]
+                return signal["output"]
 
             finally:
                 self.hooks.invoke_callbacks(AfterInvocationEvent(agent=self))
 
-    async def stream_async(self, prompt: Union[str, list[ContentBlock]], **kwargs: Any) -> AsyncIterator[Any]:
+    async def stream_async(self, prompt: Union[str, list[ContentBlock]], **kwargs: Any) -> AsyncIterator[AgentSignal]:
         """Process a natural language prompt and yield events as an async iterator.
 
         This method provides an asynchronous interface for streaming agent events, allowing
@@ -533,23 +533,23 @@ class Agent:
         with trace_api.use_span(self.trace_span):
             try:
                 invocation_state = kwargs
-                events = self._run_loop(message, invocation_state=invocation_state)
-                async for event in events:
-                    event._prepare_and_invoke(
+                signals = self._run_loop(message, invocation_state=invocation_state)
+                async for signal in signals:
+                    signal._prepare_and_invoke(
                         agent=self, invocation_state=invocation_state, callback_handler=callback_handler
                     )
-                    yield event
+                    yield signal
 
-                if not isinstance(event, StopEvent):
-                    raise ValueError(f"Last event was not a StopEvent; was: {event}")
+                if not isinstance(signal, StopSignal):
+                    raise ValueError(f"Last signal was not a StopSignal; was: {signal}")
 
-                self._end_agent_trace_span(response=event.result)
+                self._end_agent_trace_span(response=signal.result)
 
             except Exception as e:
                 self._end_agent_trace_span(error=e)
                 raise
 
-    async def _run_loop(self, message: Message, invocation_state: dict[str, Any]) -> AsyncGenerator[TypedEvent, None]:
+    async def _run_loop(self, message: Message, invocation_state: dict[str, Any]) -> AsyncGenerator[AgentSignal, None]:
         """Execute the agent's event loop with the given message and parameters.
 
         Args:
@@ -562,33 +562,33 @@ class Agent:
         self.hooks.invoke_callbacks(BeforeInvocationEvent(agent=self))
 
         try:
-            yield InitEventLoopEvent()
+            yield InitSignalLoopSignal()
 
             self._append_message(message)
 
             # Execute the event loop cycle with retry logic for context limits
-            events = self._execute_event_loop_cycle(invocation_state)
-            async for event in events:
+            signals = self._execute_event_loop_cycle(invocation_state)
+            async for signal in signals:
                 # Signal from the model provider that the message sent by the user should be redacted,
                 # likely due to a guardrail.
                 if (
-                    isinstance(event, ModelStreamEvent)
-                    and event.delta_data.get("event")
-                    and event.delta_data["event"].get("redactContent")
-                    and event.delta_data["event"]["redactContent"].get("redactUserContentMessage")
+                    isinstance(signal, ModelStreamSignal)
+                    and signal.delta_data.get("event")
+                    and signal.delta_data["event"].get("redactContent")
+                    and signal.delta_data["event"]["redactContent"].get("redactUserContentMessage")
                 ):
                     self.messages[-1]["content"] = [
-                        {"text": event.delta_data["event"]["redactContent"]["redactUserContentMessage"]}
+                        {"text": signal.delta_data["event"]["redactContent"]["redactUserContentMessage"]}
                     ]
                     if self._session_manager:
                         self._session_manager.redact_latest_message(self.messages[-1], self)
-                yield event
+                yield signal
 
         finally:
             self.conversation_manager.apply_management(self)
             self.hooks.invoke_callbacks(AfterInvocationEvent(agent=self))
 
-    async def _execute_event_loop_cycle(self, invocation_state: dict[str, Any]) -> AsyncGenerator[TypedEvent, None]:
+    async def _execute_event_loop_cycle(self, invocation_state: dict[str, Any]) -> AsyncGenerator[AgentSignal, None]:
         """Execute the event loop cycle with retry logic for context window limits.
 
         This internal method handles the execution of the event loop cycle and implements
@@ -603,12 +603,12 @@ class Agent:
 
         try:
             # Execute the main event loop cycle
-            events = event_loop_cycle(
+            signals = event_loop_cycle(
                 agent=self,
                 invocation_state=invocation_state,
             )
-            async for event in events:
-                yield event
+            async for signal in signals:
+                yield signal
 
         except ContextWindowOverflowException as e:
             # Try reducing the context size and retrying
@@ -618,9 +618,9 @@ class Agent:
             if self._session_manager:
                 self._session_manager.sync_agent(self)
 
-            events = self._execute_event_loop_cycle(invocation_state)
-            async for event in events:
-                yield event
+            signals = self._execute_event_loop_cycle(invocation_state)
+            async for signal in signals:
+                yield signal
 
     def _record_tool_execution(
         self,

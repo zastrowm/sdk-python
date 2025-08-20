@@ -6,7 +6,7 @@ import pytest
 import strands
 import strands.telemetry
 from strands.types.content import Message
-from strands.types.events import ToolResultEvent, ToolStreamEvent
+from strands.types.signals import ToolResultSignal, ToolStreamSignal
 
 
 @pytest.fixture(autouse=True)
@@ -17,8 +17,8 @@ def moto_autouse(moto_env):
 @pytest.fixture
 def tool_handler(request):
     async def handler(tool_use):
-        yield ToolStreamEvent(tool_use, {"event": "abc"})
-        yield ToolResultEvent(
+        yield ToolStreamSignal(tool_use, {"event": "abc"})
+        yield ToolResultSignal(
             {
                 **params,
                 "toolUseId": tool_use["toolUseId"],
@@ -89,8 +89,8 @@ async def test_run_tools(
 
     tru_events = await alist(stream)
     exp_events = [
-        ToolStreamEvent(tool_uses[0], {"event": "abc"}),
-        ToolResultEvent(
+        ToolStreamSignal(tool_uses[0], {"event": "abc"}),
+        ToolResultSignal(
             {
                 "content": [
                     {

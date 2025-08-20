@@ -22,7 +22,7 @@ from ..types.streaming import (
 from ..types.tools import ToolSpec, ToolUse
 
 if TYPE_CHECKING:
-    from ..types.events import ModelStreamEvent
+    from ..types.signals import ModelStreamSignal
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ def handle_content_block_start(event: ContentBlockStartEvent) -> dict[str, Any]:
 
 def handle_content_block_delta(
     event: ContentBlockDeltaEvent, state: dict[str, Any]
-) -> tuple[dict[str, Any], "ModelStreamEvent"]:
+) -> tuple[dict[str, Any], "ModelStreamSignal"]:
     """Handles content block delta updates by appending text, tool input, or reasoning content to the state.
 
     Args:
@@ -116,28 +116,28 @@ def handle_content_block_delta(
     Returns:
         Updated state with appended text or tool input.
     """
-    from ..types.events import (
-        ModelStreamEvent,
-        ReasoningSignatureStreamEvent,
-        ReasoningTextStreamEvent,
-        TextStreamEvent,
-        ToolUseStreamEvent,
+    from ..types.signals import (
+        ModelStreamSignal,
+        ReasoningSignatureStreamSignal,
+        ReasoningTextStreamSignal,
+        TextStreamSignal,
+        ToolUseStreamSignal,
     )
 
     delta_content = event["delta"]
 
-    callback_event = ModelStreamEvent({})
+    signal = ModelStreamSignal({})
 
     if "toolUse" in delta_content:
         if "input" not in state["current_tool_use"]:
             state["current_tool_use"]["input"] = ""
 
         state["current_tool_use"]["input"] += delta_content["toolUse"]["input"]
-        callback_event = ToolUseStreamEvent(event["delta"], state["current_tool_use"])
+        signal = ToolUseStreamSignal(event["delta"], state["current_tool_use"])
 
     elif "text" in delta_content:
         state["text"] += delta_content["text"]
-        callback_event = TextStreamEvent(event["delta"], delta_content["text"])
+        signal = TextStreamSignal(event["delta"], delta_content["text"])
 
     elif "reasoningContent" in delta_content:
         if "text" in delta_content["reasoningContent"]:
@@ -145,18 +145,16 @@ def handle_content_block_delta(
                 state["reasoningText"] = ""
 
             state["reasoningText"] += delta_content["reasoningContent"]["text"]
-            callback_event = ReasoningTextStreamEvent(event["delta"], delta_content["reasoningContent"]["text"])
+            signal = ReasoningTextStreamSignal(event["delta"], delta_content["reasoningContent"]["text"])
 
         elif "signature" in delta_content["reasoningContent"]:
             if "signature" not in state:
                 state["signature"] = ""
 
             state["signature"] += delta_content["reasoningContent"]["signature"]
-            callback_event = ReasoningSignatureStreamEvent(
-                event["delta"], delta_content["reasoningContent"]["signature"]
-            )
+            signal = ReasoningSignatureStreamSignal(event["delta"], delta_content["reasoningContent"]["signature"])
 
-    return state, callback_event
+    return state, signal
 
 
 def handle_content_block_stop(state: dict[str, Any]) -> dict[str, Any]:
@@ -283,8 +281,8 @@ async def process_stream(chunks: AsyncIterable[StreamEvent]) -> AsyncGenerator[d
         elif "contentBlockStart" in chunk:
             state["current_tool_use"] = handle_content_block_start(chunk["contentBlockStart"])
         elif "contentBlockDelta" in chunk:
-            state, callback_event = handle_content_block_delta(chunk["contentBlockDelta"], state)
-            yield callback_event
+            state, callback_signal = handle_content_block_delta(chunk["contentBlockDelta"], state)
+            yield callback_signal
         elif "contentBlockStop" in chunk:
             state = handle_content_block_stop(state)
         elif "messageStop" in chunk:
@@ -320,5 +318,5 @@ async def stream_messages(
 
     chunks = model.stream(messages, tool_specs if tool_specs else None, system_prompt)
 
-    async for event in process_stream(chunks):
-        yield event
+    async for signal in process_stream(chunks):
+        yield signal

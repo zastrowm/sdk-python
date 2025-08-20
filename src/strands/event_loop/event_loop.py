@@ -28,25 +28,25 @@ from ..telemetry.metrics import Trace
 from ..telemetry.tracer import get_tracer
 from ..tools.executor import run_tools, validate_and_prepare_tools
 from ..types.content import Message
-from ..types.events import (
-    EventLoopThrottleDelay,
-    ForceStopEvent,
-    MessageEvent,
-    ModelStreamEvent,
-    StartEvent,
-    StartEventLoopEvent,
-    StopEvent,
-    ToolResultEvent,
-    ToolResultMessageEvent,
-    ToolStreamEvent,
-    TypedEvent,
-    TypedToolGenerator,
-)
 from ..types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
     MaxTokensReachedException,
     ModelThrottledException,
+)
+from ..types.signals import (
+    EventLoopThrottleSignal,
+    ForceStopSignal,
+    MessageSignal,
+    ModelStreamSignal,
+    SignalToolGenerator,
+    StartEventLoopSignal,
+    StartSignal,
+    StopSignal,
+    ToolResultMessageSignal,
+    ToolResultSignal,
+    ToolStreamSignal,
+    TypedSignal,
 )
 from ..types.streaming import Metrics, StopReason
 from ..types.tools import ToolChoice, ToolChoiceAuto, ToolConfig, ToolResult, ToolUse
@@ -63,7 +63,7 @@ INITIAL_DELAY = 4
 MAX_DELAY = 240  # 4 minutes
 
 
-async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> AsyncGenerator[TypedEvent, None]:
+async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> AsyncGenerator[TypedSignal, None]:
     """Execute a single cycle of the event loop.
 
     This core function processes a single conversation turn, handling model inference, tool execution, and error
@@ -107,8 +107,8 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
     cycle_start_time, cycle_trace = agent.event_loop_metrics.start_cycle(attributes=attributes)
     invocation_state["event_loop_cycle_trace"] = cycle_trace
 
-    yield StartEvent()
-    yield StartEventLoopEvent()
+    yield StartSignal()
+    yield StartEventLoopSignal()
 
     # Create tracer span for this event loop cycle
     tracer = get_tracer()
@@ -146,11 +146,11 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
             )
 
             try:
-                async for event in stream_messages(agent.model, agent.system_prompt, agent.messages, tool_specs):
-                    if "stop" not in event:
-                        yield ModelStreamEvent(delta_data=event)
+                async for signal in stream_messages(agent.model, agent.system_prompt, agent.messages, tool_specs):
+                    if "stop" not in signal:
+                        yield ModelStreamSignal(delta_data=signal)
 
-                stop_reason, message, usage, metrics = event["stop"]
+                stop_reason, message, usage, metrics = signal["stop"]
                 invocation_state.setdefault("request_state", {})
 
                 agent.hooks.invoke_callbacks(
@@ -183,7 +183,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
 
                 if isinstance(e, ModelThrottledException):
                     if attempt + 1 == MAX_ATTEMPTS:
-                        yield ForceStopEvent(e)
+                        yield ForceStopSignal(e)
                         raise e
 
                     logger.debug(
@@ -197,7 +197,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                     time.sleep(current_delay)
                     current_delay = min(current_delay * 2, MAX_DELAY)
 
-                    yield EventLoopThrottleDelay(delay=current_delay)
+                    yield EventLoopThrottleSignal(delay=current_delay)
                 else:
                     raise e
 
@@ -209,7 +209,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
         # Add the response message to the conversation
         agent.messages.append(message)
         agent.hooks.invoke_callbacks(MessageAddedEvent(agent=agent, message=message))
-        yield MessageEvent(message=message)
+        yield MessageSignal(message=message)
 
         # Update metrics
         agent.event_loop_metrics.update_usage(usage)
@@ -234,7 +234,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
         # If the model is requesting to use tools
         if stop_reason == "tool_use":
             # Handle tool execution
-            events = _handle_tool_execution(
+            signals = _handle_tool_execution(
                 stop_reason,
                 message,
                 agent=agent,
@@ -243,12 +243,12 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                 cycle_start_time=cycle_start_time,
                 invocation_state=invocation_state,
             )
-            async for event in events:
+            async for signal in signals:
                 # Note: Once we allow streaming of tool results, we need to do a check here for it
-                if isinstance(event, TypedEvent):
-                    yield event
+                if isinstance(signal, TypedSignal):
+                    yield signal
                 else:
-                    raise ValueError(f"Event was not a subclass of TypedEvent: {event}")
+                    raise ValueError(f"Signal was not a subclass of TypedSignal: {signal}")
             return
 
         # End the cycle and return results
@@ -275,11 +275,11 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
             tracer.end_span_with_error(cycle_span, str(e), e)
 
         # Handle any other exceptions
-        yield ForceStopEvent(reason=str(e))
+        yield ForceStopSignal(reason=str(e))
         logger.exception("cycle failed")
         raise EventLoopException(e, invocation_state["request_state"]) from e
 
-    yield StopEvent(
+    yield StopSignal(
         stop_reason=stop_reason,
         message=message,
         metrics=agent.event_loop_metrics,
@@ -287,7 +287,7 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
     )
 
 
-async def recurse_event_loop(agent: "Agent", invocation_state: dict[str, Any]) -> AsyncGenerator[TypedEvent, None]:
+async def recurse_event_loop(agent: "Agent", invocation_state: dict[str, Any]) -> AsyncGenerator[TypedSignal, None]:
     """Make a recursive call to event_loop_cycle with the current state.
 
     This function is used when the event loop needs to continue processing after tool execution.
@@ -311,16 +311,16 @@ async def recurse_event_loop(agent: "Agent", invocation_state: dict[str, Any]) -
     recursive_trace = Trace("Recursive call", parent_id=cycle_trace.id)
     cycle_trace.add_child(recursive_trace)
 
-    yield StartEvent()
+    yield StartSignal()
 
-    events = event_loop_cycle(agent=agent, invocation_state=invocation_state)
-    async for event in events:
-        yield event
+    signals = event_loop_cycle(agent=agent, invocation_state=invocation_state)
+    async for signal in signals:
+        yield signal
 
     recursive_trace.end()
 
 
-async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str, Any]) -> TypedToolGenerator:
+async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str, Any]) -> SignalToolGenerator:
     """Process a tool invocation.
 
     Looks up the tool in the registry and streams it with the provided parameters.
@@ -397,17 +397,17 @@ async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str
                     result=result,
                 )
             )
-            yield ToolResultEvent(tool_result=after_event.result)
+            yield ToolResultSignal(tool_result=after_event.result)
             return
 
-        async for event in selected_tool.stream(tool_use, invocation_state):
-            # wrap all events in a ToolStreamEvent
-            print(event)
-            yield ToolStreamEvent(tool_use, event)
+        async for signal in selected_tool.stream(tool_use, invocation_state):
+            # wrap all signals in a ToolStreamSignal
+            print(signal)
+            yield ToolStreamSignal(tool_use, signal)
 
-        if not ("content" in event and "status" in event and "toolUseId" in event):
-            raise ValueError("Last event of tool invocation was not a tool result")
-        result = event
+        if not ("content" in signal and "status" in signal and "toolUseId" in signal):
+            raise ValueError("Last signal of tool invocation was not a tool result")
+        result = signal
 
         after_event = agent.hooks.invoke_callbacks(
             AfterToolInvocationEvent(
@@ -419,7 +419,7 @@ async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str
             )
         )
 
-        yield ToolResultEvent(tool_result=after_event.result)
+        yield ToolResultSignal(tool_result=after_event.result)
 
     except Exception as e:
         logger.exception("tool_name=<%s> | failed to process tool", tool_name)
@@ -438,7 +438,7 @@ async def run_tool(agent: "Agent", tool_use: ToolUse, invocation_state: dict[str
                 exception=e,
             )
         )
-        yield ToolResultEvent(tool_result=after_event.result)
+        yield ToolResultSignal(tool_result=after_event.result)
 
 
 async def _handle_tool_execution(
@@ -449,7 +449,7 @@ async def _handle_tool_execution(
     cycle_span: Any,
     cycle_start_time: float,
     invocation_state: dict[str, Any],
-) -> AsyncGenerator[TypedEvent, None]:
+) -> AsyncGenerator[TypedSignal, None]:
     tool_uses: list[ToolUse] = []
     tool_results: list[ToolResult] = []
     invalid_tool_use_ids: list[str] = []
@@ -478,7 +478,7 @@ async def _handle_tool_execution(
     validate_and_prepare_tools(message, tool_uses, tool_results, invalid_tool_use_ids)
 
     if not tool_uses:
-        yield StopEvent(
+        yield StopSignal(
             stop_reason=stop_reason,
             message=message,
             metrics=agent.event_loop_metrics,
@@ -486,10 +486,10 @@ async def _handle_tool_execution(
         )
         return
 
-    def tool_handler(tool_use: ToolUse) -> TypedToolGenerator:
+    def tool_handler(tool_use: ToolUse) -> SignalToolGenerator:
         return run_tool(agent, tool_use, invocation_state)
 
-    tool_events = run_tools(
+    tool_signals = run_tools(
         handler=tool_handler,
         tool_uses=tool_uses,
         event_loop_metrics=agent.event_loop_metrics,
@@ -498,12 +498,12 @@ async def _handle_tool_execution(
         cycle_trace=cycle_trace,
         parent_span=cycle_span,
     )
-    async for tool_event in tool_events:
-        # For now, until we implement #543, supress tool stream events
-        if isinstance(tool_event, ToolStreamEvent):
+    async for tool_signal in tool_signals:
+        # For now, until we implement #543, supress tool stream signals
+        if isinstance(tool_signal, ToolStreamSignal):
             continue
 
-        yield tool_event
+        yield tool_signal
 
     # Store parent cycle ID for the next cycle
     invocation_state["event_loop_parent_cycle_id"] = invocation_state["event_loop_cycle_id"]
@@ -515,7 +515,7 @@ async def _handle_tool_execution(
 
     agent.messages.append(tool_result_message)
     agent.hooks.invoke_callbacks(MessageAddedEvent(agent=agent, message=tool_result_message))
-    yield ToolResultMessageEvent(message=tool_result_message)
+    yield ToolResultMessageSignal(message=tool_result_message)
 
     if cycle_span:
         tracer = get_tracer()
@@ -523,7 +523,7 @@ async def _handle_tool_execution(
 
     if invocation_state["request_state"].get("stop_event_loop", False):
         agent.event_loop_metrics.end_cycle(cycle_start_time, cycle_trace)
-        yield StopEvent(
+        yield StopSignal(
             stop_reason=stop_reason,
             message=message,
             metrics=agent.event_loop_metrics,
@@ -531,6 +531,6 @@ async def _handle_tool_execution(
         )
         return
 
-    events = recurse_event_loop(agent=agent, invocation_state=invocation_state)
-    async for event in events:
-        yield event
+    signals = recurse_event_loop(agent=agent, invocation_state=invocation_state)
+    async for signal in signals:
+        yield signal

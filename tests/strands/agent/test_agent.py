@@ -20,14 +20,14 @@ from strands.handlers.callback_handler import PrintingCallbackHandler, null_call
 from strands.models.bedrock import DEFAULT_BEDROCK_MODEL_ID, BedrockModel
 from strands.session.repository_session_manager import RepositorySessionManager
 from strands.types.content import Messages
-from strands.types.events import (
-    InitEventLoopEvent,
-    ModelStreamEvent,
-    StopEvent,
-    ToolResultEvent,
-)
 from strands.types.exceptions import ContextWindowOverflowException, EventLoopException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
+from strands.types.signals import (
+    InitSignalLoopSignal,
+    ModelStreamSignal,
+    StopSignal,
+    ToolResultSignal,
+)
 from tests.fixtures.mock_session_repository import MockedSessionRepository
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
@@ -408,7 +408,7 @@ def test_agent__call__passes_invocation_state(mock_model, agent, tool, mock_even
         assert invocation_state["agent"] == agent
 
         # Return expected values from event_loop_cycle
-        yield StopEvent(
+        yield StopSignal(
             stop_reason="stop",
             message={"role": "assistant", "content": [{"text": "Response"}]},
             request_state={},
@@ -901,7 +901,7 @@ def test_agent_init_with_no_model_or_model_id():
 
 
 def test_agent_tool_no_parameter_conflict(agent, tool_registry, mock_randint, mock_run_tool, agenerator):
-    mock_run_tool.return_value = agenerator([ToolResultEvent({})])
+    mock_run_tool.return_value = agenerator([ToolResultSignal({})])
 
     @strands.tools.tool(name="system_prompter")
     def function(system_prompt: str) -> str:
@@ -925,7 +925,7 @@ def test_agent_tool_no_parameter_conflict(agent, tool_registry, mock_randint, mo
 
 
 def test_agent_tool_with_name_normalization(agent, tool_registry, mock_randint, mock_run_tool, agenerator):
-    mock_run_tool.return_value = agenerator([ToolResultEvent({})])
+    mock_run_tool.return_value = agenerator([ToolResultSignal({})])
 
     tool_name = "system-prompter"
 
@@ -1165,12 +1165,12 @@ async def test_stream_async_returns_all_events(mock_event_loop_cycle, alist):
 
     # Define the side effect to simulate callback handler being called multiple times
     async def test_event_loop(*args, **kwargs):
-        yield ModelStreamEvent(delta_data={"data": "First chunk"})
-        yield ModelStreamEvent(delta_data={"data": "Second chunk"})
-        yield ModelStreamEvent(delta_data={"data": "Final chunk", "complete": True})
+        yield ModelStreamSignal(delta_data={"data": "First chunk"})
+        yield ModelStreamSignal(delta_data={"data": "Second chunk"})
+        yield ModelStreamSignal(delta_data={"data": "Final chunk", "complete": True})
 
         # Return expected values from event_loop_cycle
-        yield StopEvent(
+        yield StopSignal(
             stop_reason="stop",
             message={"role": "assistant", "content": [{"text": "Response"}]},
             metrics={},
@@ -1183,16 +1183,16 @@ async def test_stream_async_returns_all_events(mock_event_loop_cycle, alist):
     stream = agent.stream_async("test message", callback_handler=mock_callback)
 
     # TODO
-    init_event = InitEventLoopEvent()
+    init_event = InitSignalLoopSignal()
     init_event.update({"callback_handler": mock_callback})
 
     tru_events = await alist(stream)
     exp_events = [
         init_event,
-        ModelStreamEvent(delta_data={"data": "First chunk"}),
-        ModelStreamEvent(delta_data={"data": "Second chunk"}),
-        ModelStreamEvent(delta_data={"data": "Final chunk", "complete": True}),
-        StopEvent(
+        ModelStreamSignal(delta_data={"data": "First chunk"}),
+        ModelStreamSignal(delta_data={"data": "Second chunk"}),
+        ModelStreamSignal(delta_data={"data": "Final chunk", "complete": True}),
+        StopSignal(
             stop_reason="stop",
             message={"role": "assistant", "content": [{"text": "Response"}]},
             metrics={},
@@ -1336,7 +1336,7 @@ async def test_stream_async_passes_invocation_state(agent, mock_model, mock_even
         invocation_state = kwargs["invocation_state"]
         assert invocation_state["some_value"] == "a_value"
         # Return expected values from event_loop_cycle
-        yield StopEvent(
+        yield StopSignal(
             stop_reason="stop",
             message={"role": "assistant", "content": [{"text": "Response"}]},
             metrics={},
@@ -1473,7 +1473,7 @@ async def test_agent_stream_async_creates_and_ends_span_on_success(mock_get_trac
     mock_get_tracer.return_value = mock_tracer
 
     async def test_event_loop(*args, **kwargs):
-        yield StopEvent(
+        yield StopSignal(
             stop_reason="stop",
             message={"role": "assistant", "content": [{"text": "Agent Response"}]},
             metrics={},
