@@ -244,8 +244,8 @@ async def event_loop_cycle(agent: "Agent", invocation_state: dict[str, Any]) -> 
                 cycle_start_time=cycle_start_time,
                 invocation_state=invocation_state,
             )
-            async for event in events:
-                yield event
+            async for typed_event in events:
+                yield typed_event
 
             return
 
