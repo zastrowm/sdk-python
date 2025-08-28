@@ -2,6 +2,7 @@
 Tests for the function-based tool decorator pattern.
 """
 
+from asyncio import Queue
 from typing import Any, Dict, Optional, Union
 from unittest.mock import MagicMock
 
@@ -1075,6 +1076,8 @@ async def _run_context_injection_test(context_tool: AgentTool, additional_contex
 async def test_tool_context_injection_default():
     """Test that ToolContext is properly injected with default parameter name (tool_context)."""
 
+    value_to_pass = Queue()  # a complex value that is not serializable
+
     @strands.tool(context=True)
     def context_tool(message: str, agent: Agent, tool_context: ToolContext) -> dict:
         """Tool that uses ToolContext to access tool_use_id."""
@@ -1082,7 +1085,7 @@ async def test_tool_context_injection_default():
         tool_name = tool_context.tool_use["name"]
         agent_from_tool_context = tool_context.agent
 
-        assert tool_context.invocation_state["new_value"] == 13
+        assert tool_context.invocation_state["test_reference"] is value_to_pass
 
         return {
             "status": "success",
@@ -1096,7 +1099,7 @@ async def test_tool_context_injection_default():
     await _run_context_injection_test(
         context_tool,
         {
-            "new_value": 13,
+            "test_reference": value_to_pass,
         },
     )
 
