@@ -132,8 +132,8 @@ class ToolContext:
         tool_use: The complete ToolUse object containing tool invocation details.
         agent: The Agent instance executing this tool, providing access to conversation history,
                model configuration, and other agent state.
-        invocation_state: Keyword arguments passed to agent invocation methods (agent(), agent.invoke_async(), etc.).
-                          Provides access to invocation-specific context and parameters.
+        invocation_state: Caller-provided kwargs that were passed to the agent when it was invoked (agent(),
+                          agent.invoke_async(), etc.).
 
     Note:
         This class is intended to be instantiated by the SDK. Direct construction by users
@@ -249,7 +249,8 @@ class AgentTool(ABC):
 
         Args:
             tool_use: The tool use request containing tool ID and parameters.
-            invocation_state: Context for the tool invocation, including agent state.
+            invocation_state: Caller-provided kwargs that were passed to the agent when it was invoked (agent(),
+                              agent.invoke_async(), etc.).
             **kwargs: Additional keyword arguments for future extensibility.
 
         Yields:

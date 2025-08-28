@@ -265,7 +265,8 @@ class FunctionToolMetadata:
         Args:
             validated_input: The validated input parameters (modified in place).
             tool_use: The tool use request containing tool invocation details.
-            invocation_state: Context for the tool invocation, including agent state.
+            invocation_state: Caller-provided kwargs that were passed to the agent when it was invoked (agent(),
+                              agent.invoke_async(), etc.).
         """
         if self._context_param and self._context_param in self.signature.parameters:
             tool_context = ToolContext(
@@ -435,7 +436,8 @@ class DecoratedFunctionTool(AgentTool, Generic[P, R]):
 
         Args:
             tool_use: The tool use specification from the Agent.
-            invocation_state: Context for the tool invocation, including agent state.
+            invocation_state: Caller-provided kwargs that were passed to the agent when it was invoked (agent(),
+                              agent.invoke_async(), etc.).
             **kwargs: Additional keyword arguments for future extensibility.
 
         Yields:
