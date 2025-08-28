@@ -1039,7 +1039,7 @@ async def test_tool_with_complex_anyof_schema(alist):
     assert "NoneType: None" in result["content"][0]["text"]
 
 
-async def _run_context_injection_test(context_tool: AgentTool):
+async def _run_context_injection_test(context_tool: AgentTool, additional_context=None):
     """Common test logic for context injection tests."""
     tool: AgentTool = context_tool
     generator = tool.stream(
@@ -1052,6 +1052,7 @@ async def _run_context_injection_test(context_tool: AgentTool):
         },
         invocation_state={
             "agent": Agent(name="test_agent"),
+            **(additional_context or {}),
         },
     )
     tool_results = [value async for value in generator]
@@ -1081,6 +1082,8 @@ async def test_tool_context_injection_default():
         tool_name = tool_context.tool_use["name"]
         agent_from_tool_context = tool_context.agent
 
+        assert tool_context.invocation_state["new_value"] == 13
+
         return {
             "status": "success",
             "content": [
@@ -1090,7 +1093,12 @@ async def test_tool_context_injection_default():
             ],
         }
 
-    await _run_context_injection_test(context_tool)
+    await _run_context_injection_test(
+        context_tool,
+        {
+            "new_value": 13,
+        },
+    )
 
 
 @pytest.mark.asyncio

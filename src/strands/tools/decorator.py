@@ -268,7 +268,9 @@ class FunctionToolMetadata:
             invocation_state: Context for the tool invocation, including agent state.
         """
         if self._context_param and self._context_param in self.signature.parameters:
-            tool_context = ToolContext(tool_use=tool_use, agent=invocation_state["agent"])
+            tool_context = ToolContext(
+                tool_use=tool_use, agent=invocation_state["agent"], invocation_state=invocation_state
+            )
             validated_input[self._context_param] = tool_context
 
         # Inject agent if requested (backward compatibility)
