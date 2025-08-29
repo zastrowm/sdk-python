@@ -1241,10 +1241,10 @@ async def test_self_loop_edge_cases(mock_strands_tracer, mock_use_span):
     """Test self-loop edge cases including state reset, failure handling, and infinite loop prevention."""
     # Test 1: State reset during self-loops
     from strands.agent.state import AgentState
-    
+
     agent = create_mock_agent("stateful_agent", "Stateful response")
     agent.state = AgentState()
-    
+
     def loop_condition(state: GraphState) -> bool:
         return len(state.execution_order) < 3
 
@@ -1258,9 +1258,11 @@ async def test_self_loop_edge_cases(mock_strands_tracer, mock_use_span):
     # Mock reset tracking
     reset_spy = MagicMock()
     original_reset = node.reset_executor_state
+
     def spy_reset():
         reset_spy()
         return original_reset()
+
     node.reset_executor_state = spy_reset
 
     graph = builder.build()
@@ -1272,7 +1274,7 @@ async def test_self_loop_edge_cases(mock_strands_tracer, mock_use_span):
 
     # Test 2: Infinite loop prevention
     infinite_agent = create_mock_agent("infinite_agent", "Infinite loop")
-    
+
     def always_true_condition(state: GraphState) -> bool:
         return True
 
