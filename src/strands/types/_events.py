@@ -287,7 +287,7 @@ class ToolStreamEvent(TypedEvent):
     @property
     def tool_use_id(self) -> str:
         """The toolUseId associated with this stream."""
-        return cast(str, cast(ToolUse, self.get("tool_stream_event").get("tool_use")).get("toolUseId"))
+        return cast(str, cast(ToolUse, cast(dict, self.get("tool_stream_event")).get("tool_use")).get("toolUseId"))
 
 
 class ModelMessageEvent(TypedEvent):
