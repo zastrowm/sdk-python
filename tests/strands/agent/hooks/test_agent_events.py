@@ -261,12 +261,16 @@ async def test_stream_e2e_success(alist):
             }
         },
         {
-            "tool_stream_data": {"tool_streaming": True},
-            "tool_stream_tool_use": {"input": {}, "name": "streaming_tool", "toolUseId": "12345"},
+            "tool_stream_event": {
+                "data": {"tool_streaming": True},
+                "tool_use": {"input": {}, "name": "streaming_tool", "toolUseId": "12345"},
+            }
         },
         {
-            "tool_stream_data": "Final result",
-            "tool_stream_tool_use": {"input": {}, "name": "streaming_tool", "toolUseId": "12345"},
+            "tool_stream_event": {
+                "data": "Final result",
+                "tool_use": {"input": {}, "name": "streaming_tool", "toolUseId": "12345"},
+            }
         },
         {
             "message": {

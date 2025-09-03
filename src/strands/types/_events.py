@@ -282,12 +282,12 @@ class ToolStreamEvent(TypedEvent):
             tool_use: The tool invocation producing the stream
             tool_stream_data: The yielded event from the tool execution
         """
-        super().__init__({"tool_stream_tool_use": tool_use, "tool_stream_data": tool_stream_data})
+        super().__init__({"tool_stream_event": {"tool_use": tool_use, "data": tool_stream_data}})
 
     @property
     def tool_use_id(self) -> str:
         """The toolUseId associated with this stream."""
-        return cast(str, cast(ToolUse, self.get("tool_stream_tool_use")).get("toolUseId"))
+        return cast(str, cast(ToolUse, self.get("tool_stream_event").get("tool_use")).get("toolUseId"))
 
 
 class ModelMessageEvent(TypedEvent):
