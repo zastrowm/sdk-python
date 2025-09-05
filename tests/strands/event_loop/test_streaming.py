@@ -6,6 +6,7 @@ import pytest
 import strands
 import strands.event_loop
 from strands.types._events import ModelStopReason, TypedEvent
+from strands.types.content import Message
 from strands.types.streaming import (
     ContentBlockDeltaEvent,
     ContentBlockStartEvent,
@@ -566,6 +567,10 @@ async def test_process_stream(response, exp_events, agenerator, alist):
     assert non_typed_events == []
 
 
+def _get_message_from_event(event: ModelStopReason) -> Message:
+    return cast(Message, event["stop"][1])
+
+
 @pytest.mark.asyncio
 async def test_process_stream_with_no_signature(agenerator, alist):
     response = [
@@ -598,8 +603,10 @@ async def test_process_stream_with_no_signature(agenerator, alist):
 
     last_event = cast(ModelStopReason, (await alist(stream))[-1])
 
-    assert "signature" not in last_event.message["content"][0]["reasoningContent"]["reasoningText"]
-    assert last_event.message["content"][1]["text"] == "Sure! Let’s do it"
+    message = _get_message_from_event(last_event)
+
+    assert "signature" not in message["content"][0]["reasoningContent"]["reasoningText"]
+    assert message["content"][1]["text"] == "Sure! Let’s do it"
 
 
 @pytest.mark.asyncio
@@ -636,8 +643,10 @@ async def test_process_stream_with_signature(agenerator, alist):
 
     last_event = cast(ModelStopReason, (await alist(stream))[-1])
 
-    assert last_event.message["content"][0]["reasoningContent"]["reasoningText"]["signature"] == "test-signature"
-    assert last_event.message["content"][1]["text"] == "Sure! Let’s do it"
+    message = _get_message_from_event(last_event)
+
+    assert message["content"][0]["reasoningContent"]["reasoningText"]["signature"] == "test-signature"
+    assert message["content"][1]["text"] == "Sure! Let’s do it"
 
 
 @pytest.mark.asyncio

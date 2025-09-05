@@ -198,10 +198,6 @@ class ModelStopReason(TypedEvent):
         super().__init__({"stop": (stop_reason, message, usage, metrics)})
 
     @property
-    def message(self) -> Message:
-        return cast(Message, self["stop"][1])
-
-    @property
     @override
     def is_callback_event(self) -> bool:
         return False
