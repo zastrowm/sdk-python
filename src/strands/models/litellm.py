@@ -15,6 +15,7 @@ from typing_extensions import Unpack, override
 from ..types.content import ContentBlock, Messages
 from ..types.streaming import StreamEvent
 from ..types.tools import ToolSpec
+from ._config_validation import validate_config_keys
 from .openai import OpenAIModel
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class LiteLLMModel(OpenAIModel):
             **model_config: Configuration options for the LiteLLM model.
         """
         self.client_args = client_args or {}
+        validate_config_keys(model_config, self.LiteLLMConfig)
         self.config = dict(model_config)
 
         logger.debug("config=<%s> | initializing", self.config)
@@ -60,6 +62,7 @@ class LiteLLMModel(OpenAIModel):
         Args:
             **model_config: Configuration overrides.
         """
+        validate_config_keys(model_config, self.LiteLLMConfig)
         self.config.update(model_config)
 
     @override

@@ -252,3 +252,21 @@ async def test_structured_output(litellm_acompletion, model, test_output_model_c
 
     exp_result = {"output": test_output_model_cls(name="John", age=30)}
     assert tru_result == exp_result
+
+
+def test_config_validation_warns_on_unknown_keys(litellm_acompletion, captured_warnings):
+    """Test that unknown config keys emit a warning."""
+    LiteLLMModel(client_args={"api_key": "test"}, model_id="test-model", invalid_param="test")
+
+    assert len(captured_warnings) == 1
+    assert "Invalid configuration parameters" in str(captured_warnings[0].message)
+    assert "invalid_param" in str(captured_warnings[0].message)
+
+
+def test_update_config_validation_warns_on_unknown_keys(model, captured_warnings):
+    """Test that update_config warns on unknown keys."""
+    model.update_config(wrong_param="test")
+
+    assert len(captured_warnings) == 1
+    assert "Invalid configuration parameters" in str(captured_warnings[0].message)
+    assert "wrong_param" in str(captured_warnings[0].message)
