@@ -31,8 +31,12 @@ type-safe system that supports multiple subscribers per event type.
 
 from .events import (
     AfterInvocationEvent,
+    AfterModelCallEvent,
+    AfterToolCallEvent,
     AgentInitializedEvent,
     BeforeInvocationEvent,
+    BeforeModelCallEvent,
+    BeforeToolCallEvent,
     MessageAddedEvent,
 )
 from .registry import HookCallback, HookEvent, HookProvider, HookRegistry
@@ -40,6 +44,10 @@ from .registry import HookCallback, HookEvent, HookProvider, HookRegistry
 __all__ = [
     "AgentInitializedEvent",
     "BeforeInvocationEvent",
+    "BeforeToolCallEvent",
+    "AfterToolCallEvent",
+    "BeforeModelCallEvent",
+    "AfterModelCallEvent",
     "AfterInvocationEvent",
     "MessageAddedEvent",
     "HookEvent",
