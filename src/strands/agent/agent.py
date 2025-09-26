@@ -41,7 +41,7 @@ from ..hooks import (
     HookRegistry,
     MessageAddedEvent,
 )
-from ..models.bedrock import BedrockModel
+from ..models.mocked_model_provider import MockedModelProvider
 from ..models.model import Model
 from ..session.session_manager import SessionManager
 from ..telemetry.metrics import EventLoopMetrics
@@ -272,7 +272,7 @@ class Agent:
         Raises:
             ValueError: If agent id contains path separators.
         """
-        self.model = BedrockModel() if not model else BedrockModel(model_id=model) if isinstance(model, str) else model
+        self.model = MockedModelProvider([{"role": "assistant", "content": [{"text": "world!"}]}]) if not model else model
         self.messages = messages if messages is not None else []
 
         self.system_prompt = system_prompt
