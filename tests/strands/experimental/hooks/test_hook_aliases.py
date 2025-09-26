@@ -5,6 +5,8 @@ backwards compatibility and can be used interchangeably with the actual
 hook event types.
 """
 
+import importlib
+import sys
 from unittest.mock import Mock
 
 from strands.experimental.hooks import (
@@ -28,6 +30,11 @@ def test_experimental_aliases_are_same_types():
     assert AfterToolInvocationEvent is AfterToolCallEvent
     assert BeforeModelInvocationEvent is BeforeModelCallEvent
     assert AfterModelInvocationEvent is AfterModelCallEvent
+
+    assert BeforeToolCallEvent is BeforeToolInvocationEvent
+    assert AfterToolCallEvent is AfterToolInvocationEvent
+    assert BeforeModelCallEvent is BeforeModelInvocationEvent
+    assert AfterModelCallEvent is AfterModelInvocationEvent
 
 
 def test_before_tool_call_event_type_equality():
@@ -100,3 +107,29 @@ def test_experimental_aliases_in_hook_registry():
 
     assert callback_called
     assert received_event is test_event
+
+
+def test_deprecation_warning_on_import(captured_warnings):
+    """Verify that importing from experimental module emits deprecation warning."""
+
+    module = sys.modules.get("strands.experimental.hooks.events")
+    if module:
+        importlib.reload(module)
+    else:
+        importlib.import_module("strands.experimental.hooks.events")
+
+    assert len(captured_warnings) == 1
+    assert issubclass(captured_warnings[0].category, DeprecationWarning)
+    assert "moved to production with updated names" in str(captured_warnings[0].message)
+
+
+def test_deprecation_warning_on_import_only_for_experimental(captured_warnings):
+    """Verify that importing from experimental module emits deprecation warning."""
+    # Re-import the module to trigger the warning
+    module = sys.modules.get("strands.hooks")
+    if module:
+        importlib.reload(module)
+    else:
+        importlib.import_module("strands.hooks")
+
+    assert len(captured_warnings) == 0
