@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from .. import _identifier
 from ..event_loop.event_loop import event_loop_cycle
-from ..handlers.callback_handler import PrintingCallbackHandler, null_callback_handler
+from ..handlers.callback_handler import null_callback_handler
 from ..hooks import (
     AfterInvocationEvent,
     AgentInitializedEvent,
@@ -41,7 +41,6 @@ from ..hooks import (
     HookRegistry,
     MessageAddedEvent,
 )
-from ..models.mocked_model_provider import MockedModelProvider
 from ..models.model import Model
 from ..session.session_manager import SessionManager
 from ..telemetry.metrics import EventLoopMetrics
@@ -56,6 +55,7 @@ from ..types.content import ContentBlock, Message, Messages
 from ..types.exceptions import ContextWindowOverflowException
 from ..types.tools import ToolResult, ToolUse
 from ..types.traces import AttributeValue
+from ._DefaultAgentFactory import AgentPropertyFactories
 from .agent_result import AgentResult
 from .conversation_manager import (
     ConversationManager,
@@ -272,7 +272,7 @@ class Agent:
         Raises:
             ValueError: If agent id contains path separators.
         """
-        self.model = MockedModelProvider([{"role": "assistant", "content": [{"text": "world!"}]}]) if not model else model
+        self.model = model if isinstance(model, Model) else AgentPropertyFactories.create_model(model)
         self.messages = messages if messages is not None else []
 
         self.system_prompt = system_prompt
@@ -283,9 +283,9 @@ class Agent:
         # If not provided, create a new PrintingCallbackHandler instance
         # If explicitly set to None, use null_callback_handler
         # Otherwise use the passed callback_handler
-        self.callback_handler: Union[Callable[..., Any], PrintingCallbackHandler]
+        self.callback_handler: Callable[..., Any]
         if isinstance(callback_handler, _DefaultCallbackHandlerSentinel):
-            self.callback_handler = PrintingCallbackHandler()
+            self.callback_handler = AgentPropertyFactories.create_callback_handler()
         elif callback_handler is None:
             self.callback_handler = null_callback_handler
         else:
