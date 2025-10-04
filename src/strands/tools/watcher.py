@@ -5,14 +5,12 @@ modified.
 """
 
 import logging
-from pathlib import Path
-from typing import Any, Dict, Set, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
+from typing import TYPE_CHECKING, Dict, Set
 
 from .registry import ToolRegistry
+
+if TYPE_CHECKING:
+    from ._watchdog import ToolChangeHandler
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,7 @@ class ToolWatcher:
     _shared_observer = None
     _watched_dirs: Set[str] = set()
     _observer_started = False
-    _registry_handlers: Dict[str, Dict[int, "ToolWatcher.ToolChangeHandler"]] = {}
+    _registry_handlers: Dict[str, Dict[int, "ToolChangeHandler"]] = {}
 
     def __init__(self, tool_registry: ToolRegistry) -> None:
         """Initialize a tool watcher for the given tool registry.
@@ -41,12 +39,16 @@ class ToolWatcher:
 
     def start(self) -> None:
         """Start watching all tools directories for changes."""
+        from watchdog.observers import Observer
+
+        from ._watchdog import MasterChangeHandler, Observer, ToolChangeHandler
+
         # Initialize shared observer if not already done
         if ToolWatcher._shared_observer is None:
             ToolWatcher._shared_observer = Observer()
 
         # Create handler for this instance
-        self.tool_change_handler = self.ToolChangeHandler(self.tool_registry)
+        self.tool_change_handler = ToolChangeHandler(self.tool_registry)
         registry_id = id(self.tool_registry)
 
         # Get tools directories to watch
@@ -65,7 +67,7 @@ class ToolWatcher:
             # Schedule or update the master handler for this directory
             if dir_str not in ToolWatcher._watched_dirs:
                 # First time seeing this directory, create a master handler
-                master_handler = self.MasterChangeHandler(dir_str)
+                master_handler = MasterChangeHandler(dir_str)
                 ToolWatcher._shared_observer.schedule(master_handler, dir_str, recursive=False)
                 ToolWatcher._watched_dirs.add(dir_str)
                 logger.debug("tools_dir=<%s> | started watching tools directory", tools_dir)

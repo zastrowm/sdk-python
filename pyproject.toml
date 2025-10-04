@@ -27,11 +27,13 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "boto3>=1.26.0,<2.0.0",
-    "botocore>=1.29.0,<2.0.0",
+    "boto3>=1.26.0,<2.0.0; sys_platform != 'emscripten'",
+    "botocore>=1.29.0,<2.0.0; sys_platform != 'emscripten'",
     "docstring_parser>=0.15,<1.0",
-    "pydantic",
+    "mcp>=1.11.0,<2.0.0; sys_platform != 'emscripten'",
+    "pydantic>=2.10.0,<3.0.0",
     "typing-extensions>=4.13.2,<5.0.0",
+    "watchdog>=6.0.0,<7.0.0; sys_platform != 'emscripten'",
     "opentelemetry-api>=1.30.0,<2.0.0",
     "opentelemetry-sdk>=1.30.0,<2.0.0",
     "opentelemetry-instrumentation-threading>=0.51b0,<1.00b0",
