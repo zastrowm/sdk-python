@@ -7,7 +7,8 @@ import warnings
 from typing import Any, AsyncGenerator, AsyncIterable, Optional
 
 from ..models.model import Model
-from ..tools._validator import check_tool_name_validity
+from ..tools import InvalidToolUseNameException
+from ..tools.tools import validate_tool_use_name
 from ..types._events import (
     CitationStreamEvent,
     ModelStopReason,
@@ -65,15 +66,16 @@ def _normalize_messages(messages: Messages) -> Messages:
 
             has_tool_use = False
 
-            # Ensure the tool-uses always have invalid names before sending
+            # Ensure the tool-uses always have valid names before sending
             # https://github.com/strands-agents/sdk-python/issues/1069
             for item in content:
                 if "toolUse" in item:
                     has_tool_use = True
                     tool_use: ToolUse = item["toolUse"]
 
-                    is_valid, _ = check_tool_name_validity(tool_use)
-                    if not is_valid:
+                    try:
+                        validate_tool_use_name(tool_use)
+                    except InvalidToolUseNameException:
                         tool_use["name"] = "INVALID_TOOL_NAME"
                         replaced_tool_names = True
 

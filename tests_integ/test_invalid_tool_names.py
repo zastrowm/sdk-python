@@ -48,5 +48,5 @@ def test_invalid_tool_names_works(temp_dir):
     tool_use_block = next(block for block in agent2.messages[-5]['content'] if 'toolUse' in block)
     assert tool_use_block['toolUse']['name'] == 'invalid tool'
 
-    # but that it still sends successfully
+    # ensure it sends without an exception - previously we would throw
     agent2("What was the tool result")
