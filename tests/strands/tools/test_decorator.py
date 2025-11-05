@@ -337,7 +337,7 @@ This is more description text.
 
 Returns:
     A string result
-    
+
 Raises:
     ValueError: If something goes wrong"""
     )
