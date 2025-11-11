@@ -722,7 +722,11 @@ class MCPClient(ToolProvider):
         # save a reference to this so that even if it's reset we have the original
         close_future = self._close_future
 
-        if self._background_thread_session is None or self._background_thread_event_loop is None or close_future is None:
+        if (
+            self._background_thread_session is None
+            or self._background_thread_event_loop is None
+            or close_future is None
+        ):
             raise MCPClientInitializationError("the client session was not initialized")
 
         async def run_async() -> T:
