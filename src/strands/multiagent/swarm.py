@@ -233,7 +233,7 @@ class Swarm(MultiAgentBase):
         """Initialize Swarm with agents and configuration.
 
         Args:
-            id : Unique swarm id (default: None)
+            id: Unique swarm id (default: None)
             nodes: List of nodes (e.g. Agent) to include in the swarm
             entry_point: Agent to start with. If None, uses the first agent (default: None)
             max_handoffs: Maximum handoffs to agents and users (default: 20)
