@@ -165,12 +165,35 @@ class RepositorySessionManager(SessionManager):
             agent.messages = self._fix_broken_tool_use(agent.messages)
 
     def _fix_broken_tool_use(self, messages: list[Message]) -> list[Message]:
-        """Add tool_result after orphaned tool_use messages.
+        """Fix broken tool use/result pairs in message history.
 
-        Before 1.15.0, strands had a bug where they persisted sessions with a potentially broken messages array.
-        This method retroactively fixes that issue by adding a tool_result outside of session management. After 1.15.0,
-        this bug is no longer present.
+        This method handles two issues:
+        1. Orphaned toolUse messages without corresponding toolResult.
+           Before 1.15.0, strands had a bug where they persisted sessions with a potentially broken messages array.
+           This method retroactively fixes that issue by adding a tool_result outside of session management.
+           After 1.15.0, this bug is no longer present.
+        2. Orphaned toolResult messages without corresponding toolUse (e.g., when pagination truncates messages)
+
+        Args:
+            messages: The list of messages to fix
+            agent_id: The agent ID for fetching previous messages
+            removed_message_count: Number of messages removed by the conversation manager
+
+        Returns:
+            Fixed list of messages with proper tool use/result pairs
         """
+        # First, check if the oldest message has orphaned toolResult (no preceding toolUse) and remove it.
+        if messages:
+            first_message = messages[0]
+            if first_message["role"] == "user" and any("toolResult" in content for content in first_message["content"]):
+                logger.warning(
+                    "Session message history starts with orphaned toolResult with no preceding toolUse. "
+                    "This typically happens when messages are truncated due to pagination limits. "
+                    "Removing orphaned toolResult message to maintain valid conversation structure."
+                )
+                messages.pop(0)
+
+        # Then check for orphaned toolUse messages
         for index, message in enumerate(messages):
             # Check all but the latest message in the messages array
             # The latest message being orphaned is handled in the agent class
@@ -188,7 +211,7 @@ class RepositorySessionManager(SessionManager):
                     ]
 
                     missing_tool_use_ids = list(set(tool_use_ids) - set(tool_result_ids))
-                    # If there area missing tool use ids, that means the messages history is broken
+                    # If there are missing tool use ids, that means the messages history is broken
                     if missing_tool_use_ids:
                         logger.warning(
                             "Session message history has an orphaned toolUse with no toolResult. "
