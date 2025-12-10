@@ -56,7 +56,7 @@ from ..tools.executors._executor import ToolExecutor
 from ..tools.registry import ToolRegistry
 from ..tools.structured_output._structured_output_context import StructuredOutputContext
 from ..tools.watcher import ToolWatcher
-from ..types._events import AgentResultEvent, InitEventLoopEvent, ModelStreamChunkEvent, TypedEvent
+from ..types._events import AgentResultEvent, EventLoopStopEvent, InitEventLoopEvent, ModelStreamChunkEvent, TypedEvent
 from ..types.agent import AgentInput
 from ..types.content import ContentBlock, Message, Messages, SystemContentBlock
 from ..types.exceptions import ContextWindowOverflowException
@@ -621,6 +621,7 @@ class Agent:
         """
         await self.hooks.invoke_callbacks_async(BeforeInvocationEvent(agent=self))
 
+        agent_result: AgentResult | None = None
         try:
             yield InitEventLoopEvent()
 
@@ -648,9 +649,13 @@ class Agent:
                         self._session_manager.redact_latest_message(self.messages[-1], self)
                 yield event
 
+            # Capture the result from the final event if available
+            if isinstance(event, EventLoopStopEvent):
+                agent_result = AgentResult(*event["stop"])
+
         finally:
             self.conversation_manager.apply_management(self)
-            await self.hooks.invoke_callbacks_async(AfterInvocationEvent(agent=self))
+            await self.hooks.invoke_callbacks_async(AfterInvocationEvent(agent=self, result=agent_result))
 
     async def _execute_event_loop_cycle(
         self, invocation_state: dict[str, Any], structured_output_context: StructuredOutputContext | None = None
