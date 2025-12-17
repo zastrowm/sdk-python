@@ -250,8 +250,10 @@ class Agent:
         if self._session_manager:
             self.hooks.add_hook(self._session_manager)
 
-        # Check if conversation_manager can provide hooks
-        if hasattr(self.conversation_manager, "register_hooks"):
+        # Check if conversation_manager implements HookProvider protocol
+        if hasattr(self.conversation_manager, "register_hooks") and callable(
+            self.conversation_manager.register_hooks
+        ):
             self.hooks.add_hook(self.conversation_manager)
 
         self.tool_executor = tool_executor or ConcurrentToolExecutor()

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from ...agent.agent import Agent
     from ...hooks.registry import HookRegistry
 
-from ...hooks.events import AfterToolCallEvent
+from ...hooks.events import AfterModelCallEvent
 from ...types.content import Messages
 from ...types.exceptions import ContextWindowOverflowException
 from .conversation_manager import ConversationManager
@@ -33,8 +33,8 @@ class SlidingWindowConversationManager(ConversationManager):
             should_truncate_results: Truncate tool results when a message is too large for the model's context window
             per_turn: Controls when to apply message management during agent execution.
                 - False (default): Only apply management at the end (current behavior)
-                - True: Apply management after every tool call
-                - int (e.g., 3): Apply management after every N tool calls
+                - True: Apply management after every model call
+                - int (e.g., 3): Apply management after every N model calls
 
                 When to use per_turn: If your agent performs many tool operations in loops
                 (e.g., web browsing with frequent screenshots), enable per_turn to proactively
@@ -55,14 +55,14 @@ class SlidingWindowConversationManager(ConversationManager):
         self.window_size = window_size
         self.should_truncate_results = should_truncate_results
         self.per_turn = per_turn
-        self._tool_call_count = 0
+        self.model_call_count = 0
 
     def register_hooks(self, registry: "HookRegistry", **kwargs: Any) -> None:
         """Register hook callbacks for per-turn conversation management.
 
         This method is called by the Agent during initialization if the conversation manager
         implements the HookProvider protocol. When per_turn is enabled, it registers a callback
-        for AfterToolCallEvent to apply message management during the agent loop execution.
+        for AfterModelCallEvent to apply message management during the agent loop execution.
 
         Args:
             registry: The hook registry to register callbacks with.
@@ -72,32 +72,32 @@ class SlidingWindowConversationManager(ConversationManager):
         if self.per_turn is False:
             return
 
-        # Register callback for after tool call events
-        registry.add_callback(AfterToolCallEvent, self._on_after_tool_call)
+        # Register callback for after model call events
+        registry.add_callback(AfterModelCallEvent, self._on_after_model_call)
 
-    def _on_after_tool_call(self, event: AfterToolCallEvent) -> None:
-        """Handle after tool call event for per-turn management.
+    def _on_after_model_call(self, event: AfterModelCallEvent) -> None:
+        """Handle after model call event for per-turn management.
 
-        This callback is invoked after each tool execution when per_turn is enabled.
-        It tracks the tool call count and applies message management based on the
+        This callback is invoked after each model call when per_turn is enabled.
+        It tracks the model call count and applies message management based on the
         per_turn configuration.
 
         Args:
-            event: The after tool call event containing the agent and tool execution details.
+            event: The after model call event containing the agent and model execution details.
         """
-        self._tool_call_count += 1
+        self.model_call_count += 1
 
         # Determine if we should apply management
         should_apply = False
         if self.per_turn is True:
             should_apply = True
         elif isinstance(self.per_turn, int) and self.per_turn > 0:
-            should_apply = self._tool_call_count % self.per_turn == 0
+            should_apply = self.model_call_count % self.per_turn == 0
 
         if should_apply:
             logger.debug(
-                "tool_call_count=<%d>, per_turn=<%s> | applying per-turn conversation management",
-                self._tool_call_count,
+                "model_call_count=<%d>, per_turn=<%s> | applying per-turn conversation management",
+                self.model_call_count,
                 self.per_turn,
             )
             self.apply_management(event.agent)
@@ -106,10 +106,10 @@ class SlidingWindowConversationManager(ConversationManager):
         """Get the current state of the conversation manager.
 
         Returns:
-            Dictionary containing the manager's state, including tool call count for per-turn tracking.
+            Dictionary containing the manager's state, including model call count for per-turn tracking.
         """
         state = super().get_state()
-        state["_tool_call_count"] = self._tool_call_count
+        state["model_call_count"] = self.model_call_count
         return state
 
     def restore_from_session(self, state: dict[str, Any]) -> Optional[list]:
@@ -122,7 +122,7 @@ class SlidingWindowConversationManager(ConversationManager):
             Optional list of messages to prepend to the agent's messages.
         """
         result = super().restore_from_session(state)
-        self._tool_call_count = state.get("_tool_call_count", 0)
+        self.model_call_count = state.get("model_call_count", 0)
         return result
 
     def apply_management(self, agent: "Agent", **kwargs: Any) -> None:
