@@ -566,6 +566,8 @@ class MCPClient(ToolProvider):
 
         if call_tool_result.structuredContent:
             result["structuredContent"] = call_tool_result.structuredContent
+        if call_tool_result.meta:
+            result["metadata"] = call_tool_result.meta
 
         return result
 
