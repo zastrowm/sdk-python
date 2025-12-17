@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from ...agent.agent import Agent
+    from ...hooks.registry import HookRegistry
 
+from ...hooks.events import AfterToolCallEvent
 from ...types.content import Messages
 from ...types.exceptions import ContextWindowOverflowException
 from .conversation_manager import ConversationManager
@@ -18,19 +20,110 @@ class SlidingWindowConversationManager(ConversationManager):
 
     This class handles the logic of maintaining a conversation window that preserves tool usage pairs and avoids
     invalid window states.
+
+    Supports proactive management during agent loop execution via the per_turn parameter.
     """
 
-    def __init__(self, window_size: int = 40, should_truncate_results: bool = True):
+    def __init__(self, window_size: int = 40, should_truncate_results: bool = True, per_turn: bool | int = False):
         """Initialize the sliding window conversation manager.
 
         Args:
             window_size: Maximum number of messages to keep in the agent's history.
                 Defaults to 40 messages.
             should_truncate_results: Truncate tool results when a message is too large for the model's context window
+            per_turn: Controls when to apply message management during agent execution.
+                - False (default): Only apply management at the end (current behavior)
+                - True: Apply management after every tool call
+                - int (e.g., 3): Apply management after every N tool calls
+
+                When to use per_turn: If your agent performs many tool operations in loops
+                (e.g., web browsing with frequent screenshots), enable per_turn to proactively
+                manage message history and prevent the agent loop from slowing down. Start with
+                per_turn=True and adjust to a specific frequency (e.g., per_turn=5) if needed
+                for performance tuning.
+
+        Raises:
+            ValueError: If per_turn is 0 or a negative integer.
         """
         super().__init__()
+
+        # Validate per_turn parameter
+        # Note: Must check bool before int since bool is a subclass of int in Python
+        if not isinstance(per_turn, bool) and isinstance(per_turn, int) and per_turn <= 0:
+            raise ValueError(f"per_turn must be True, False, or a positive integer, got {per_turn}")
+
         self.window_size = window_size
         self.should_truncate_results = should_truncate_results
+        self.per_turn = per_turn
+        self._tool_call_count = 0
+
+    def register_hooks(self, registry: "HookRegistry", **kwargs: Any) -> None:
+        """Register hook callbacks for per-turn conversation management.
+
+        This method is called by the Agent during initialization if the conversation manager
+        implements the HookProvider protocol. When per_turn is enabled, it registers a callback
+        for AfterToolCallEvent to apply message management during the agent loop execution.
+
+        Args:
+            registry: The hook registry to register callbacks with.
+            **kwargs: Additional keyword arguments for future extensibility.
+        """
+        # Only register callbacks if per_turn is enabled
+        if self.per_turn is False:
+            return
+
+        # Register callback for after tool call events
+        registry.add_callback(AfterToolCallEvent, self._on_after_tool_call)
+
+    def _on_after_tool_call(self, event: AfterToolCallEvent) -> None:
+        """Handle after tool call event for per-turn management.
+
+        This callback is invoked after each tool execution when per_turn is enabled.
+        It tracks the tool call count and applies message management based on the
+        per_turn configuration.
+
+        Args:
+            event: The after tool call event containing the agent and tool execution details.
+        """
+        self._tool_call_count += 1
+
+        # Determine if we should apply management
+        should_apply = False
+        if self.per_turn is True:
+            should_apply = True
+        elif isinstance(self.per_turn, int) and self.per_turn > 0:
+            should_apply = self._tool_call_count % self.per_turn == 0
+
+        if should_apply:
+            logger.debug(
+                "tool_call_count=<%d>, per_turn=<%s> | applying per-turn conversation management",
+                self._tool_call_count,
+                self.per_turn,
+            )
+            self.apply_management(event.agent)
+
+    def get_state(self) -> dict[str, Any]:
+        """Get the current state of the conversation manager.
+
+        Returns:
+            Dictionary containing the manager's state, including tool call count for per-turn tracking.
+        """
+        state = super().get_state()
+        state["_tool_call_count"] = self._tool_call_count
+        return state
+
+    def restore_from_session(self, state: dict[str, Any]) -> Optional[list]:
+        """Restore the conversation manager's state from a session.
+
+        Args:
+            state: Previous state of the conversation manager
+
+        Returns:
+            Optional list of messages to prepend to the agent's messages.
+        """
+        result = super().restore_from_session(state)
+        self._tool_call_count = state.get("_tool_call_count", 0)
+        return result
 
     def apply_management(self, agent: "Agent", **kwargs: Any) -> None:
         """Apply the sliding window to the agent's messages array to maintain a manageable history size.
