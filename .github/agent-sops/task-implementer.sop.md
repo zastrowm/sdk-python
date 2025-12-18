@@ -270,8 +270,6 @@ If you have received feedback from user reviews or PR comments, address them bef
 **Constraints:**
 
 - You MAY skip this step if no user feedback has been received yet
-- You MUST reply to user review threads with a concise response
-  - You MUST keep your response to less than 3 sentences
 - You MUST categorize each piece of feedback as:
   - Actionable code changes that can be implemented immediately
   - Clarifying questions that require user input
@@ -280,6 +278,29 @@ If you have received feedback from user reviews or PR comments, address them bef
 - You MUST re-run tests after addressing feedback to ensure nothing is broken
 - You MUST return to step 4.3 after implementing changes to review the updated code
 - You MUST use the handoff_to_user tool if clarification is needed before you can proceed
+- You MUST NOT reply to review comments until AFTER changes have been committed and pushed
+  - Replying before committing risks claiming work is done when it is not
+  - See step 4.7 for the proper comment reply workflow
+
+#### 4.7 Reply to Review Comments
+
+After implementing and committing changes from review feedback, reply to the review comments to confirm the changes were made.
+
+**Constraints:**
+
+- You MUST only execute this step AFTER changes have been committed
+- You MUST verify each requested change was actually implemented before replying:
+  - Check the committed code to confirm the change exists
+  - Review the git diff or commit contents to validate the implementation
+- You MUST NOT reply to a comment claiming a change was made if you cannot verify it in the committed code
+- You MUST reply to user review threads with a concise response that:
+  - Confirms what specific change was made
+  - References the commit hash where the change was implemented
+  - You MUST keep your response to less than 3 sentences
+- If you discover a requested change was NOT actually made:
+  - You MUST return to step 4.6 to implement the missing change
+  - You MUST NOT reply to the comment until the change is committed
+- If comment posting is deferred, continue with the workflow and note the deferred status
 
 ### 5. Commit and Pull Request Phase
 
@@ -354,8 +375,13 @@ Retrieve and analyze the user's responses from the pull request reviews and comm
   - Clear actionable requests that can be implemented
   - Unclear requests that need clarification
   - General feedback that doesn't require code changes
-- You MUST reply to unclear comments asking for specific clarification
+- For unclear comments that require clarification:
+  - You MAY reply immediately to ask for specific clarification since no code changes are being claimed
   - If comment posting is deferred, continue with the workflow and note the deferred status
+- For actionable requests:
+  - You MUST NOT reply to comments until AFTER the requested changes have been implemented, committed, and pushed
+  - You MUST return to step 4 to implement the changes first
+  - You MUST follow step 4.7 to reply to comments only after verifying the changes were committed
 - You MUST record your progress and update the implementation plan based on the feedback
 - You MUST return to step 6.1 if you needed further clarification
 
