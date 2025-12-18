@@ -1,0 +1,18 @@
+Creating environment: hatch-static-analysis
+Installing Python distribution: 3.10
+Checking dependencies
+Syncing dependencies
+F841 Local variable `result` is assigned to but never used
+   --> tests/strands/agent/hooks/test_agent_events.py:916:5
+    |
+914 |     agent = Agent(model=model, hooks=[DelayedRetryProvider()])
+915 |
+916 |     result = agent("Test")
+    |     ^^^^^^
+917 |
+918 |     # Verify the retries happened with delays
+    |
+help: Remove assignment to unused variable `result`
+
+Found 1 error.
+No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).
