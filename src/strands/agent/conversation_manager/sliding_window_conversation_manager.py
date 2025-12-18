@@ -32,15 +32,12 @@ class SlidingWindowConversationManager(ConversationManager):
                 Defaults to 40 messages.
             should_truncate_results: Truncate tool results when a message is too large for the model's context window
             per_turn: Controls when to apply message management during agent execution.
-                - False (default): Only apply management at the end (current behavior)
-                - True: Apply management after every model call
-                - int (e.g., 3): Apply management after every N model calls
+                - False (default): Only apply management at the end
+                - True: Apply management before every model call
+                - int (e.g., 3): Apply management before every N model calls
 
-                When to use per_turn: If your agent performs many tool operations in loops
-                (e.g., web browsing with frequent screenshots), enable per_turn to proactively
-                manage message history and prevent the agent loop from slowing down. Start with
-                per_turn=True and adjust to a specific frequency (e.g., per_turn=5) if needed
-                for performance tuning.
+                Reduces context size to speed up execution and reduce costs, but removes
+                conversation history the agent uses for decision-making.
 
         Raises:
             ValueError: If per_turn is 0 or a negative integer.
