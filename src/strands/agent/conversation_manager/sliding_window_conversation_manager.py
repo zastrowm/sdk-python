@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from ...agent.agent import Agent
     from ...hooks.registry import HookRegistry
 
-from ...hooks.events import AfterModelCallEvent
+from ...hooks.events import BeforeModelCallEvent
 from ...types.content import Messages
 from ...types.exceptions import ContextWindowOverflowException
 from .conversation_manager import ConversationManager
@@ -62,29 +62,29 @@ class SlidingWindowConversationManager(ConversationManager):
 
         This method is called by the Agent during initialization if the conversation manager
         implements the HookProvider protocol. When per_turn is enabled, it registers a callback
-        for AfterModelCallEvent to apply message management during the agent loop execution.
+        for BeforeModelCallEvent to apply message management during the agent loop execution.
 
         Args:
             registry: The hook registry to register callbacks with.
             **kwargs: Additional keyword arguments for future extensibility.
         """
-        # Only register callbacks if per_turn is enabled
-        if self.per_turn is False:
-            return
+        # Always register the callback - per_turn check happens in the callback
+        registry.add_callback(BeforeModelCallEvent, self._on_before_model_call)
 
-        # Register callback for after model call events
-        registry.add_callback(AfterModelCallEvent, self._on_after_model_call)
+    def _on_before_model_call(self, event: BeforeModelCallEvent) -> None:
+        """Handle before model call event for per-turn management.
 
-    def _on_after_model_call(self, event: AfterModelCallEvent) -> None:
-        """Handle after model call event for per-turn management.
-
-        This callback is invoked after each model call when per_turn is enabled.
+        This callback is invoked before each model call when per_turn is enabled.
         It tracks the model call count and applies message management based on the
         per_turn configuration.
 
         Args:
-            event: The after model call event containing the agent and model execution details.
+            event: The before model call event containing the agent and model execution details.
         """
+        # Check if per_turn is enabled
+        if self.per_turn is False:
+            return
+
         self.model_call_count += 1
 
         # Determine if we should apply management

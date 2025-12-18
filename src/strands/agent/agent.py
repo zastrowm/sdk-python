@@ -251,9 +251,7 @@ class Agent:
             self.hooks.add_hook(self._session_manager)
 
         # Check if conversation_manager implements HookProvider protocol
-        if hasattr(self.conversation_manager, "register_hooks") and callable(
-            self.conversation_manager.register_hooks
-        ):
+        if isinstance(self.conversation_manager, HookProvider):
             self.hooks.add_hook(self.conversation_manager)
 
         self.tool_executor = tool_executor or ConcurrentToolExecutor()
