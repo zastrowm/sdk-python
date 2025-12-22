@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from ...agent.agent import Agent
 
-from ...hooks.events import BeforeModelCallEvent
-from ...hooks.registry import HookRegistry
+from ...hooks import BeforeModelCallEvent, HookProvider, HookRegistry
 from ...types.content import Messages
 from ...types.exceptions import ContextWindowOverflowException
 from .conversation_manager import ConversationManager
@@ -15,7 +14,7 @@ from .conversation_manager import ConversationManager
 logger = logging.getLogger(__name__)
 
 
-class SlidingWindowConversationManager(ConversationManager, HookRegistry):
+class SlidingWindowConversationManager(ConversationManager, HookProvider):
     """Implements a sliding window strategy for managing conversation history.
 
     This class handles the logic of maintaining a conversation window that preserves tool usage pairs and avoids
