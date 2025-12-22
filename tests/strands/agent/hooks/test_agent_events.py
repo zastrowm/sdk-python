@@ -661,3 +661,267 @@ async def test_structured_output(agenerator):
     exp_calls = [call(**event) for event in exp_events]
     act_calls = mock_callback.call_args_list
     assert act_calls == exp_calls
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_on_exception(alist):
+    """Test that hooks can retry model invocations when exceptions occur."""
+
+    class ServiceUnavailableException(Exception):
+        """Mock exception for testing retry logic."""
+
+        pass
+
+    # Track call attempts
+    attempt_count = 0
+
+    def mock_stream_side_effect(*args, **kwargs):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count == 1:
+            # First attempt fails
+            raise ServiceUnavailableException("Service temporarily unavailable")
+        else:
+            # Second attempt succeeds
+            return MockedModelProvider(
+                [
+                    {
+                        "role": "assistant",
+                        "content": [{"text": "Success after retry"}],
+                    }
+                ]
+            ).stream([])
+
+    model = MagicMock()
+    model.stream.side_effect = mock_stream_side_effect
+
+    # Create hook that retries on ServiceUnavailableException
+    retry_count = 0
+
+    async def retry_hook(event):
+        nonlocal retry_count
+        if event.exception and isinstance(event.exception, ServiceUnavailableException):
+            retry_count += 1
+            if retry_count <= 2:
+                event.retry_model = True
+
+    from strands.hooks import AfterModelCallEvent, HookProvider, HookRegistry
+
+    class RetryHookProvider(HookProvider):
+        def register_hooks(self, registry: HookRegistry) -> None:
+            registry.add_callback(AfterModelCallEvent, retry_hook)
+
+    agent = Agent(model=model, hooks=[RetryHookProvider()])
+
+    result = agent("Test retry")
+
+    # Verify the retry happened
+    assert attempt_count == 2
+    assert retry_count == 1
+    assert result.message["content"][0]["text"] == "Success after retry"
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_ignored_on_success(alist):
+    """Test that retry_model is ignored when no exception occurs."""
+
+    mock_provider = MockedModelProvider(
+        [
+            {
+                "role": "assistant",
+                "content": [{"text": "Success"}],
+            }
+        ]
+    )
+
+    # Hook that tries to set retry_model=True even on success
+    async def bad_retry_hook(event):
+        # This should be ignored since there's no exception
+        event.retry_model = True
+
+    from strands.hooks import AfterModelCallEvent, HookProvider, HookRegistry
+
+    class BadRetryHookProvider(HookProvider):
+        def register_hooks(self, registry: HookRegistry) -> None:
+            registry.add_callback(AfterModelCallEvent, bad_retry_hook)
+
+    agent = Agent(model=mock_provider, hooks=[BadRetryHookProvider()])
+
+    result = agent("Test")
+
+    # Verify only one call was made (retry was ignored)
+    assert result.message["content"][0]["text"] == "Success"
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_multiple_hooks_modify_field(alist):
+    """Test that multiple hooks can modify retry_model and last one wins.
+
+    Note: AfterModelCallEvent uses reverse callback ordering, so hooks are
+    invoked in reverse order of registration. The last hook to execute
+    (first registered) determines the final value.
+    """
+
+    class ServiceUnavailableException(Exception):
+        pass
+
+    attempt_count = 0
+
+    def mock_stream_side_effect(*args, **kwargs):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count == 1:
+            raise ServiceUnavailableException("Service unavailable")
+        else:
+            return MockedModelProvider(
+                [
+                    {
+                        "role": "assistant",
+                        "content": [{"text": "Success"}],
+                    }
+                ]
+            ).stream([])
+
+    model = MagicMock()
+    model.stream.side_effect = mock_stream_side_effect
+
+    # Hook1 sets retry to False (will be called last due to reverse ordering)
+    async def hook1(event):
+        if event.exception:
+            event.retry_model = False
+
+    # Hook2 sets retry to True (will be called first due to reverse ordering)
+    async def hook2(event):
+        if event.exception:
+            event.retry_model = True
+
+    from strands.hooks import AfterModelCallEvent, HookProvider, HookRegistry
+
+    class Hook1Provider(HookProvider):
+        def register_hooks(self, registry: HookRegistry) -> None:
+            registry.add_callback(AfterModelCallEvent, hook1)
+
+    class Hook2Provider(HookProvider):
+        def register_hooks(self, registry: HookRegistry) -> None:
+            registry.add_callback(AfterModelCallEvent, hook2)
+
+    agent = Agent(model=model, hooks=[Hook1Provider(), Hook2Provider()])
+
+    # Should raise exception since hook1 (called last) set retry_model=False
+    with pytest.raises(ServiceUnavailableException):
+        agent("Test")
+
+    # Verify only one attempt was made (no retry)
+    assert attempt_count == 1
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_controlled_count(alist):
+    """Test that hooks can control their own retry count."""
+
+    class ServiceUnavailableException(Exception):
+        pass
+
+    attempt_count = 0
+
+    def mock_stream_side_effect(*args, **kwargs):
+        nonlocal attempt_count
+        attempt_count += 1
+        # Always fail to test retry limit
+        raise ServiceUnavailableException(f"Attempt {attempt_count} failed")
+
+    model = MagicMock()
+    model.stream.side_effect = mock_stream_side_effect
+
+    # Hook with max_retries=2
+    retry_count = 0
+    max_retries = 2
+
+    async def limited_retry_hook(event):
+        nonlocal retry_count
+        if event.exception and isinstance(event.exception, ServiceUnavailableException):
+            if retry_count < max_retries:
+                retry_count += 1
+                event.retry_model = True
+            # else: don't set retry_model, let exception propagate
+
+    from strands.hooks import AfterModelCallEvent, HookProvider, HookRegistry
+
+    class LimitedRetryProvider(HookProvider):
+        def register_hooks(self, registry: HookRegistry) -> None:
+            registry.add_callback(AfterModelCallEvent, limited_retry_hook)
+
+    agent = Agent(model=model, hooks=[LimitedRetryProvider()])
+
+    # Should raise exception after max retries
+    with pytest.raises(ServiceUnavailableException) as exc_info:
+        agent("Test")
+
+    # Verify we got the last attempt's exception
+    assert "Attempt 3 failed" in str(exc_info.value)
+
+    # Verify we made exactly 3 attempts (initial + 2 retries)
+    assert attempt_count == 3
+    assert retry_count == 2
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_with_delay(alist, mock_sleep):
+    """Test that hooks can implement their own delay logic."""
+
+    class ServiceUnavailableException(Exception):
+        pass
+
+    attempt_count = 0
+
+    def mock_stream_side_effect(*args, **kwargs):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 3:
+            raise ServiceUnavailableException("Service unavailable")
+        else:
+            return MockedModelProvider(
+                [
+                    {
+                        "role": "assistant",
+                        "content": [{"text": "Success after delays"}],
+                    }
+                ]
+            ).stream([])
+
+    model = MagicMock()
+    model.stream.side_effect = mock_stream_side_effect
+
+    # Hook with exponential backoff
+    retry_count = 0
+
+    async def delayed_retry_hook(event):
+        nonlocal retry_count
+        if event.exception and isinstance(event.exception, ServiceUnavailableException):
+            if retry_count < 3:
+                # Exponential backoff: 1, 2, 4 seconds
+                delay = 2**retry_count
+                await asyncio.sleep(delay)
+                retry_count += 1
+                event.retry_model = True
+
+    from strands.hooks import AfterModelCallEvent, HookProvider, HookRegistry
+
+    class DelayedRetryProvider(HookProvider):
+        def register_hooks(self, registry: HookRegistry) -> None:
+            registry.add_callback(AfterModelCallEvent, delayed_retry_hook)
+
+    agent = Agent(model=model, hooks=[DelayedRetryProvider()])
+
+    agent("Test")
+
+    # Verify the retries happened with delays
+    assert attempt_count == 3
+    assert retry_count == 2
+
+    # Verify asyncio.sleep was called with exponential backoff
+    # Note: The mock_sleep fixture mocks asyncio.sleep in event_loop module
+    # We expect 2 sleep calls (for 2 retries): 1 second, 2 seconds
+    assert mock_sleep.call_count == 2
+    mock_sleep.assert_any_call(1)
+    mock_sleep.assert_any_call(2)

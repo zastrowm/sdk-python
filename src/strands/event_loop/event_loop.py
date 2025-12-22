@@ -372,12 +372,19 @@ async def _handle_model_execution(
                 if model_invoke_span:
                     tracer.end_span_with_error(model_invoke_span, str(e), e)
 
-                await agent.hooks.invoke_callbacks_async(
-                    AfterModelCallEvent(
-                        agent=agent,
-                        exception=e,
-                    )
+                event = AfterModelCallEvent(
+                    agent=agent,
+                    exception=e,
                 )
+                await agent.hooks.invoke_callbacks_async(event)
+
+                # Check if hooks want to retry the model call
+                if event.retry_model and event.exception:
+                    logger.debug(
+                        "retry_requested=<True>, current_attempt=<%s> | hook requested model retry",
+                        attempt + 1,
+                    )
+                    continue  # Retry the model call
 
                 if isinstance(e, ModelThrottledException):
                     if attempt + 1 == MAX_ATTEMPTS:
