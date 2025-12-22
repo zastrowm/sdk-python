@@ -273,6 +273,34 @@ def test_per_turn_parameter_validation():
         SlidingWindowConversationManager(per_turn=-1)
 
 
+def test_conversation_manager_is_hook_provider():
+    """Test that ConversationManager implements HookProvider protocol."""
+    manager = NullConversationManager()
+    assert isinstance(manager, HookProvider)
+
+
+def test_derived_class_does_not_need_to_implement_register_hooks():
+    """Test that derived classes don't need to override register_hooks for backwards compatibility."""
+    from strands.agent.conversation_manager.conversation_manager import ConversationManager
+
+    class MinimalConversationManager(ConversationManager):
+        """A minimal implementation that only implements abstract methods."""
+
+        def apply_management(self, agent, **kwargs):
+            pass
+
+        def reduce_context(self, agent, e=None, **kwargs):
+            pass
+
+    # Should be able to instantiate without implementing register_hooks
+    manager = MinimalConversationManager()
+    registry = HookRegistry()
+
+    # Should work without error
+    manager.register_hooks(registry)
+    assert not registry.has_callbacks()
+
+
 def test_per_turn_hooks_registration():
     """Test that hooks are registered when conversation_manager implements HookProvider."""
     manager = SlidingWindowConversationManager(per_turn=True)
