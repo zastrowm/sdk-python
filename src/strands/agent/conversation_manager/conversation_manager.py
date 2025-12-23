@@ -7,6 +7,7 @@ from ...types.content import Message
 
 if TYPE_CHECKING:
     from ...agent.agent import Agent
+    from ...hooks.registry import HookRegistry
 
 
 class ConversationManager(ABC):
@@ -18,6 +19,9 @@ class ConversationManager(ABC):
     - Manage memory usage
     - Control context length
     - Maintain relevant conversation state
+
+    Conversation managers can optionally implement the HookProvider protocol by overriding
+    register_hooks() to integrate with the agent's event lifecycle.
     """
 
     def __init__(self) -> None:
@@ -29,6 +33,18 @@ class ConversationManager(ABC):
               included by the conversation manager through something like summarization.
         """
         self.removed_message_count = 0
+
+    def register_hooks(self, registry: "HookRegistry", **kwargs: Any) -> None:
+        """Register hook callbacks for lifecycle event integration.
+
+        By default, this is a no-op. Subclasses can override this method to register
+        callbacks for agent lifecycle events (e.g., BeforeModelCallEvent, AfterToolCallEvent).
+
+        Args:
+            registry: The hook registry to register callbacks with.
+            **kwargs: Additional keyword arguments for future extensibility.
+        """
+        pass
 
     def restore_from_session(self, state: dict[str, Any]) -> Optional[list[Message]]:
         """Restore the Conversation Manager's state from a session.

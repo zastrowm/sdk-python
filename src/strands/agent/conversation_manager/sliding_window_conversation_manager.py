@@ -57,9 +57,9 @@ class SlidingWindowConversationManager(ConversationManager):
     def register_hooks(self, registry: "HookRegistry", **kwargs: Any) -> None:
         """Register hook callbacks for per-turn conversation management.
 
-        This method is called by the Agent during initialization if the conversation manager
-        implements the HookProvider protocol. When per_turn is enabled, it registers a callback
-        for BeforeModelCallEvent to apply message management during the agent loop execution.
+        Overrides the base ConversationManager.register_hooks() to enable per-turn management
+        during agent execution. When per_turn is enabled, registers a callback for
+        BeforeModelCallEvent to apply message management during the agent loop.
 
         Args:
             registry: The hook registry to register callbacks with.
