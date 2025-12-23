@@ -3,7 +3,10 @@ import pytest
 from strands.agent.agent import Agent
 from strands.agent.conversation_manager.null_conversation_manager import NullConversationManager
 from strands.agent.conversation_manager.sliding_window_conversation_manager import SlidingWindowConversationManager
+from strands.hooks.events import BeforeModelCallEvent
+from strands.hooks.registry import HookRegistry
 from strands.types.exceptions import ContextWindowOverflowException
+from tests.fixtures.mocked_model_provider import MockedModelProvider
 
 
 @pytest.fixture
@@ -246,3 +249,89 @@ def test_null_conversation_does_not_restore_with_incorrect_state():
 
     with pytest.raises(ValueError):
         manager.restore_from_session({})
+
+
+# ==============================================================================
+# Per-Turn Management Tests
+# ==============================================================================
+
+
+@pytest.mark.parametrize(
+    "per_turn_value,is_valid",
+    [
+        (False, True),
+        (True, True),
+        (1, True),
+        (3, True),
+        (0, False),
+        (-1, False),
+    ],
+)
+def test_per_turn_parameter_validation(per_turn_value, is_valid):
+    """Test per_turn parameter validation for various values."""
+    if is_valid:
+        manager = SlidingWindowConversationManager(per_turn=per_turn_value)
+        assert manager.per_turn == per_turn_value
+    else:
+        with pytest.raises(ValueError):
+            SlidingWindowConversationManager(per_turn=per_turn_value)
+
+
+@pytest.mark.parametrize(
+    "per_turn,num_responses,expected_min_calls",
+    [
+        (False, 1, 1),  # Only finally block
+        (True, 1, 2),  # Before model call + finally
+        (2, 1, 1),  # Not reached, only finally
+        (3, 1, 1),  # Not reached, only finally
+    ],
+)
+def test_per_turn_management_frequency(per_turn, num_responses, expected_min_calls):
+    """Test apply_management call frequency with different per_turn values."""
+    from unittest.mock import patch
+
+    manager = SlidingWindowConversationManager(per_turn=per_turn, window_size=100)
+    responses = [{"role": "assistant", "content": [{"text": f"Response {i}"}]} for i in range(num_responses)]
+    model = MockedModelProvider(responses)
+    agent = Agent(model=model, conversation_manager=manager)
+
+    with patch.object(manager, "apply_management", wraps=manager.apply_management) as mock:
+        agent("Test")
+        assert mock.call_count >= expected_min_calls
+
+
+def test_per_turn_dynamic_change():
+    """Test that per_turn can be changed dynamically during execution."""
+    from unittest.mock import MagicMock, patch
+
+    manager = SlidingWindowConversationManager(per_turn=False)
+    registry = HookRegistry()
+    manager.register_hooks(registry)
+
+    mock_agent = MagicMock()
+    mock_agent.messages = []
+    event = BeforeModelCallEvent(agent=mock_agent)
+
+    # Initially disabled
+    with patch.object(manager, "apply_management") as mock_apply:
+        registry.invoke_callbacks(event)
+        assert mock_apply.call_count == 0
+
+    # Enable dynamically
+    manager.per_turn = True
+    with patch.object(manager, "apply_management") as mock_apply:
+        registry.invoke_callbacks(event)
+        assert mock_apply.call_count == 1
+
+
+def test_per_turn_state_persistence():
+    """Test that model_call_count is persisted and restored from state."""
+    manager = SlidingWindowConversationManager(per_turn=3)
+    manager.model_call_count = 7
+
+    state = manager.get_state()
+    assert state["model_call_count"] == 7
+
+    new_manager = SlidingWindowConversationManager(per_turn=3)
+    new_manager.restore_from_session(state)
+    assert new_manager.model_call_count == 7
