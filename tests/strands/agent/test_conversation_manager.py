@@ -266,12 +266,6 @@ def test_per_turn_parameter_validation():
     assert SlidingWindowConversationManager(per_turn=True).per_turn is True
     assert SlidingWindowConversationManager(per_turn=3).per_turn == 3
 
-    # Invalid values
-    with pytest.raises(ValueError):
-        SlidingWindowConversationManager(per_turn=0)
-    with pytest.raises(ValueError):
-        SlidingWindowConversationManager(per_turn=-1)
-
 
 def test_conversation_manager_is_hook_provider():
     """Test that ConversationManager implements HookProvider protocol."""

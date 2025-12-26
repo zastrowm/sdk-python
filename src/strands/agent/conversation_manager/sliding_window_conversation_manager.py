@@ -46,11 +46,6 @@ class SlidingWindowConversationManager(ConversationManager):
         """
         super().__init__()
 
-        # Validate per_turn parameter
-        # Note: Must check bool before int since bool is a subclass of int in Python
-        if not isinstance(per_turn, bool) and isinstance(per_turn, int) and per_turn <= 0:
-            raise ValueError(f"per_turn must be True, False, or a positive integer, got {per_turn}")
-
         self.window_size = window_size
         self.should_truncate_results = should_truncate_results
         self.per_turn = per_turn
