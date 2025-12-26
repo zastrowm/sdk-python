@@ -406,14 +406,14 @@ def test_per_turn_reduces_message_count():
 def test_per_turn_state_persistence():
     """Test that model_call_count is persisted in state."""
     manager = SlidingWindowConversationManager(per_turn=3)
-    manager.model_call_count = 7
+    manager._model_call_count = 7
 
     state = manager.get_state()
     assert state["model_call_count"] == 7
 
     new_manager = SlidingWindowConversationManager(per_turn=3)
     new_manager.restore_from_session(state)
-    assert new_manager.model_call_count == 7
+    assert new_manager._model_call_count == 7
 
 
 def test_per_turn_backward_compatibility():
