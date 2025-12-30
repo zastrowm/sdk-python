@@ -380,23 +380,12 @@ async def _handle_model_execution(
 
                 # Check if hooks want to retry the model call
                 if after_model_call_event.retry_model and after_model_call_event.exception:
-                    # Only retry if we haven't exhausted attempts
-                    if attempt + 1 < MAX_ATTEMPTS:
-                        logger.debug(
-                            "exception=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
-                            type(e).__name__,
-                            attempt + 1,
-                        )
-                        continue  # Retry the model call
-                    else:
-                        logger.debug(
-                            "exception=<%s>, retry_requested=<True>, attempt=<%d>, max_attempts=<%d> "
-                            "| hook retry limit reached",
-                            type(e).__name__,
-                            attempt + 1,
-                            MAX_ATTEMPTS,
-                        )
-                        # Fall through to raise the exception
+                    logger.debug(
+                        "exception=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
+                        type(e).__name__,
+                        attempt + 1,
+                    )
+                    continue  # Retry the model call
 
                 if isinstance(e, ModelThrottledException):
                     if attempt + 1 == MAX_ATTEMPTS:
