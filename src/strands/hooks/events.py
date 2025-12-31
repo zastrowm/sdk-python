@@ -237,7 +237,7 @@ class AfterModelCallEvent(HookEvent):
     retry: bool = False
 
     def _can_write(self, name: str) -> bool:
-        return name == "retry_model"
+        return name == "retry"
 
     @property
     def should_reverse_callbacks(self) -> bool:
