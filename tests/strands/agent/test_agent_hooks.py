@@ -1,4 +1,4 @@
-from unittest.mock import ANY, Mock, MagicMock, patch, AsyncMock
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -101,12 +101,12 @@ def user():
 
     return User(name="Jane Doe", age=30)
 
+
 @pytest.fixture
 def mock_sleep():
-    with patch.object(
-        strands.event_loop.event_loop.asyncio, "sleep", new_callable=AsyncMock
-    ) as mock:
+    with patch.object(strands.event_loop.event_loop.asyncio, "sleep", new_callable=AsyncMock) as mock:
         yield mock
+
 
 def test_agent__init__hooks():
     """Verify that the AgentInitializedEvent is emitted on Agent construction."""
@@ -340,10 +340,7 @@ async def test_hook_retry_on_successful_call():
             # Check successful responses for minimum length
             if event.stop_response:
                 message = event.stop_response.message
-                text_content = "".join(
-                    block.get("text", "")
-                    for block in message.get("content", [])
-                )
+                text_content = "".join(block.get("text", "") for block in message.get("content", []))
 
                 if len(text_content) < self.min_length:
                     event.retry_model = True

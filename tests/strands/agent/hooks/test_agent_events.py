@@ -661,4 +661,3 @@ async def test_structured_output(agenerator):
     exp_calls = [call(**event) for event in exp_events]
     act_calls = mock_callback.call_args_list
     assert act_calls == exp_calls
-

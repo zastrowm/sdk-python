@@ -206,7 +206,7 @@ class AfterModelCallEvent(HookEvent):
         implications for streaming consumers:
 
         - Streaming events from the discarded response will have already been emitted
-          to callers before the retry occurs. Agent invokers consuming streamed events 
+          to callers before the retry occurs. Agent invokers consuming streamed events
           should be prepared to handle this scenario, potentially by tracking retry state
           or implementing idempotent event processing
         - The original model message is thrown away internally and not added to the
