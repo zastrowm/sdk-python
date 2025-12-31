@@ -215,7 +215,7 @@ class AfterModelCallEvent(HookEvent):
     Attributes:
         stop_response: The model response data if invocation was successful, None if failed.
         exception: Exception if the model invocation failed, None if successful.
-        retry_model: Whether to retry the model invocation. Can be set by hook callbacks
+        retry: Whether to retry the model invocation. Can be set by hook callbacks
             to trigger a retry. When True, the current response is discarded and the
             model is called again. Defaults to False.
     """
@@ -234,7 +234,7 @@ class AfterModelCallEvent(HookEvent):
 
     stop_response: Optional[ModelStopResponse] = None
     exception: Optional[Exception] = None
-    retry_model: bool = False
+    retry: bool = False
 
     def _can_write(self, name: str) -> bool:
         return name == "retry_model"

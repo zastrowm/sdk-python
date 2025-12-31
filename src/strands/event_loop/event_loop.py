@@ -362,7 +362,7 @@ async def _handle_model_execution(
                 await agent.hooks.invoke_callbacks_async(after_model_call_event)
 
                 # Check if hooks want to retry the model call
-                if after_model_call_event.retry_model:
+                if after_model_call_event.retry:
                     logger.debug(
                         "stop_reason=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
                         stop_reason,
@@ -388,7 +388,7 @@ async def _handle_model_execution(
                 await agent.hooks.invoke_callbacks_async(after_model_call_event)
 
                 # Check if hooks want to retry the model call
-                if after_model_call_event.retry_model:
+                if after_model_call_event.retry:
                     logger.debug(
                         "exception=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
                         type(e).__name__,

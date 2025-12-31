@@ -343,7 +343,7 @@ async def test_hook_retry_on_successful_call():
                 text_content = "".join(block.get("text", "") for block in message.get("content", []))
 
                 if len(text_content) < self.min_length:
-                    event.retry_model = True
+                    event.retry = True
 
     retry_hook = MinLengthRetryHook(min_length=10)
     agent = Agent(model=mock_provider, hooks=[retry_hook])
@@ -388,7 +388,7 @@ async def test_hook_retry_on_exception_basic(alist, mock_sleep):
         async def handle_after_model_call(self, event):
             self.after_model_call_count += 1
             if event.exception and isinstance(event.exception, CustomException):
-                event.retry_model = True
+                event.retry = True
 
     retry_hook = RetryHook()
     agent = Agent(model=model, hooks=[retry_hook])
@@ -465,7 +465,7 @@ async def test_hook_retry_with_limit(alist, mock_sleep):
             if event.exception and isinstance(event.exception, CustomException):
                 if self.retry_count < self.max_retries:
                     self.retry_count += 1
-                    event.retry_model = True
+                    event.retry = True
                 # else: let exception propagate
 
     retry_hook = LimitedRetryHook(max_retries=2)
@@ -501,11 +501,11 @@ async def test_hook_retry_multiple_hooks(alist, mock_sleep):
 
     async def retry_enabler(event: AfterModelCallEvent):
         if event.exception:
-            event.retry_model = True
+            event.retry = True
 
     async def another_retry_enabler(event: AfterModelCallEvent):
         if event.exception:
-            event.retry_model = True
+            event.retry = True
 
     agent = Agent(model=model)
     agent.hooks.add_callback(AfterModelCallEvent, retry_enabler)
@@ -543,12 +543,12 @@ async def test_hook_retry_last_hook_wins(alist, mock_sleep):
     async def retry_enabler(event: AfterModelCallEvent):
         """Called first due to reverse order."""
         if event.exception:
-            event.retry_model = True
+            event.retry = True
 
     async def retry_disabler(event: AfterModelCallEvent):
         """Called last, so it wins."""
         if event.exception:
-            event.retry_model = False
+            event.retry = False
 
     agent = Agent(model=model)
     agent.hooks.add_callback(AfterModelCallEvent, retry_disabler)  # Registered first, called last
@@ -586,7 +586,7 @@ async def test_hook_retry_with_throttle_exception(alist, mock_sleep):
 
     async def handle_after_model_call(event: AfterModelCallEvent):
         if event.exception and isinstance(event.exception, CustomException):
-            event.retry_model = True
+            event.retry = True
 
     agent = Agent(model=model)
     agent.hooks.add_callback(AfterModelCallEvent, handle_after_model_call)
