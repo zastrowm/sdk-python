@@ -450,27 +450,17 @@ async def test_hook_retry_multiple_hooks(alist, mock_sleep):
         ).stream([]),
     ]
 
-    # First hook sets retry to True
-    class RetryEnabler:
-        def register_hooks(self, registry):
-            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+    async def retry_enabler(event: AfterModelCallEvent):
+        if event.exception:
+            event.retry_model = True
 
-        async def handle_after_model_call(self, event):
-            if event.exception:
-                event.retry_model = True
+    async def another_retry_enabler(event: AfterModelCallEvent):
+        if event.exception:
+            event.retry_model = True
 
-    # Second hook also sets it to True (should still work)
-    class AnotherRetryEnabler:
-        def register_hooks(self, registry):
-            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
-
-        async def handle_after_model_call(self, event):
-            if event.exception:
-                event.retry_model = True
-
-    hook1 = RetryEnabler()
-    hook2 = AnotherRetryEnabler()
-    agent = Agent(model=model, hooks=[hook1, hook2])
+    agent = Agent(model=model)
+    agent.hooks.add_callback(AfterModelCallEvent, retry_enabler)
+    agent.hooks.add_callback(AfterModelCallEvent, another_retry_enabler)
 
     result = agent("Test multiple hooks")
 
@@ -501,27 +491,19 @@ async def test_hook_retry_last_hook_wins(alist, mock_sleep):
     model = MagicMock()
     model.stream = mock_stream
 
-    # Second hook enables retry (called first due to reverse order)
-    class RetryEnabler:
-        def register_hooks(self, registry):
-            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+    async def retry_enabler(event: AfterModelCallEvent):
+        """Called first due to reverse order."""
+        if event.exception:
+            event.retry_model = True
 
-        async def handle_after_model_call(self, event):
-            if event.exception:
-                event.retry_model = True
+    async def retry_disabler(event: AfterModelCallEvent):
+        """Called last, so it wins."""
+        if event.exception:
+            event.retry_model = False
 
-    # First hook disables retry (called last, so it wins)
-    class RetryDisabler:
-        def register_hooks(self, registry):
-            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
-
-        async def handle_after_model_call(self, event):
-            if event.exception:
-                event.retry_model = False
-
-    hook1 = RetryDisabler()  # Registered first, called last due to reverse order
-    hook2 = RetryEnabler()  # Registered second, called first
-    agent = Agent(model=model, hooks=[hook1, hook2])
+    agent = Agent(model=model)
+    agent.hooks.add_callback(AfterModelCallEvent, retry_disabler)  # Registered first, called last
+    agent.hooks.add_callback(AfterModelCallEvent, retry_enabler)  # Registered second, called first
 
     # Should raise exception since last-called hook disabled retry
     with pytest.raises(CustomException, match="First attempt fails"):
@@ -553,17 +535,12 @@ async def test_hook_retry_with_throttle_exception(alist, mock_sleep):
         ).stream([]),
     ]
 
-    # Hook that retries on CustomException
-    class CustomRetryHook:
-        def register_hooks(self, registry):
-            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+    async def handle_after_model_call(event: AfterModelCallEvent):
+        if event.exception and isinstance(event.exception, CustomException):
+            event.retry_model = True
 
-        async def handle_after_model_call(self, event):
-            if event.exception and isinstance(event.exception, CustomException):
-                event.retry_model = True
-
-    retry_hook = CustomRetryHook()
-    agent = Agent(model=model, hooks=[retry_hook])
+    agent = Agent(model=model)
+    agent.hooks.add_callback(AfterModelCallEvent, handle_after_model_call)
 
     result = agent("Test mixed retries")
 
