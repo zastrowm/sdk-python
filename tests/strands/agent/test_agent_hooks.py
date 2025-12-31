@@ -1,4 +1,4 @@
-from unittest.mock import ANY, Mock
+from unittest.mock import ANY, Mock, MagicMock, patch, AsyncMock
 
 import pytest
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from strands.hooks import (
     MessageAddedEvent,
 )
 from strands.types.content import Messages
+from strands.types.exceptions import ModelThrottledException
 from strands.types.tools import ToolResult, ToolUse
 from tests.fixtures.mock_hook_provider import MockHookProvider
 from tests.fixtures.mocked_model_provider import MockedModelProvider
@@ -100,6 +101,12 @@ def user():
 
     return User(name="Jane Doe", age=30)
 
+@pytest.fixture
+def mock_sleep():
+    with patch.object(
+        strands.event_loop.event_loop.asyncio, "sleep", new_callable=AsyncMock
+    ) as mock:
+        yield mock
 
 def test_agent__init__hooks():
     """Verify that the AgentInitializedEvent is emitted on Agent construction."""
@@ -299,3 +306,267 @@ async def test_agent_structured_async_output_hooks(agent, hook_provider, user, a
     assert next(events) == AfterInvocationEvent(agent=agent)
 
     assert len(agent.messages) == 0  # no new messages added
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_on_exception_basic(alist, mock_sleep):
+    """Test that hooks can retry model calls on exceptions."""
+
+    class CustomException(Exception):
+        pass
+
+    model = MagicMock()
+    model.stream.side_effect = [
+        CustomException("First attempt fails"),
+        MockedModelProvider(
+            [
+                {
+                    "role": "assistant",
+                    "content": [{"text": "Success after retry"}],
+                },
+            ]
+        ).stream([]),
+    ]
+
+    # Hook that enables retry on CustomException
+    class RetryHook:
+        def __init__(self):
+            self.after_model_call_count = 0
+
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            self.after_model_call_count += 1
+            if event.exception and isinstance(event.exception, CustomException):
+                event.retry_model = True
+
+    retry_hook = RetryHook()
+    agent = Agent(model=model, hooks=[retry_hook])
+
+    result = agent("Test retry")
+
+    # Verify the hook was called twice (once for failure, once for success)
+    assert retry_hook.after_model_call_count == 2
+    assert result.stop_reason == "end_turn"
+    assert result.message["content"][0]["text"] == "Success after retry"
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_ignored_without_exception(alist):
+    """Test that retry_model is ignored when there's no exception."""
+    mock_provider = MockedModelProvider(
+        [
+            {
+                "role": "assistant",
+                "content": [{"text": "First successful response"}],
+            },
+        ]
+    )
+
+    # Hook that tries to set retry_model=True even on success
+    class AlwaysRetryHook:
+        def __init__(self):
+            self.call_count = 0
+
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            self.call_count += 1
+            # Try to set retry even on success
+            event.retry_model = True
+
+    retry_hook = AlwaysRetryHook()
+    agent = Agent(model=mock_provider, hooks=[retry_hook])
+
+    result = agent("Test no retry on success")
+
+    # Should only be called once since retry is ignored without exception
+    assert retry_hook.call_count == 1
+    assert result.message["content"][0]["text"] == "First successful response"
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_with_limit(alist, mock_sleep):
+    """Test that hooks can control retry limits."""
+
+    class CustomException(Exception):
+        pass
+
+    model = MagicMock()
+    model.stream.side_effect = [
+        CustomException("Attempt 1 fails"),
+        CustomException("Attempt 2 fails"),
+        CustomException("Attempt 3 fails"),
+    ]
+
+    # Hook that allows max 2 retries
+    class LimitedRetryHook:
+        def __init__(self, max_retries=2):
+            self.max_retries = max_retries
+            self.retry_count = 0
+            self.call_count = 0
+
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            self.call_count += 1
+            if event.exception and isinstance(event.exception, CustomException):
+                if self.retry_count < self.max_retries:
+                    self.retry_count += 1
+                    event.retry_model = True
+                # else: let exception propagate
+
+    retry_hook = LimitedRetryHook(max_retries=2)
+    agent = Agent(model=model, hooks=[retry_hook])
+
+    with pytest.raises(CustomException, match="Attempt 3 fails"):
+        await agent("Test limited retries")
+
+    # Should be called 3 times: initial + 2 retries
+    assert retry_hook.call_count == 3
+    assert retry_hook.retry_count == 2
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_multiple_hooks(alist, mock_sleep):
+    """Test that multiple hooks can modify retry_model and last one wins."""
+
+    class CustomException(Exception):
+        pass
+
+    model = MagicMock()
+    model.stream.side_effect = [
+        CustomException("First attempt fails"),
+        MockedModelProvider(
+            [
+                {
+                    "role": "assistant",
+                    "content": [{"text": "Success"}],
+                },
+            ]
+        ).stream([]),
+    ]
+
+    # First hook sets retry to True
+    class RetryEnabler:
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            if event.exception:
+                event.retry_model = True
+
+    # Second hook also sets it to True (should still work)
+    class AnotherRetryEnabler:
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            if event.exception:
+                event.retry_model = True
+
+    hook1 = RetryEnabler()
+    hook2 = AnotherRetryEnabler()
+    agent = Agent(model=model, hooks=[hook1, hook2])
+
+    result = agent("Test multiple hooks")
+
+    assert result.stop_reason == "end_turn"
+    assert result.message["content"][0]["text"] == "Success"
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_last_hook_wins(alist, mock_sleep):
+    """Test that when multiple hooks set retry_model, the last-called hook wins.
+
+    Note: AfterModelCallEvent callbacks are invoked in reverse order, so the first
+    registered hook is called last.
+    """
+
+    class CustomException(Exception):
+        pass
+
+    call_count = [0]
+
+    def mock_stream(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise CustomException("First attempt fails")
+        else:
+            raise CustomException(f"Should not be called (call {call_count[0]})")
+
+    model = MagicMock()
+    model.stream = mock_stream
+
+    # Second hook enables retry (called first due to reverse order)
+    class RetryEnabler:
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            if event.exception:
+                event.retry_model = True
+
+    # First hook disables retry (called last, so it wins)
+    class RetryDisabler:
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            if event.exception:
+                event.retry_model = False
+
+    hook1 = RetryDisabler()  # Registered first, called last due to reverse order
+    hook2 = RetryEnabler()  # Registered second, called first
+    agent = Agent(model=model, hooks=[hook1, hook2])
+
+    # Should raise exception since last-called hook disabled retry
+    with pytest.raises(CustomException, match="First attempt fails"):
+        agent("Test last hook wins")
+
+    # Verify stream was only called once
+    assert call_count[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_hook_retry_with_throttle_exception(alist, mock_sleep):
+    """Test that hook retry works alongside existing throttle retry."""
+
+    class CustomException(Exception):
+        pass
+
+    model = MagicMock()
+    model.stream.side_effect = [
+        CustomException("Custom error"),
+        ModelThrottledException("ThrottlingException"),
+        ModelThrottledException("ThrottlingException"),
+        MockedModelProvider(
+            [
+                {
+                    "role": "assistant",
+                    "content": [{"text": "Success after mixed retries"}],
+                },
+            ]
+        ).stream([]),
+    ]
+
+    # Hook that retries on CustomException
+    class CustomRetryHook:
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            if event.exception and isinstance(event.exception, CustomException):
+                event.retry_model = True
+
+    retry_hook = CustomRetryHook()
+    agent = Agent(model=model, hooks=[retry_hook])
+
+    result = agent("Test mixed retries")
+
+    # Should succeed after: custom retry + 2 throttle retries
+    assert result.stop_reason == "end_turn"
+    assert result.message["content"][0]["text"] == "Success after mixed retries"
