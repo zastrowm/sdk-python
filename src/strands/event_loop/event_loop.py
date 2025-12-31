@@ -351,15 +351,23 @@ async def _handle_model_execution(
                 stop_reason, message, usage, metrics = event["stop"]
                 invocation_state.setdefault("request_state", {})
 
-                await agent.hooks.invoke_callbacks_async(
-                    AfterModelCallEvent(
-                        agent=agent,
-                        stop_response=AfterModelCallEvent.ModelStopResponse(
-                            stop_reason=stop_reason,
-                            message=message,
-                        ),
-                    )
+                after_model_call_event = AfterModelCallEvent(
+                    agent=agent,
+                    stop_response=AfterModelCallEvent.ModelStopResponse(
+                        stop_reason=stop_reason,
+                        message=message,
+                    ),
                 )
+                await agent.hooks.invoke_callbacks_async(after_model_call_event)
+
+                # Check if hooks want to retry the model call
+                if after_model_call_event.retry_model:
+                    logger.debug(
+                        "stop_reason=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
+                        stop_reason,
+                        attempt + 1,
+                    )
+                    continue  # Retry the model call
 
                 if stop_reason == "max_tokens":
                     message = recover_message_on_max_tokens_reached(message)
@@ -379,7 +387,7 @@ async def _handle_model_execution(
                 await agent.hooks.invoke_callbacks_async(after_model_call_event)
 
                 # Check if hooks want to retry the model call
-                if after_model_call_event.retry_model and after_model_call_event.exception:
+                if after_model_call_event.retry_model:
                     logger.debug(
                         "exception=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
                         type(e).__name__,

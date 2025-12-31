@@ -664,6 +664,58 @@ async def test_structured_output(agenerator):
 
 
 @pytest.mark.asyncio
+async def test_hook_retry_on_successful_call():
+    """Test that hooks can retry even on successful model calls based on response content."""
+    
+    mock_provider = MockedModelProvider(
+        [
+            {
+                "role": "assistant",
+                "content": [{"text": "Short"}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"text": "This is a much longer and more detailed response"}],
+            },
+        ]
+    )
+
+    # Hook that retries if response is too short
+    class MinLengthRetryHook:
+        def __init__(self, min_length=10):
+            self.min_length = min_length
+            self.call_count = 0
+
+        def register_hooks(self, registry):
+            registry.add_callback(strands.hooks.AfterModelCallEvent, self.handle_after_model_call)
+
+        async def handle_after_model_call(self, event):
+            self.call_count += 1
+            
+            # Check successful responses for minimum length
+            if event.stop_response:
+                message = event.stop_response.message
+                text_content = "".join(
+                    block.get("text", "") 
+                    for block in message.get("content", [])
+                )
+                
+                if len(text_content) < self.min_length:
+                    event.retry_model = True
+
+    retry_hook = MinLengthRetryHook(min_length=10)
+    agent = Agent(model=mock_provider, hooks=[retry_hook])
+
+    result = agent("Generate a response")
+
+    # Verify hook was called twice (once for short response, once for long)
+    assert retry_hook.call_count == 2
+    
+    # Verify final result is the longer response
+    assert result.message["content"][0]["text"] == "This is a much longer and more detailed response"
+
+
+@pytest.mark.asyncio
 async def test_hook_retry_on_exception_basic(alist, mock_sleep):
     """Test that hooks can retry model calls on exceptions."""
 
@@ -708,8 +760,8 @@ async def test_hook_retry_on_exception_basic(alist, mock_sleep):
 
 
 @pytest.mark.asyncio
-async def test_hook_retry_ignored_without_exception(alist):
-    """Test that retry_model is ignored when there's no exception."""
+async def test_hook_retry_not_set_on_success():
+    """Test that model is not retried when hook doesn't set retry_model on success."""
     mock_provider = MockedModelProvider(
         [
             {
@@ -719,8 +771,8 @@ async def test_hook_retry_ignored_without_exception(alist):
         ]
     )
 
-    # Hook that tries to set retry_model=True even on success
-    class AlwaysRetryHook:
+    # Hook that does NOT set retry_model
+    class NoRetryHook:
         def __init__(self):
             self.call_count = 0
 
@@ -729,15 +781,14 @@ async def test_hook_retry_ignored_without_exception(alist):
 
         async def handle_after_model_call(self, event):
             self.call_count += 1
-            # Try to set retry even on success
-            event.retry_model = True
+            # Don't set retry_model (leave it as False)
 
-    retry_hook = AlwaysRetryHook()
+    retry_hook = NoRetryHook()
     agent = Agent(model=mock_provider, hooks=[retry_hook])
 
-    result = agent("Test no retry on success")
+    result = agent("Test no retry when not set")
 
-    # Should only be called once since retry is ignored without exception
+    # Should only be called once since retry_model was not set
     assert retry_hook.call_count == 1
     assert result.message["content"][0]["text"] == "First successful response"
 
