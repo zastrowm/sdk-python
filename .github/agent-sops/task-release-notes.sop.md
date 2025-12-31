@@ -62,10 +62,13 @@ For each PR identified (from release or API query), fetch additional metadata ne
 - You MUST retrieve additional metadata for PRs being considered for Major Features or Major Bug Fixes:
   - PR description/body (essential for understanding the change)
   - PR labels (if any)
+  - PR review comments and conversation threads (to identify post-description changes)
 - You SHOULD retrieve for Major Feature candidates:
   - Files changed in the PR (to find code examples)
-- You MAY retrieve:
-  - PR review comments if helpful for understanding the change
+- You MUST retrieve PR review comments for Major Feature and Major Bug Fix candidates:
+  - Review comments often contain important context about changes made after the initial description
+  - Look for reviewer requests that resulted in structural changes to the implementation
+  - Check for author responses indicating significant modifications
 - You SHOULD minimize API calls by only fetching detailed metadata for PRs that appear significant based on title/prefix
 - You MUST track this data for use in categorization and release notes generation
 
@@ -89,18 +92,27 @@ Extract categorization signals from PR titles using conventional commit prefixes
 - You SHOULD record the prefix-based category for each PR
 - You MAY encounter PRs without conventional commit prefixes
 
-#### 2.2 Analyze PR Descriptions
+#### 2.2 Analyze PR Descriptions and Review Comments
 
 Use LLM analysis to understand the significance and user impact of each change.
 
+**Critical Warning - Stale PR Descriptions:**
+PR descriptions are written at the time of PR creation and may become outdated after code review. Reviewers often request structural changes, API modifications, or feature adjustments that are implemented but NOT reflected in the original description. You MUST cross-reference the description with review comments to get an accurate understanding of the final merged code.
+
 **Constraints:**
 - You MUST read and analyze the PR description for each PR
+- You MUST also review PR comments and review threads to identify changes made after the initial description:
+  - Look for reviewer comments requesting changes to the implementation
+  - Look for author responses confirming changes were made
+  - Look for "LGTM" or approval comments that reference specific modifications
+  - Pay special attention to comments about API changes, renamed methods, or restructured code
+- You MUST treat the actual merged code as the source of truth when descriptions conflict with review feedback
 - You MUST assess the user-facing impact of the change:
   - Does it introduce new functionality users will interact with?
   - Does it fix a bug that users experienced?
   - Is it purely internal with no user-visible changes?
 - You MUST identify if the change introduces breaking changes
-- You SHOULD identify if the PR includes code examples in its description
+- You SHOULD identify if the PR includes code examples in its description (but verify they match the final implementation)
 - You SHOULD note any links to documentation or related issues
 - You MAY consider the size and complexity of the change
 
@@ -161,14 +173,21 @@ Present the categorized PRs to the user for review and confirmation.
 
 Search merged PRs for existing code that demonstrates the new feature.
 
+**Critical Warning - Verify Examples Against Final Implementation:**
+Code examples in PR descriptions may be outdated if the implementation changed during review. Always verify that examples match the actual merged code by checking review comments for requested changes and examining the final implementation.
+
 **Constraints:**
 - You MUST search each Major Feature PR for existing code examples in:
-  - Test files (especially integration tests or example tests)
+  - Test files (especially integration tests or example tests) - these are most reliable as they reflect the final implementation
   - Example applications or scripts in `examples/` directory
-  - Code snippets in the PR description
+  - Code snippets in the PR description (but verify against review comments and final code)
   - Documentation updates that include code examples
   - README updates with usage examples
-- You MUST prioritize test files that show real usage of the feature
+- You MUST cross-reference any examples from PR descriptions with:
+  - Review comments that may have requested API changes
+  - The actual merged code to ensure the example is still accurate
+  - Test files which reflect the working implementation
+- You MUST prioritize test files that show real usage of the feature (these are validated against the final code)
 - You SHOULD look for the simplest, most focused examples
 - You SHOULD prefer examples that are already validated (from test files)
 - You MAY examine multiple PRs if a feature spans several PRs
@@ -643,6 +662,17 @@ If no suitable code examples can be found or generated for a feature:
 4. Generate a minimal example based on the API changes, even if you can't fully validate it
 5. Mark the example as "conceptual" if validation isn't possible
 6. Consider omitting the code example if it would be misleading
+
+### Stale or Inaccurate PR Descriptions
+
+If you discover that a PR description doesn't match the actual implementation:
+1. Review the PR comment thread and review comments for context on what changed
+2. Look for reviewer requests that led to structural changes
+3. Check the author's responses to understand what modifications were made
+4. Examine the actual merged code (especially test files) to understand the true implementation
+5. Use test files as the authoritative source for code examples, not the PR description
+6. If the feature's scope changed significantly during review, update your categorization accordingly
+7. Note in your analysis when you relied on review comments rather than the description
 
 ## Desired Outcome
 
