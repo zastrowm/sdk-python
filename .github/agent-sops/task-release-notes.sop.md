@@ -433,11 +433,12 @@ Add a horizontal rule to separate your content from GitHub's auto-generated sect
 
 **Critical**: You are running in an ephemeral environment. All files created during execution (test files, temporary notes, etc.) will be deleted when the workflow completes. You MUST post all deliverables as GitHub issue comments—this is the only way to preserve your work and make it accessible to reviewers.
 
-**Comment Structure**: Post exactly two comments on the GitHub issue:
+**Comment Structure**: Post exactly three comments on the GitHub issue:
 1. **Validation Comment** (first): Contains all validation code for all features in one batched comment
 2. **Release Notes Comment** (second): Contains the final formatted release notes
+3. **Exclusions Comment** (third): Documents any features that were excluded and why
 
-This ordering allows reviewers to see the validation evidence before reviewing the release notes.
+This ordering allows reviewers to see the validation evidence, review the release notes, and understand any exclusion decisions.
 
 #### 6.1 Post Validation Code Comment
 
@@ -496,6 +497,42 @@ Post the formatted release notes as a single GitHub issue comment.
 - You SHOULD add a brief introductory line (e.g., "## Release Notes for v1.15.0")
 - You MAY use markdown formatting in the comment
 - If comment posting is deferred, continue with the workflow and note the deferred status
+
+#### 6.3 Post Exclusions Comment
+
+Document any features or bug fixes that were considered but excluded from the release notes.
+
+**Critical**: This comment is REQUIRED whenever you decide that a categorized Major Feature or Major Bug Fix does not warrant inclusion in the final release notes, does not need a code example, or was downgraded to Minor Changes during the process.
+
+**Constraints:**
+- You MUST post this comment as the FINAL comment on the GitHub issue
+- You MUST include this comment if ANY of the following occurred:
+  - A PR initially categorized as Major Feature was excluded from release notes
+  - A PR initially categorized as Major Bug Fix was excluded from release notes
+  - A Major Feature was included without a code example
+  - A feature's scope or description was significantly different from the PR description
+  - You relied on review comments rather than the PR description to understand a feature
+- You MUST clearly explain the reasoning for each exclusion or modification
+- You MUST format the comment with clear sections:
+  ```markdown
+  ## Release Notes Exclusions & Notes
+
+  The following decisions were made during release notes generation:
+
+  ### Excluded from Major Features
+  - **PR#123 - Feature Title**: Excluded because [specific reason - e.g., "internal refactoring with no user-facing API changes", "feature was reverted in a later PR", "scope reduced during review to minor enhancement"]
+
+  ### Excluded from Major Bug Fixes
+  - **PR#456 - Fix Title**: Excluded because [specific reason]
+
+  ### Features Without Code Examples
+  - **PR#789 - Feature Title**: No code example provided because [specific reason - e.g., "feature is configuration-only", "existing documentation covers usage adequately", "unable to create a validated example"]
+
+  ### Description vs. Implementation Discrepancies
+  - **PR#101 - Feature Title**: PR description stated [X] but review comments and final implementation show [Y]. Release notes reflect the actual merged behavior.
+  ```
+- You SHOULD include this comment even if there are no exclusions, with a simple note: "No features or bug fixes were excluded from this release notes draft."
+- You MUST NOT skip this comment—it provides critical transparency for reviewers
 
 ## Examples
 
@@ -680,6 +717,7 @@ If you discover that a PR description doesn't match the actual implementation:
 * Working, behaviorally-validated code examples for all major features (tests must verify feature behavior, not just syntax)
 * Well-formatted markdown that renders properly on GitHub
 * Release notes posted as a comment on the GitHub issue for review
+* Exclusions comment documenting any features excluded or modified, with clear reasoning for each decision
 
 **Important**: Your generated release notes will be prepended to GitHub's auto-generated release notes. GitHub automatically generates:
 - "What's Changed" section listing all PRs with authors and links
