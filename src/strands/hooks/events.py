@@ -204,8 +204,7 @@ class AfterModelCallEvent(HookEvent):
         stop_response: The model response data if invocation was successful, None if failed.
         exception: Exception if the model invocation failed, None if successful.
         retry_model: Whether to retry the model invocation. Can be set by hook callbacks
-            when exception is present to trigger a retry. Only checked when exception exists;
-            ignored on successful calls. Defaults to False.
+            to trigger a retry. Defaults to False.
     """
 
     @dataclass
