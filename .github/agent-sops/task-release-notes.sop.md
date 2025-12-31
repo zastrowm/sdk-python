@@ -210,42 +210,102 @@ When existing examples are insufficient, generate new code snippets.
 
 **Note**: This phase is REQUIRED for all code snippets (extracted or generated) that will appear in Major Features sections. Validation must occur AFTER snippets have been extracted or generated in Step 3.
 
+**Critical**: Validation tests MUST verify the actual behavior of the feature, not just syntax correctness. A test that only checks whether code parses or imports succeed is NOT valid validation. The purpose of validation is to prove the code example actually works and demonstrates the feature as intended.
+
 #### 4.1 Create Temporary Test Files
 
-Create temporary test files to validate the code snippets.
+Create temporary test files that verify the feature's behavior.
 
 **Constraints:**
 - You MUST create a temporary test file for each code snippet
 - You MUST place test files in an appropriate test directory based on the project structure
 - You MUST include all necessary imports and setup code in the test file
 - You MUST wrap the snippet in a proper test case
+- You MUST include assertions that verify the feature's actual behavior:
+  - Assert that outputs match expected values
+  - Assert that state changes occur as expected
+  - Assert that callbacks/hooks are invoked correctly
+  - Assert that return types and structures are correct
+- You MUST NOT write tests that only verify:
+  - Code parses without syntax errors
+  - Imports succeed
+  - Objects can be instantiated without checking behavior
+  - Functions can be called without checking results
 - You SHOULD use the project's testing framework
-- You MAY need to mock dependencies or setup test fixtures
+- You SHOULD mock external dependencies (APIs, databases) but still verify behavior with mocks
+- You MAY need to setup test fixtures that enable behavioral verification
 - You MAY include additional test code that doesn't appear in the release notes
 
-**Example test file structure** (language-specific format will vary):
+**Example of GOOD validation** (verifies behavior):
+```python
+def test_structured_output_validation():
+    """Verify that structured output actually validates against the schema."""
+    from pydantic import BaseModel
+    
+    class UserResponse(BaseModel):
+        name: str
+        age: int
+    
+    agent = Agent(model=mock_model, output_schema=UserResponse)
+    result = agent("Get user info")
+    
+    # Behavioral assertions - verify the feature works
+    assert isinstance(result.output, UserResponse)
+    assert hasattr(result.output, 'name')
+    assert hasattr(result.output, 'age')
+    assert isinstance(result.output.age, int)
 ```
-# Test structure depends on the project's testing framework
-# Include necessary imports, setup, and the snippet being validated
-# Add assertions to verify the code works correctly
+
+**Example of BAD validation** (only verifies syntax):
+```python
+def test_structured_output_syntax():
+    """BAD: This only verifies the code runs without errors."""
+    from pydantic import BaseModel
+    
+    class UserResponse(BaseModel):
+        name: str
+        age: int
+    
+    # BAD: No assertions about behavior
+    agent = Agent(model=mock_model, output_schema=UserResponse)
+    # BAD: Just calling without checking results proves nothing
+    agent("Get user info")
 ```
 
 #### 4.2 Run Validation Tests
 
-Execute tests to ensure code snippets are valid and functional.
+Execute tests to ensure code snippets demonstrate working feature behavior.
 
 **Constraints:**
 - You MUST run the appropriate test command for the project (e.g., `npm test`, `pytest`, `go test`)
 - You MUST verify that the test passes successfully
+- You MUST verify that assertions actually executed (not skipped or short-circuited)
 - You MUST check that the code compiles without errors in compiled languages
+- You MUST ensure tests include meaningful assertions about feature behavior
 - You SHOULD run type checking if applicable (e.g., `npm run type-check`, `mypy`)
+- You SHOULD review test output to confirm behavioral assertions passed, not just that the test didn't error
 - You MAY need to adjust imports or setup code if tests fail
 - You MAY need to install additional dependencies if required
 
-**Fallback validation** (if test execution fails or is not possible):
-- You MUST at minimum validate syntax using the appropriate language tools
-- You MUST ensure the code is syntactically correct
-- You MUST verify all referenced types and modules exist
+**What constitutes valid behavioral verification:**
+- Testing that a new API returns expected data structures
+- Testing that a new option/parameter changes behavior as documented
+- Testing that callbacks are invoked with correct arguments
+- Testing that error handling works as described
+- Testing that integrations connect and exchange data correctly (with mocks if needed)
+
+**What does NOT constitute valid verification:**
+- Code executes without raising exceptions
+- Objects can be constructed
+- Functions can be called
+- Imports resolve successfully
+- Type hints are valid
+
+**Fallback validation** (if full behavioral test execution is not possible):
+- You MUST still write assertions about expected behavior, even if mocked
+- You MUST document why full behavioral testing wasn't possible
+- You SHOULD use mocks that verify interaction patterns (e.g., mock.assert_called_with)
+- You MAY mark the example as "partially validated" in the validation comment if behavioral testing is limited
 
 #### 4.3 Handle Validation Failures
 
@@ -253,13 +313,17 @@ Address any validation failures before including snippets in release notes.
 
 **Constraints:**
 - You MUST NOT include unvalidated code snippets in release notes
+- You MUST NOT consider syntax-only tests as valid validation
 - You MUST revise the code snippet if validation fails
 - You MUST re-run validation after making changes
+- You MUST ensure revised tests include behavioral assertions
 - You SHOULD examine the actual implementation in the PR if generated code fails
-- You SHOULD simplify the example if complexity is causing validation issues
-- You MAY extract a different example from the PR if the current one cannot be validated
-- You MAY seek clarification if you cannot create a valid example
-- You MUST preserve the test file content to include in the GitHub issue comment (Step 6.2)
+- You SHOULD examine existing tests in the PR for patterns that verify behavior
+- You SHOULD simplify the example if complexity is causing validation issues, but maintain behavioral assertions
+- You MAY extract a different example from the PR if the current one cannot be behaviorally validated
+- You MAY seek clarification if you cannot create a valid example with behavioral verification
+- You MUST preserve the test file content to include in the GitHub issue comment (Step 6.1)
+- You MUST note in the validation comment what specific behavior each test verifies
 - You MAY delete temporary test files after capturing their content, as the environment is ephemeral
 
 ### 5. Release Notes Formatting
@@ -365,10 +429,12 @@ Batch all validation code into a single GitHub issue comment.
 - You MUST NOT post separate comments for each feature's validation
 - You MUST post this comment BEFORE the release notes comment
 - You MUST include all test files created during validation (Step 4) in this single comment
+- You MUST document what specific behavior each test verifies (not just "validates the code works")
 - You MUST NOT reference local file paths—the ephemeral environment will be destroyed
 - You MUST clearly label this comment as "Code Validation Tests"
 - You MUST include a note explaining that this code was used to validate the snippets in the release notes
-- You SHOULD use collapsible `<details>` sections to organize validation code by feature:
+- You SHOULD use collapsible `<details>` sections to organize validation code by feature
+- You SHOULD include a brief description of what behavior is being verified for each test:
   ```markdown
   ## Code Validation Tests
 
@@ -377,8 +443,10 @@ Batch all validation code into a single GitHub issue comment.
   <details>
   <summary>Validation: Feature Name 1</summary>
 
-  \`\`\`typescript
-  [Full test file for feature 1]
+  **Behavior verified:** This test confirms that the new `output_schema` parameter causes the agent to return a validated Pydantic model instance with the correct field types.
+
+  \`\`\`python
+  [Full test file for feature 1 with behavioral assertions]
   \`\`\`
 
   </details>
@@ -386,13 +454,15 @@ Batch all validation code into a single GitHub issue comment.
   <details>
   <summary>Validation: Feature Name 2</summary>
 
-  \`\`\`typescript
-  [Full test file for feature 2]
+  **Behavior verified:** This test confirms that async streaming yields events in real-time and that the final result contains all streamed content.
+
+  \`\`\`python
+  [Full test file for feature 2 with behavioral assertions]
   \`\`\`
 
   </details>
   ```
-- This allows reviewers to copy and run the validation code themselves
+- This allows reviewers to understand what was validated and copy/run the validation code themselves
 
 #### 6.2 Post Release Notes Comment
 
@@ -523,10 +593,13 @@ If code validation fails for a snippet:
 1. Review the test output to understand the failure reason
 2. Check if the feature requires additional dependencies or setup
 3. Examine the actual implementation in the PR to understand correct usage
-4. Try simplifying the example to focus on core functionality
-5. Consider using a different example from the PR
-6. If unable to validate, note the issue in the release notes comment and skip the code example for that feature
-7. Leave a comment on the issue noting which features couldn't include validated code examples
+4. Look at existing tests in the PR for patterns that verify behavior correctly
+5. Try simplifying the example to focus on core functionality while maintaining behavioral assertions
+6. Consider using a different example from the PR
+7. If unable to validate behaviorally, note the issue in the release notes comment and skip the code example for that feature
+8. Leave a comment on the issue noting which features couldn't include validated code examples
+
+**Important**: If your tests only verify syntax (code runs without errors) but don't verify behavior (assertions about outputs, state changes, or interactions), the validation is incomplete. Revisit Step 4 and add meaningful behavioral assertions.
 
 ### Large PR Sets (>100 PRs)
 
@@ -574,7 +647,7 @@ If no suitable code examples can be found or generated for a feature:
 ## Desired Outcome
 
 * Focused release notes highlighting Major Features and Major Bug Fixes with concise descriptions (2-3 sentences, no bullet points)
-* Working, validated code examples for all major features
+* Working, behaviorally-validated code examples for all major features (tests must verify feature behavior, not just syntax)
 * Well-formatted markdown that renders properly on GitHub
 * Release notes posted as a comment on the GitHub issue for review
 
