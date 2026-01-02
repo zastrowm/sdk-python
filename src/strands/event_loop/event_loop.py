@@ -366,8 +366,8 @@ async def _handle_model_execution(
                     # Emit EventLoopThrottleEvent for backwards compatibility if ModelRetryStrategy triggered retry
                     from ..agent.retry import ModelRetryStrategy
 
-                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy.did_trigger_retry:
-                        yield EventLoopThrottleEvent(delay=agent.retry_strategy.current_delay)
+                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy._did_trigger_retry:
+                        yield EventLoopThrottleEvent(delay=agent.retry_strategy._current_delay)
                     continue  # Retry the model call
 
                 if stop_reason == "max_tokens":
@@ -396,8 +396,8 @@ async def _handle_model_execution(
                     # Emit EventLoopThrottleEvent for backwards compatibility if ModelRetryStrategy triggered retry
                     from ..agent.retry import ModelRetryStrategy
 
-                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy.did_trigger_retry:
-                        yield EventLoopThrottleEvent(delay=agent.retry_strategy.current_delay)
+                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy._did_trigger_retry:
+                        yield EventLoopThrottleEvent(delay=agent.retry_strategy._current_delay)
                     continue  # Retry the model call
 
                 # No retry requested, raise the exception

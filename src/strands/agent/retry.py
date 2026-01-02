@@ -94,14 +94,18 @@ class ModelRetryStrategy(HookProvider):
         return min(delay, self._max_delay)
 
     @property
-    def current_delay(self) -> float:
-        """Get the current retry delay (for backwards compatibility with EventLoopThrottleEvent)."""
+    def _current_delay(self) -> float:
+        """Get the current retry delay (for backwards compatibility with EventLoopThrottleEvent).
+        
+        This property is private and only exists for backwards compatibility with EventLoopThrottleEvent.
+        External code should not access this property.
+        """
         return self._calculate_delay()
 
-    @property
-    def did_trigger_retry(self) -> bool:
-        """Check if this strategy triggered the last retry."""
-        return self._did_trigger_retry
+    def _reset_retry_state(self) -> None:
+        """Reset retry state to initial values."""
+        self._current_attempt = 0
+        self._did_trigger_retry = False
 
     async def _handle_after_invocation(self, event: AfterInvocationEvent) -> None:
         """Reset retry state after invocation completes.
@@ -109,8 +113,7 @@ class ModelRetryStrategy(HookProvider):
         Args:
             event: The AfterInvocationEvent signaling invocation completion.
         """
-        self._current_attempt = 0
-        self._did_trigger_retry = False
+        self._reset_retry_state()
 
     async def _handle_after_model_call(self, event: AfterModelCallEvent) -> None:
         """Handle model call completion and determine if retry is needed.
@@ -134,12 +137,12 @@ class ModelRetryStrategy(HookProvider):
                 "stop_reason=<%s> | model call succeeded, resetting retry state",
                 event.stop_response.stop_reason,
             )
-            self._current_attempt = 0
-            self._did_trigger_retry = False
+            self._reset_retry_state()
             return
 
-        # Check if we have an exception (and skip log if no exception)
+        # Check if we have an exception and reset state if no exception
         if event.exception is None:
+            self._reset_retry_state()
             return
 
         # Only retry on ModelThrottledException
