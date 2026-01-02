@@ -64,20 +64,53 @@ class ModelRetryStrategy(HookProvider):
             initial_delay: Initial delay in seconds before retrying. Defaults to 4.
             max_delay: Maximum delay in seconds between retries. Defaults to 240 (4 minutes).
         """
-        self.max_attempts = max_attempts
-        self.initial_delay = initial_delay
-        self.max_delay = max_delay
-        self.current_attempt = 0
-        self.current_delay = initial_delay
+        self._max_attempts = max_attempts
+        self._initial_delay = initial_delay
+        self._max_delay = max_delay
+        self._current_attempt = 0
+        self._did_trigger_retry = False
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
-        """Register callback for AfterModelCallEvent to handle retries.
+        """Register callbacks for AfterModelCallEvent and AfterInvocationEvent.
 
         Args:
             registry: The hook registry to register callbacks with.
             **kwargs: Additional keyword arguments for future extensibility.
         """
         registry.add_callback(AfterModelCallEvent, self._handle_after_model_call)
+        registry.add_callback(AfterInvocationEvent, self._handle_after_invocation)
+
+    def _calculate_delay(self) -> float:
+        """Calculate the current retry delay based on attempt number.
+        
+        Uses exponential backoff: initial_delay * (2 ** attempt), capped at max_delay.
+        
+        Returns:
+            The delay in seconds for the current attempt.
+        """
+        if self._current_attempt == 0:
+            return self._initial_delay
+        delay = self._initial_delay * (2 ** (self._current_attempt - 1))
+        return min(delay, self._max_delay)
+
+    @property
+    def current_delay(self) -> float:
+        """Get the current retry delay (for backwards compatibility with EventLoopThrottleEvent)."""
+        return self._calculate_delay()
+
+    @property
+    def did_trigger_retry(self) -> bool:
+        """Check if this strategy triggered the last retry."""
+        return self._did_trigger_retry
+
+    async def _handle_after_invocation(self, event: AfterInvocationEvent) -> None:
+        """Reset retry state after invocation completes.
+        
+        Args:
+            event: The AfterInvocationEvent signaling invocation completion.
+        """
+        self._current_attempt = 0
+        self._did_trigger_retry = False
 
     async def _handle_after_model_call(self, event: AfterModelCallEvent) -> None:
         """Handle model call completion and determine if retry is needed.
