@@ -236,7 +236,14 @@ When existing examples are insufficient, generate new code snippets.
 
 **Note**: This phase is REQUIRED for all code snippets (extracted or generated) that will appear in Major Features sections. Validation must occur AFTER snippets have been extracted or generated in Step 3.
 
+**PRIMARY GOAL: Every Major Feature MUST have a validated code example.** The placeholder comment is an absolute last resort, not a convenient escape hatch. You must try extremely hard to create working, validated examples for every feature. Users rely on these examples to understand how to use new features.
+
 **Critical**: Validation tests MUST verify the actual behavior of the feature, not just syntax correctness. A test that only checks whether code parses or imports succeed is NOT valid validation. The purpose of validation is to prove the code example actually works and demonstrates the feature as intended.
+
+**Available Testing Resources:**
+- **Amazon Bedrock**: You have access to Bedrock models for testing. Use Bedrock when a feature requires a real model provider.
+- **Project test fixtures**: The project includes mocked model providers and test utilities in `tests/fixtures/`
+- **Integration test patterns**: Examine `tests_integ/` for patterns that test real model interactions
 
 #### 4.1 Create Temporary Test Files
 
@@ -344,14 +351,23 @@ Execute tests to ensure code snippets demonstrate working feature behavior.
 
 **Handling External Dependencies:**
 When a feature requires external SDKs or services (e.g., OpenAI SDK, Google Gemini SDK, AWS services):
+
+**TRY EXTREMELY HARD to create working examples. Exhaust all options before using a placeholder.**
+
 1. **First, attempt to install the dependency** - Many SDKs can be installed and used for validation
 2. **If installation succeeds**, write tests that use the real SDK with mocked API responses
-3. **If installation fails or requires paid credentials**, mock the dependency entirely
-- You MUST still write and execute tests using mocks
-- You MUST mock the external dependency and verify the integration code works correctly
+3. **For model provider features, USE BEDROCK** - You have access to Amazon Bedrock. If a feature works with any model provider, test it with Bedrock instead of skipping validation.
+4. **If the feature is provider-specific** (e.g., OpenAI-only feature), install that provider's SDK and mock the API responses
+5. **Only as an absolute last resort**, if you have exhausted all options and still cannot validate, use the placeholder
+
+- You MUST use Bedrock for testing when a feature works with multiple model providers
+- You MUST install and use provider SDKs when testing provider-specific features
+- You MUST mock API responses when you cannot make real API calls
 - You MUST NOT skip validation because "external dependencies were not installed" without first attempting installation
+- You MUST NOT use the placeholder if Bedrock or mocking could work
 - You SHOULD use the project's existing test patterns for mocking external services
 - You SHOULD examine how the project's existing tests handle similar dependencies
+- You SHOULD check `tests_integ/models/` for examples of testing with real model providers
 
 **Example of mocking external dependencies:**
 ```python
@@ -371,27 +387,37 @@ def test_custom_http_client():
         assert call_kwargs.get('http_client') == custom_client
 ```
 
-**Fallback: Excluding Features Without Validated Examples**
-If you genuinely cannot create a working test for a feature (after attempting mocks):
-- You MUST NOT include a code example for that feature in the release notes
-- You MUST document the feature in the Exclusions Comment (Step 6.3) explaining why validation failed
-- You MUST still include the feature in release notes with a placeholder indicating manual sample creation is needed:
+**Fallback: Placeholder for Truly Impossible Validation (LAST RESORT ONLY)**
+The placeholder is for situations where validation is genuinely impossible, NOT inconvenient. Before using a placeholder, you MUST have attempted ALL of the following:
+
+1. ✅ Tried using Bedrock as the model provider (if feature works with multiple providers)
+2. ✅ Tried installing the required SDK/dependency
+3. ✅ Tried mocking the external service
+4. ✅ Tried using the project's test fixtures (`tests/fixtures/mocked_model_provider.py`)
+5. ✅ Tried adapting patterns from `tests_integ/` integration tests
+6. ✅ Tried simplifying the example to remove external dependencies
+
+Only if ALL applicable approaches above have been attempted and failed should you use a placeholder:
+- You MUST document which approaches you tried and why they failed in the Exclusions Comment (Step 6.3)
+- You MUST use the placeholder format in the release notes:
   ```markdown
   ### Feature Name - [PR#123](link)
 
   Description of the feature and its impact.
 
   \`\`\`
-  # TODO: Could not verify a code sample successfully because [specific reason, e.g., "feature requires live AWS credentials", "complex integration with external service that cannot be mocked"]
+  # TODO: Could not verify a code sample successfully because [specific reason]
+  # Attempted: [list what you tried, e.g., "Bedrock (not applicable - OpenAI-specific), SDK installation (succeeded), mocking (failed because X)"]
   # Manual code sample creation required
   \`\`\`
   ```
+- You MUST NOT use the placeholder simply because validation is difficult or time-consuming
 - You MUST NOT invent alternative "validation" methods like source verification or API review
 - You MUST NOT include unvalidated code examples - use the placeholder instead
 
 #### 4.3 Handle Validation Failures
 
-Address any validation failures before including snippets in release notes.
+Address any validation failures before including snippets in release notes. **Do not give up easily - try multiple approaches.**
 
 **Constraints:**
 - You MUST NOT include unvalidated code snippets in release notes
@@ -400,6 +426,12 @@ Address any validation failures before including snippets in release notes.
 - You MUST revise the code snippet if validation fails
 - You MUST re-run validation after making changes
 - You MUST ensure revised tests include behavioral assertions
+- You MUST try multiple approaches before giving up:
+  1. Try using Bedrock instead of other model providers
+  2. Try installing missing dependencies
+  3. Try mocking external services
+  4. Try using project test fixtures
+  5. Try simplifying the example
 - You SHOULD examine the actual implementation in the PR if generated code fails
 - You SHOULD examine existing tests in the PR for patterns that verify behavior
 - You SHOULD simplify the example if complexity is causing validation issues, but maintain behavioral assertions
