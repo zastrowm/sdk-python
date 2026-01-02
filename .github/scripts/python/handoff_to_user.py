@@ -4,13 +4,28 @@ from strands import tool
 from strands.types.tools import ToolContext
 from strands_tools.utils import console_util
 
+from github_tools import add_issue_comment
+
+
 @tool(context=True)
-def handoff_to_user(message: str, tool_context: ToolContext) -> str:
+def handoff_to_user(
+    message: str,
+    tool_context: ToolContext,
+    post_comment: bool = False,
+    issue_number: int | None = None,
+) -> str:
     """
-    Hand off control to the user with a message.
+    Hand off control to the user with a message. This stops the agent execution
+    and waits for the user to respond before continuing.
 
     Args:
         message: The message to give to the user
+        post_comment: If true, post the message as a comment on the GitHub issue/PR.
+            Only set this to true when user intervention or feedback is required
+            before the agent can continue (e.g., clarification needed, approval required,
+            or a decision must be made). Do not post a comment for simple status updates
+            or completion messages.
+        issue_number: The issue or PR number to comment on (required if post_comment is true)
 
     Returns:
         The users response after handing back control
@@ -24,6 +39,19 @@ def handoff_to_user(message: str, tool_context: ToolContext) -> str:
             border_style="yellow",
         )
     )
+    
+    # Post comment to GitHub if requested
+    if post_comment:
+        if issue_number is None:
+            console.print(
+                Panel(
+                    "Cannot post comment: issue_number is required when post_comment is true",
+                    title="[bold red]Error",
+                    border_style="red",
+                )
+            )
+        else:
+            add_issue_comment(issue_number, message)
     
     request_state = {
         "stop_event_loop": True
