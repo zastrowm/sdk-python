@@ -236,9 +236,19 @@ When existing examples are insufficient, generate new code snippets.
 
 **Note**: This phase is REQUIRED for all code snippets (extracted or generated) that will appear in Major Features sections. Validation must occur AFTER snippets have been extracted or generated in Step 3.
 
-**CRITICAL RULE: Every Major Feature MUST have a code example in the release notes.** You cannot remove a feature from the release notes because validation failed. If validation fails, you MUST:
-1. Use a code sample extracted from the PR (description, tests, or implementation)
-2. Mark it clearly as requiring engineer validation
+**CRITICAL: You MUST attempt to validate EVERY code example.** The fallback is only for cases where you have genuinely tried and failed. You cannot skip validation - you must demonstrate that you attempted it.
+
+**Validation is almost always possible** because:
+- You have access to Amazon Bedrock for testing model features
+- Most features can be tested with mocks
+- The project has extensive test fixtures in `tests/fixtures/`
+- Many "external" dependencies can be installed and mocked
+
+**For each Major Feature, you MUST:**
+1. Write a test file
+2. Run the test
+3. If it fails, try alternative approaches (Bedrock, mocking, different example)
+4. Only after multiple documented failures can you use the engineer validation fallback
 
 **Critical**: Validation tests MUST verify the actual behavior of the feature, not just syntax correctness. A test that only checks whether code parses or imports succeed is NOT valid validation. The purpose of validation is to prove the code example actually works and demonstrates the feature as intended.
 
@@ -246,6 +256,14 @@ When existing examples are insufficient, generate new code snippets.
 - **Amazon Bedrock**: You have access to Bedrock models for testing. Use Bedrock when a feature requires a real model provider.
 - **Project test fixtures**: The project includes mocked model providers and test utilities in `tests/fixtures/`
 - **Integration test patterns**: Examine `tests_integ/` for patterns that test real model interactions
+
+
+**Features that genuinely cannot be validated (rare):**
+- Features requiring paid third-party API credentials with no mock option AND no Bedrock alternative
+- Features requiring specific hardware (GPU, TPU)
+- Features requiring live network access to specific external services that cannot be mocked
+
+**If your feature doesn't fall into the "genuinely cannot validate" category, you MUST validate it.**
 
 #### 4.1 Create Temporary Test Files
 
@@ -389,17 +407,27 @@ def test_custom_http_client():
         assert call_kwargs.get('http_client') == custom_client
 ```
 
-**When Validation Fails: Use PR Code Sample with Engineer Review Callout**
+**When Validation Fails After Genuine Attempts: Use PR Code Sample with Engineer Review Callout**
 
-If you cannot successfully validate a code example after attempting all approaches (Bedrock, mocking, dependency installation), you MUST still include a code example. Follow this process:
+**You can ONLY use this fallback if you have actually attempted validation and can document what you tried.** Simply stating "complex external SDK setup required" or "provider SDK setup required" without evidence of attempts is NOT acceptable.
 
+**Required proof of validation attempts:**
+Before marking any example as needing engineer validation, you MUST have:
+1. Created an actual test file (show the code in the validation comment)
+2. Run the test and received an actual error (show the error message)
+3. Tried at least ONE alternative approach (Bedrock, mocking, simplified example)
+4. Documented each attempt and its failure reason
+
+**If you cannot show this proof, you have not tried hard enough.**
+
+**Process when validation genuinely fails after documented attempts:**
 1. **Extract a code sample from the PR** - Use code from:
    - The PR description's code examples
    - Test files added in the PR
    - The actual implementation (simplified for readability)
    - Documentation updates in the PR
 2. **Include the sample in the release notes** with a clear callout that it needs engineer validation
-3. **Document the validation failure** in the Exclusions Comment (Step 6.3)
+3. **Document the validation attempts and failures** in the Validation Comment (Step 6.1)
 
 **Format for unvalidated code examples:**
 ```markdown
@@ -408,8 +436,9 @@ If you cannot successfully validate a code example after attempting all approach
 Description of the feature and its impact.
 
 \`\`\`python
-# ⚠️ NEEDS ENGINEER VALIDATION - Could not automatically verify this example
-# Reason: [specific reason, e.g., "requires OpenAI API credentials", "complex integration setup"]
+# ⚠️ NEEDS ENGINEER VALIDATION
+# Validation attempted: [describe test created and error received]
+# Alternative attempts: [what else you tried and why it failed]
 
 # Code sample extracted from PR description/tests
 from strands import Agent
@@ -421,33 +450,35 @@ agent = Agent(model=model)
 ```
 
 **Constraints:**
-- You MUST NOT remove a feature from release notes because validation failed
-- You MUST extract actual code from the PR to use as the example
-- You MUST include the warning comment at the top of unvalidated examples
-- You MUST include the reason validation failed in the warning
-- You MUST document all unvalidated examples in the Exclusions Comment
+- You MUST NOT mark examples as needing validation without actually attempting validation first
+- You MUST NOT use vague reasons like "complex setup required" - be specific about what you tried and what error you got
+- You MUST show your test code and error messages in the Validation Comment
+- You MUST try Bedrock for any feature that works with multiple model providers before giving up
+- You MUST try mocking for provider-specific features before giving up
+- You MUST document all validation attempts (successful AND failed) in the Validation Comment
 
 #### 4.3 Handle Validation Failures
 
-Address any validation failures before including snippets in release notes. **Do not give up easily - try multiple approaches. But NEVER remove a feature because validation failed.**
+Address any validation failures before including snippets in release notes. **You MUST actually attempt validation - do not skip to the fallback.**
 
 **Constraints:**
-- You MUST NOT remove a feature from release notes because validation failed
+- You MUST actually run tests before claiming validation failed
+- You MUST NOT skip validation and go straight to "NEEDS ENGINEER VALIDATION"
 - You MUST NOT consider syntax-only tests as valid validation
 - You MUST NOT invent alternative validation methods (source verification, API review, conceptual correctness, etc.)
 - You MUST revise the code snippet if validation fails and try again
 - You MUST re-run validation after making changes
 - You MUST ensure revised tests include behavioral assertions
-- You MUST try multiple approaches before falling back to unvalidated PR code:
-  1. Try using Bedrock instead of other model providers
-  2. Try installing missing dependencies
-  3. Try mocking external services
-  4. Try using project test fixtures
-  5. Try simplifying the example
+- You MUST try these approaches IN ORDER before using the fallback:
+  1. Run the test as-is and capture the error
+  2. Try using Bedrock instead of other model providers
+  3. Try installing missing dependencies
+  4. Try mocking external services
+  5. Try using project test fixtures (`tests/fixtures/mocked_model_provider.py`)
+  6. Try simplifying the example
+- You MUST document each attempt and its result in the Validation Comment
 - You SHOULD examine the actual implementation in the PR if generated code fails
 - You SHOULD examine existing tests in the PR for patterns that verify behavior
-- You SHOULD simplify the example if complexity is causing validation issues, but maintain behavioral assertions
-- You MAY extract a different example from the PR if the current one cannot be behaviorally validated
 - You MUST preserve the test file content to include in the GitHub issue comment (Step 6.1)
 - You MUST note in the validation comment what specific behavior each test verifies
 - You MAY delete temporary test files after capturing their content, as the environment is ephemeral
@@ -561,19 +592,17 @@ This ordering allows reviewers to see the validation evidence, review the releas
 
 #### 6.1 Post Validation Code Comment
 
-Batch all validation code into a single GitHub issue comment.
+Batch all validation code into a single GitHub issue comment. **This comment MUST show evidence that you attempted validation for EVERY feature.**
 
 **Constraints:**
-- You MUST post ONE comment containing ALL validation code for features that were successfully validated
+- You MUST post ONE comment containing validation attempts for ALL Major Features
+- You MUST show test code for EVERY feature - both successful and failed attempts
 - You MUST NOT post separate comments for each feature's validation
 - You MUST post this comment BEFORE the release notes comment
 - You MUST include all test files created during validation (Step 4) in this single comment
 - You MUST document what specific behavior each test verifies (not just "validates the code works")
 - You MUST NOT reference local file paths—the ephemeral environment will be destroyed
 - You MUST clearly label this comment as "Code Validation Tests"
-- You MUST include a note explaining that this code was used to validate the snippets in the release notes
-- You MUST NOT include "batch validation notes" claiming features were validated through source review, API structure validation, or conceptual correctness
-- You MUST list which features have unvalidated code samples (marked for engineer review) at the end of this comment
 - You SHOULD use collapsible `<details>` sections to organize validation code by feature
 - You SHOULD include a brief description of what behavior is being verified for each test:
   ```markdown
@@ -590,29 +619,36 @@ Batch all validation code into a single GitHub issue comment.
   [Full test file for feature 1 with behavioral assertions]
   \`\`\`
 
+  **Test output:** PASSED
+
   </details>
 
   <details>
-  <summary>✅ Validated: Feature Name 2</summary>
+  <summary>⚠️ Could Not Validate: Feature Name 2</summary>
 
-  **Behavior verified:** This test confirms that async streaming yields events in real-time and that the final result contains all streamed content.
-
+  **Attempt 1: Direct test with mocked model**
   \`\`\`python
-  [Full test file for feature 2 with behavioral assertions]
+  [Test code that was attempted]
+  \`\`\`
+  **Error received:**
+  \`\`\`
+  [Actual error message from running the test]
   \`\`\`
 
+  **Attempt 2: Test with Bedrock**
+  \`\`\`python
+  [Alternative test code attempted]
+  \`\`\`
+  **Error received:**
+  \`\`\`
+  [Actual error message]
+  \`\`\`
+
+  **Conclusion:** Could not validate because [specific reason based on actual errors]. Code sample in release notes extracted from PR description.
+
   </details>
-
-  ---
-
-  ### ⚠️ Features Requiring Engineer Validation
-
-  The following features have code samples extracted from PRs but could not be automatically validated:
-
-  - **Feature Name 3** (PR#456): Could not validate because [reason]. Code sample extracted from PR description.
-  - **Feature Name 4** (PR#789): Could not validate because [reason]. Code sample extracted from PR test files.
   ```
-- This allows reviewers to understand what was validated and which examples need manual review
+- This allows reviewers to verify that validation was genuinely attempted
 
 #### 6.2 Post Release Notes Comment
 
