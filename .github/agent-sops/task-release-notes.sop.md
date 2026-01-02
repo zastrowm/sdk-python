@@ -165,6 +165,13 @@ Present the categorized PRs to the user for review and confirmation.
 - You SHOULD update your categorization based on user feedback
 - You MAY iterate on categorization if the user requests changes
 
+**Critical - Re-validation After Recategorization:**
+When the user promotes a PR to "Major Features" that was not previously in that category:
+- You MUST perform Step 3 (Code Snippet Extraction) for the newly promoted PR
+- You MUST perform Step 4 (Code Validation) for any code snippets extracted or generated
+- You MUST NOT skip validation just because the user requested the change
+- You MUST include the validation code for newly promoted features in the Validation Comment (Step 6.1)
+
 ### 3. Code Snippet Extraction and Generation
 
 **Note**: This phase applies only to PRs categorized as "Major Features". Bug fixes typically do not require code examples.
@@ -440,6 +447,11 @@ Add a horizontal rule to separate your content from GitHub's auto-generated sect
 
 This ordering allows reviewers to see the validation evidence, review the release notes, and understand any exclusion decisions.
 
+**Iteration Comments**: If the user requests changes after the initial comments are posted:
+- Post additional validation comments for any re-validated code
+- Post updated release notes as new comments (do not edit previous comments)
+- This creates an audit trail of changes and validations
+
 #### 6.1 Post Validation Code Comment
 
 Batch all validation code into a single GitHub issue comment.
@@ -533,6 +545,30 @@ Document any features or bug fixes that were considered but excluded from the re
   ```
 - You SHOULD include this comment even if there are no exclusions, with a simple note: "No features or bug fixes were excluded from this release notes draft."
 - You MUST NOT skip this comment—it provides critical transparency for reviewers
+
+#### 6.4 Handle User Feedback on Release Notes
+
+When the user requests changes to the release notes after they have been posted, re-validate as needed.
+
+**Critical**: User feedback does NOT exempt you from validation requirements. Any changes to code examples or newly added features must be validated.
+
+**Constraints:**
+- You MUST re-run validation (Step 4) when the user requests changes that affect code examples:
+  - Modified code snippets
+  - New code examples for features that previously had none
+  - Replacement examples for features
+- You MUST perform full extraction (Step 3) and validation (Step 4) when the user requests:
+  - Adding a new feature to the release notes that wasn't previously included
+  - Promoting a bug fix to include a code example
+- You MUST NOT make changes to code examples without re-validating them
+- You MUST post updated validation code as a new comment when re-validation occurs
+- You MUST post the revised release notes as a new comment (do not edit previous comments)
+- You SHOULD note in the updated release notes comment what changed from the previous version
+- You MAY skip re-validation only for changes that do not affect code:
+  - Wording changes to descriptions
+  - Fixing typos
+  - Reordering features
+  - Removing features (no validation needed for removal)
 
 ## Examples
 
