@@ -8,6 +8,22 @@ You analyze merged pull requests between two git references (tags or branches), 
 
 **Important**: You are executing in an ephemeral environment. Any files you create (test files, notes, etc.) will be discarded after execution. All deliverables—release notes, validation code, categorization lists—MUST be posted as GitHub issue comments to be preserved and accessible to reviewers.
 
+## Key Principles
+
+These principles apply throughout the entire workflow and are referenced by name in later sections.
+
+### Principle 1: Ephemeral Environment
+You are executing in an ephemeral environment. All deliverables MUST be posted as GitHub issue comments to be preserved.
+
+### Principle 2: PR Descriptions May Be Stale
+PR descriptions are written at PR creation and may become outdated after code review. Reviewers often request structural changes, API modifications, or feature adjustments that are implemented but NOT reflected in the original description. You MUST cross-reference descriptions with review comments and treat merged code as the source of truth.
+
+### Principle 3: Validation Is Mandatory
+You MUST attempt to validate EVERY code example with behavioral tests. The engineer review fallback is only for cases where you have genuinely tried and failed with documented evidence.
+
+### Principle 4: Never Remove Features
+You MUST NOT remove a feature from release notes because validation failed. Always include a code sample—either validated or marked for engineer review.
+
 ## Steps
 
 ### 1. Setup and Input Processing
@@ -62,13 +78,10 @@ For each PR identified (from release or API query), fetch additional metadata ne
 - You MUST retrieve additional metadata for PRs being considered for Major Features or Major Bug Fixes:
   - PR description/body (essential for understanding the change)
   - PR labels (if any)
-  - PR review comments and conversation threads (to identify post-description changes)
+  - PR review comments and conversation threads (per **Principle 2**)
 - You SHOULD retrieve for Major Feature candidates:
   - Files changed in the PR (to find code examples)
-- You MUST retrieve PR review comments for Major Feature and Major Bug Fix candidates:
-  - Review comments often contain important context about changes made after the initial description
-  - Look for reviewer requests that resulted in structural changes to the implementation
-  - Check for author responses indicating significant modifications
+- You MUST retrieve PR review comments for Major Feature and Major Bug Fix candidates to identify post-description changes
 - You SHOULD minimize API calls by only fetching detailed metadata for PRs that appear significant based on title/prefix
 - You MUST track this data for use in categorization and release notes generation
 
@@ -96,12 +109,9 @@ Extract categorization signals from PR titles using conventional commit prefixes
 
 Use LLM analysis to understand the significance and user impact of each change.
 
-**Critical Warning - Stale PR Descriptions:**
-PR descriptions are written at the time of PR creation and may become outdated after code review. Reviewers often request structural changes, API modifications, or feature adjustments that are implemented but NOT reflected in the original description. You MUST cross-reference the description with review comments to get an accurate understanding of the final merged code.
-
 **Constraints:**
 - You MUST read and analyze the PR description for each PR
-- You MUST also review PR comments and review threads to identify changes made after the initial description:
+- Per **Principle 2**, you MUST also review PR comments and review threads to identify changes made after the initial description:
   - Look for reviewer comments requesting changes to the implementation
   - Look for author responses confirming changes were made
   - Look for "LGTM" or approval comments that reference specific modifications
@@ -164,13 +174,10 @@ Present the categorized PRs to the user for review and confirmation.
 - You MUST wait for user confirmation or recategorization before proceeding
 - You SHOULD update your categorization based on user feedback
 - You MAY iterate on categorization if the user requests changes
-
-**Critical - Re-validation After Recategorization:**
-When the user promotes a PR to "Major Features" that was not previously in that category:
-- You MUST perform Step 3 (Code Snippet Extraction) for the newly promoted PR
-- You MUST perform Step 4 (Code Validation) for any code snippets extracted or generated
-- You MUST NOT skip validation just because the user requested the change
-- You MUST include the validation code for newly promoted features in the Validation Comment (Step 6.1)
+- When the user promotes a PR to "Major Features" that was not previously in that category:
+  - You MUST perform Step 3 (Code Snippet Extraction) for the newly promoted PR
+  - You MUST perform Step 4 (Code Validation) for any code snippets extracted or generated
+  - You MUST include the validation code for newly promoted features in the Validation Comment (Step 6.1)
 
 ### 3. Code Snippet Extraction and Generation
 
@@ -180,14 +187,11 @@ When the user promotes a PR to "Major Features" that was not previously in that 
 
 Search merged PRs for existing code that demonstrates the new feature.
 
-**Critical Warning - Verify Examples Against Final Implementation:**
-Code examples in PR descriptions may be outdated if the implementation changed during review. Always verify that examples match the actual merged code by checking review comments for requested changes and examining the final implementation.
-
 **Constraints:**
 - You MUST search each Major Feature PR for existing code examples in:
   - Test files (especially integration tests or example tests) - these are most reliable as they reflect the final implementation
   - Example applications or scripts in `examples/` directory
-  - Code snippets in the PR description (but verify against review comments and final code)
+  - Code snippets in the PR description (but verify per **Principle 2**)
   - Documentation updates that include code examples
   - README updates with usage examples
 - You MUST cross-reference any examples from PR descriptions with:
@@ -234,40 +238,21 @@ When existing examples are insufficient, generate new code snippets.
 
 ### 4. Code Validation
 
-**Note**: This phase is REQUIRED for all code snippets (extracted or generated) that will appear in Major Features sections. Validation must occur AFTER snippets have been extracted or generated in Step 3.
+**Note**: This phase is REQUIRED for all code snippets (extracted or generated) that will appear in Major Features sections. Per **Principle 3**, you MUST attempt validation for every example.
 
-**CRITICAL: You MUST attempt to validate EVERY code example.** The fallback is only for cases where you have genuinely tried and failed. You cannot skip validation - you must demonstrate that you attempted it.
+#### 4.1 Validation Requirements
 
-**Validation is almost always possible** because:
-- You have access to Amazon Bedrock for testing model features
-- Most features can be tested with mocks
-- The project has extensive test fixtures in `tests/fixtures/`
-- Many "external" dependencies can be installed and mocked
-
-**For each Major Feature, you MUST:**
-1. Write a test file
-2. Run the test
-3. If it fails, try alternative approaches (Bedrock, mocking, different example)
-4. Only after multiple documented failures can you use the engineer validation fallback
-
-**Critical**: Validation tests MUST verify the actual behavior of the feature, not just syntax correctness. A test that only checks whether code parses or imports succeed is NOT valid validation. The purpose of validation is to prove the code example actually works and demonstrates the feature as intended.
+Validation tests MUST verify the actual behavior of the feature, not just syntax correctness. A test that only checks whether code parses or imports succeed is NOT valid validation.
 
 **Available Testing Resources:**
 - **Amazon Bedrock**: You have access to Bedrock models for testing. Use Bedrock when a feature requires a real model provider.
 - **Project test fixtures**: The project includes mocked model providers and test utilities in `tests/fixtures/`
 - **Integration test patterns**: Examine `tests_integ/` for patterns that test real model interactions
 
-
 **Features that genuinely cannot be validated (rare):**
 - Features requiring paid third-party API credentials with no mock option AND no Bedrock alternative
 - Features requiring specific hardware (GPU, TPU)
 - Features requiring live network access to specific external services that cannot be mocked
-
-**If your feature doesn't fall into the "genuinely cannot validate" category, you MUST validate it.**
-
-#### 4.1 Create Temporary Test Files
-
-Create temporary test files that verify the feature's behavior.
 
 **Constraints:**
 - You MUST create a temporary test file for each code snippet
@@ -325,9 +310,20 @@ def test_structured_output_syntax():
     agent("Get user info")
 ```
 
-#### 4.2 Run Validation Tests
+#### 4.2 Validation Workflow
 
-Execute tests to ensure code snippets demonstrate working feature behavior.
+For each Major Feature, follow this workflow in order:
+
+1. **Write a test file** with behavioral assertions
+2. **Run the test** using the project's test framework
+3. **If it fails**, try these approaches in order:
+   - Try using Bedrock instead of other model providers
+   - Try installing missing dependencies
+   - Try mocking external services
+   - Try using project test fixtures (`tests/fixtures/mocked_model_provider.py`)
+   - Try simplifying the example
+4. **Document each attempt** and its result in the Validation Comment
+5. **Only after documented failures** can you use the engineer review fallback
 
 **Constraints:**
 - You MUST run the appropriate test command for the project (e.g., `npm test`, `pytest`, `go test`)
@@ -336,58 +332,15 @@ Execute tests to ensure code snippets demonstrate working feature behavior.
 - You MUST check that the code compiles without errors in compiled languages
 - You MUST ensure tests include meaningful assertions about feature behavior
 - You SHOULD run type checking if applicable (e.g., `npm run type-check`, `mypy`)
-- You SHOULD review test output to confirm behavioral assertions passed, not just that the test didn't error
+- You SHOULD review test output to confirm behavioral assertions passed
 - You MAY need to adjust imports or setup code if tests fail
 
-**Installing Dependencies for Validation:**
+**Installing Dependencies:**
 - You MUST attempt to install missing dependencies when tests fail due to import errors
 - You SHOULD check the project's `pyproject.toml`, `package.json`, or equivalent for optional dependency groups
 - You SHOULD use the project's package manager to install dependencies (e.g., `pip install`, `npm install`, `hatch`)
 - For Python projects with optional extras, try: `pip install -e ".[extra_name]"` or `pip install package_name`
-- You MUST NOT skip validation simply because a dependency is missing - attempt installation first
 - You SHOULD only fall back to mocking if the dependency cannot be installed (e.g., requires paid API keys, proprietary software)
-- Common optional dependencies to check for:
-  - Model provider SDKs: `openai`, `anthropic`, `google-generativeai`, `boto3`
-  - Testing utilities: `pytest`, `pytest-asyncio`, `moto`
-  - Type checking: `mypy`, `types-*` packages
-
-**What constitutes valid behavioral verification:**
-- Testing that a new API returns expected data structures
-- Testing that a new option/parameter changes behavior as documented
-- Testing that callbacks are invoked with correct arguments
-- Testing that error handling works as described
-- Testing that integrations connect and exchange data correctly (with mocks if needed)
-
-**What does NOT constitute valid verification:**
-- Code executes without raising exceptions
-- Objects can be constructed
-- Functions can be called
-- Imports resolve successfully
-- Type hints are valid
-- "Source verification" or reviewing PR descriptions
-- "API structure validation" or checking import paths exist
-- "Conceptual correctness" or any form of manual review
-- Claiming external dependencies prevent testing (use mocks instead)
-
-**Handling External Dependencies:**
-When a feature requires external SDKs or services (e.g., OpenAI SDK, Google Gemini SDK, AWS services):
-
-**Try hard to validate, but NEVER skip including the feature or its code example.**
-
-1. **First, attempt to install the dependency** - Many SDKs can be installed and used for validation
-2. **If installation succeeds**, write tests that use the real SDK with mocked API responses
-3. **For model provider features, USE BEDROCK** - You have access to Amazon Bedrock. If a feature works with any model provider, test it with Bedrock instead of skipping validation.
-4. **If the feature is provider-specific** (e.g., OpenAI-only feature), install that provider's SDK and mock the API responses
-5. **If validation fails after all attempts**, extract a code sample from the PR and mark it for engineer review
-
-- You MUST use Bedrock for testing when a feature works with multiple model providers
-- You MUST install and use provider SDKs when testing provider-specific features
-- You MUST mock API responses when you cannot make real API calls
-- You MUST NOT skip validation because "external dependencies were not installed" without first attempting installation
-- You MUST NOT remove a feature from release notes because validation failed
-- You SHOULD use the project's existing test patterns for mocking external services
-- You SHOULD examine how the project's existing tests handle similar dependencies
-- You SHOULD check `tests_integ/models/` for examples of testing with real model providers
 
 **Example of mocking external dependencies:**
 ```python
@@ -407,20 +360,28 @@ def test_custom_http_client():
         assert call_kwargs.get('http_client') == custom_client
 ```
 
-**When Validation Fails After Genuine Attempts: Use PR Code Sample with Engineer Review Callout**
+#### 4.3 Engineer Review Fallback
 
-**You can ONLY use this fallback if you have actually attempted validation and can document what you tried.** Simply stating "complex external SDK setup required" or "provider SDK setup required" without evidence of attempts is NOT acceptable.
+When validation genuinely fails after documented attempts, use this fallback. Per **Principle 4**, you MUST still include the feature with a code sample.
 
-**Required proof of validation attempts:**
-Before marking any example as needing engineer validation, you MUST have:
+**Required proof before using this fallback:**
 1. Created an actual test file (show the code in the validation comment)
-2. Run the test and received an actual error (show the error message)
+2. Ran the test and received an actual error (show the error message)
 3. Tried at least ONE alternative approach (Bedrock, mocking, simplified example)
 4. Documented each attempt and its failure reason
 
-**If you cannot show this proof, you have not tried hard enough.**
+**Constraints:**
+- You MUST NOT mark examples as needing validation without actually attempting validation first
+- You MUST NOT use vague reasons like "complex setup required" - be specific about what you tried and what error you got
+- You MUST show your test code and error messages in the Validation Comment
+- You MUST try Bedrock for any feature that works with multiple model providers before giving up
+- You MUST try mocking for provider-specific features before giving up
+- You MUST document all validation attempts (successful AND failed) in the Validation Comment
+- You MUST preserve the test file content to include in the GitHub issue comment (Step 6.1)
+- You MUST note in the validation comment what specific behavior each test verifies
+- You MAY delete temporary test files after capturing their content, as the environment is ephemeral
 
-**Process when validation genuinely fails after documented attempts:**
+**Process when validation genuinely fails:**
 1. **Extract a code sample from the PR** - Use code from:
    - The PR description's code examples
    - Test files added in the PR
@@ -449,47 +410,6 @@ agent = Agent(model=model)
 \`\`\`
 ```
 
-**Constraints:**
-- You MUST NOT mark examples as needing validation without actually attempting validation first
-- You MUST NOT use vague reasons like "complex setup required" - be specific about what you tried and what error you got
-- You MUST show your test code and error messages in the Validation Comment
-- You MUST try Bedrock for any feature that works with multiple model providers before giving up
-- You MUST try mocking for provider-specific features before giving up
-- You MUST document all validation attempts (successful AND failed) in the Validation Comment
-
-#### 4.3 Handle Validation Failures
-
-Address any validation failures before including snippets in release notes. **You MUST actually attempt validation - do not skip to the fallback.**
-
-**Constraints:**
-- You MUST actually run tests before claiming validation failed
-- You MUST NOT skip validation and go straight to "NEEDS ENGINEER VALIDATION"
-- You MUST NOT consider syntax-only tests as valid validation
-- You MUST NOT invent alternative validation methods (source verification, API review, conceptual correctness, etc.)
-- You MUST revise the code snippet if validation fails and try again
-- You MUST re-run validation after making changes
-- You MUST ensure revised tests include behavioral assertions
-- You MUST try these approaches IN ORDER before using the fallback:
-  1. Run the test as-is and capture the error
-  2. Try using Bedrock instead of other model providers
-  3. Try installing missing dependencies
-  4. Try mocking external services
-  5. Try using project test fixtures (`tests/fixtures/mocked_model_provider.py`)
-  6. Try simplifying the example
-- You MUST document each attempt and its result in the Validation Comment
-- You SHOULD examine the actual implementation in the PR if generated code fails
-- You SHOULD examine existing tests in the PR for patterns that verify behavior
-- You MUST preserve the test file content to include in the GitHub issue comment (Step 6.1)
-- You MUST note in the validation comment what specific behavior each test verifies
-- You MAY delete temporary test files after capturing their content, as the environment is ephemeral
-
-**If validation is not possible after all attempts:**
-- You MUST extract a code sample from the PR (description, tests, or implementation)
-- You MUST include the code sample with the engineer validation warning (see format above)
-- You MUST document the failure in the Exclusions Comment (Step 6.3)
-- You MUST NOT leave the feature without a code example
-- You MUST NOT use empty placeholders
-
 ### 5. Release Notes Formatting
 
 #### 5.1 Format Major Features Section
@@ -517,9 +437,16 @@ Create the Major Features section with concise descriptions and code examples.
 
 Agents can now validate responses against predefined schemas with configurable retry behavior for non-conforming outputs.
 
-\`\`\`[language]
-# Code example in the project's programming language
-# Show the feature in action with clear, focused code
+\`\`\`python
+from strands import Agent
+from pydantic import BaseModel
+
+class Response(BaseModel):
+    answer: str
+
+agent = Agent(output_schema=Response)
+result = agent("What is 2+2?")
+print(result.output.answer)
 \`\`\`
 
 See the [Structured Output docs](https://docs.example.com/structured-output) for configuration options.
@@ -564,19 +491,9 @@ Add a horizontal rule to separate your content from GitHub's auto-generated sect
 - This visually separates your curated content from GitHub's auto-generated "What's Changed" and "New Contributors" sections
 - You MUST NOT include a "Full Changelog" link—GitHub adds this automatically
 
-**Example format**:
-```markdown
-## Major Bug Fixes
-
-- **Critical Fix** - [PR#124](https://github.com/owner/repo/pull/124)  
-  Description of what was fixed.
-
----
-```
-
 ### 6. Output Delivery
 
-**Critical**: You are running in an ephemeral environment. All files created during execution (test files, temporary notes, etc.) will be deleted when the workflow completes. You MUST post all deliverables as GitHub issue comments—this is the only way to preserve your work and make it accessible to reviewers.
+Per **Principle 1**, all deliverables must be posted as GitHub issue comments.
 
 **Comment Structure**: Post exactly three comments on the GitHub issue:
 1. **Validation Comment** (first): Contains all validation code for all features in one batched comment
@@ -592,7 +509,7 @@ This ordering allows reviewers to see the validation evidence, review the releas
 
 #### 6.1 Post Validation Code Comment
 
-Batch all validation code into a single GitHub issue comment. **This comment MUST show evidence that you attempted validation for EVERY feature.**
+Batch all validation code into a single GitHub issue comment.
 
 **Constraints:**
 - You MUST post ONE comment containing validation attempts for ALL Major Features
@@ -604,51 +521,52 @@ Batch all validation code into a single GitHub issue comment. **This comment MUS
 - You MUST NOT reference local file paths—the ephemeral environment will be destroyed
 - You MUST clearly label this comment as "Code Validation Tests"
 - You SHOULD use collapsible `<details>` sections to organize validation code by feature
-- You SHOULD include a brief description of what behavior is being verified for each test:
-  ```markdown
-  ## Code Validation Tests
+- You SHOULD include a brief description of what behavior is being verified for each test
 
-  The following test code was used to validate the code examples in the release notes.
+**Format:**
+```markdown
+## Code Validation Tests
 
-  <details>
-  <summary>✅ Validated: Feature Name 1</summary>
+The following test code was used to validate the code examples in the release notes.
 
-  **Behavior verified:** This test confirms that the new `output_schema` parameter causes the agent to return a validated Pydantic model instance with the correct field types.
+<details>
+<summary>✅ Validated: Feature Name 1</summary>
 
-  \`\`\`python
-  [Full test file for feature 1 with behavioral assertions]
-  \`\`\`
+**Behavior verified:** This test confirms that the new `output_schema` parameter causes the agent to return a validated Pydantic model instance with the correct field types.
 
-  **Test output:** PASSED
+\`\`\`python
+[Full test file for feature 1 with behavioral assertions]
+\`\`\`
 
-  </details>
+**Test output:** PASSED
 
-  <details>
-  <summary>⚠️ Could Not Validate: Feature Name 2</summary>
+</details>
 
-  **Attempt 1: Direct test with mocked model**
-  \`\`\`python
-  [Test code that was attempted]
-  \`\`\`
-  **Error received:**
-  \`\`\`
-  [Actual error message from running the test]
-  \`\`\`
+<details>
+<summary>⚠️ Could Not Validate: Feature Name 2</summary>
 
-  **Attempt 2: Test with Bedrock**
-  \`\`\`python
-  [Alternative test code attempted]
-  \`\`\`
-  **Error received:**
-  \`\`\`
-  [Actual error message]
-  \`\`\`
+**Attempt 1: Direct test with mocked model**
+\`\`\`python
+[Test code that was attempted]
+\`\`\`
+**Error received:**
+\`\`\`
+[Actual error message from running the test]
+\`\`\`
 
-  **Conclusion:** Could not validate because [specific reason based on actual errors]. Code sample in release notes extracted from PR description.
+**Attempt 2: Test with Bedrock**
+\`\`\`python
+[Alternative test code attempted]
+\`\`\`
+**Error received:**
+\`\`\`
+[Actual error message]
+\`\`\`
 
-  </details>
-  ```
-- This allows reviewers to verify that validation was genuinely attempted
+**Conclusion:** Could not validate because [specific reason based on actual errors]. Code sample in release notes extracted from PR description.
+
+</details>
+```
 
 #### 6.2 Post Release Notes Comment
 
@@ -668,8 +586,6 @@ Post the formatted release notes as a single GitHub issue comment.
 
 Document any features with unvalidated code samples and any other notable decisions.
 
-**Critical**: This comment is REQUIRED to document features that have unvalidated code samples requiring engineer review.
-
 **Constraints:**
 - You MUST post this comment as the FINAL comment on the GitHub issue
 - You MUST include this comment if ANY of the following occurred:
@@ -677,39 +593,32 @@ Document any features with unvalidated code samples and any other notable decisi
   - A feature's scope or description was significantly different from the PR description
   - You relied on review comments rather than the PR description to understand a feature
 - You MUST clearly explain the reasoning for each unvalidated sample
-- You MUST format the comment with clear sections:
-  ```markdown
-  ## Release Notes Review Notes
-
-  The following items require attention during review:
-
-  ### ⚠️ Features with Unvalidated Code Samples
-
-  These features have code samples extracted from PRs but could not be automatically validated. An engineer must verify these examples before publishing:
-
-  - **PR#123 - Feature Title**: 
-    - Code source: PR description / test files / implementation
-    - Validation attempted: [what you tried]
-    - Failure reason: [why it failed, e.g., "requires OpenAI API credentials", "complex multi-service integration"]
-    - Action needed: Engineer should verify the code sample works as shown
-
-  - **PR#456 - Feature Title**:
-    - Code source: PR test files
-    - Validation attempted: Bedrock (not applicable - OpenAI-specific), mocking (failed due to complex auth flow)
-    - Failure reason: Feature requires live OpenAI API interaction that cannot be mocked
-    - Action needed: Engineer should test with OpenAI credentials and update if needed
-
-  ### Description vs. Implementation Discrepancies
-  - **PR#101 - Feature Title**: PR description stated [X] but review comments and final implementation show [Y]. Release notes reflect the actual merged behavior.
-  ```
 - You SHOULD include this comment even if all code samples were validated, with a simple note: "All code samples were successfully validated. No engineer review required."
 - You MUST NOT skip this comment—it provides critical transparency for reviewers
+
+**Format:**
+```markdown
+## Release Notes Review Notes
+
+The following items require attention during review:
+
+### ⚠️ Features with Unvalidated Code Samples
+
+These features have code samples extracted from PRs but could not be automatically validated. An engineer must verify these examples before publishing:
+
+- **PR#123 - Feature Title**: 
+  - Code source: PR description / test files / implementation
+  - Validation attempted: [what you tried]
+  - Failure reason: [why it failed, e.g., "requires OpenAI API credentials", "complex multi-service integration"]
+  - Action needed: Engineer should verify the code sample works as shown
+
+### Description vs. Implementation Discrepancies
+- **PR#101 - Feature Title**: PR description stated [X] but review comments and final implementation show [Y]. Release notes reflect the actual merged behavior.
+```
 
 #### 6.4 Handle User Feedback on Release Notes
 
 When the user requests changes to the release notes after they have been posted, re-validate as needed.
-
-**Critical**: User feedback does NOT exempt you from validation requirements. Any changes to code examples or newly added features must be validated.
 
 **Constraints:**
 - You MUST re-run validation (Step 4) when the user requests changes that affect code examples:
@@ -731,7 +640,7 @@ When the user requests changes to the release notes after they have been posted,
 
 ## Examples
 
-### Example 1: Major Features Section with Validated Code
+### Example 1: Complete Release Notes
 
 ```markdown
 ## Major Features
@@ -741,43 +650,32 @@ When the user requests changes to the release notes after they have been posted,
 MCP Connections via ToolProviders allow the Agent to manage connection lifecycles automatically, eliminating the need for manual context managers. This experimental interface simplifies MCP tool integration significantly.
 
 \`\`\`python
-# Code example in the project's programming language
-# Demonstrate the key feature usage
-# Keep it focused and concise
+from strands import Agent
+from strands.tools import MCPToolProvider
+
+provider = MCPToolProvider(server_config)
+agent = Agent(tools=[provider])
+result = agent("Use the MCP tools")
 \`\`\`
 
 See the [MCP docs](https://docs.example.com/mcp) for details.
-```
 
-### Example 2: Major Feature with Unvalidated Code (Needs Engineer Review)
-
-```markdown
 ### Custom HTTP Client Support - [PR#1366](https://github.com/org/repo/pull/1366)
 
 OpenAI model provider now accepts a custom HTTP client, enabling proxy configuration, custom timeouts, and request logging.
 
 \`\`\`python
-# ⚠️ NEEDS ENGINEER VALIDATION - Could not automatically verify this example
-# Reason: Requires OpenAI API credentials for full validation
+# ⚠️ NEEDS ENGINEER VALIDATION
+# Validation attempted: mocked OpenAI client, received import error
+# Alternative attempts: Bedrock (not applicable - OpenAI-specific)
 
 from strands.models.openai import OpenAIModel
 import httpx
 
-# Create custom HTTP client with proxy and timeout settings
-custom_client = httpx.Client(
-    proxy="http://proxy.example.com:8080",
-    timeout=30.0
-)
-
-model = OpenAIModel(
-    client_args={"http_client": custom_client}
-)
+custom_client = httpx.Client(proxy="http://proxy.example.com:8080")
+model = OpenAIModel(client_args={"http_client": custom_client})
 \`\`\`
-```
 
-### Example 3: Major Bug Fixes Section
-
-```markdown
 ---
 
 ## Major Bug Fixes
@@ -790,50 +688,11 @@ model = OpenAIModel(
 
 - **Orphaned Tool Use Fix** - [PR#1123](https://github.com/strands-agents/sdk-python/pull/1123)  
   Fixed broken conversations caused by orphaned `toolUse` blocks, improving reliability when tools fail or are interrupted.
-```
-
-### Example 4: Complete Release Notes Structure
-
-```markdown
-## Major Features
-
-### Feature Name - [PR#123](https://github.com/owner/repo/pull/123)
-
-Description of the feature and its impact.
-
-\`\`\`[language]
-# Code example demonstrating the feature
-\`\`\`
-
----
-
-## Major Bug Fixes
-
-- **Critical Fix** - [PR#124](https://github.com/owner/repo/pull/124)  
-  Description of what was fixed and why it matters.
 
 ---
 ```
 
 Note: The trailing `---` separates your content from GitHub's auto-generated "What's Changed" and "New Contributors" sections that follow.
-
-### Example 4: Issue Comment with Release Notes
-
-```markdown
-Release notes for v1.15.0:
-
-## Major Features
-
-### Managed MCP Connections - [PR#895](https://github.com/strands-agents/sdk-typescript/pull/895)
-
-We've introduced MCP Connections via ToolProviders...
-
-[... rest of release notes ...]
-
----
-```
-
-When this content is added to the GitHub release, GitHub will automatically append the "What's Changed" and "New Contributors" sections below the separator.
 
 ## Troubleshooting
 
@@ -856,18 +715,7 @@ If you encounter GitHub API rate limit errors:
 
 ### Code Validation Failures
 
-If code validation fails for a snippet:
-1. Review the test output to understand the failure reason
-2. Check if the feature requires additional dependencies or setup
-3. Examine the actual implementation in the PR to understand correct usage
-4. Look at existing tests in the PR for patterns that verify behavior correctly
-5. Try simplifying the example to focus on core functionality while maintaining behavioral assertions
-6. Try using Bedrock if the feature works with multiple model providers
-7. Try mocking external services
-8. **If all attempts fail**: Extract a code sample from the PR and include it with the engineer validation warning
-9. Document the unvalidated sample in the Exclusions Comment
-
-**Important**: You MUST NOT remove a feature from release notes because validation failed. Always include a code sample - either validated or marked for engineer review.
+Follow the validation workflow in Section 4.2. If all attempts fail, use the engineer review fallback per Section 4.3. Per **Principle 4**, always include a code sample.
 
 ### Large PR Sets (>100 PRs)
 
@@ -902,27 +750,9 @@ When GitHub tools or git operations are deferred (GITHUB_WRITE=false):
 - The operations will be executed after agent completion
 - Do not retry or attempt alternative approaches for deferred operations
 
-### Unable to Extract Suitable Code Examples
+### Stale PR Descriptions
 
-If no suitable code examples can be found in a PR:
-1. Check the PR description for any code snippets
-2. Look at test files added or modified in the PR
-3. Examine the actual implementation and create a simplified usage example
-4. Look at related documentation changes
-5. Check if there are example files in the `examples/` directory
-
-**Important**: You MUST always include a code example for Major Features. If you cannot find one in the PR, create one based on the implementation and mark it for engineer validation. Never leave a feature without a code example.
-
-### Stale or Inaccurate PR Descriptions
-
-If you discover that a PR description doesn't match the actual implementation:
-1. Review the PR comment thread and review comments for context on what changed
-2. Look for reviewer requests that led to structural changes
-3. Check the author's responses to understand what modifications were made
-4. Examine the actual merged code (especially test files) to understand the true implementation
-5. Use test files as the authoritative source for code examples, not the PR description
-6. If the feature's scope changed significantly during review, update your categorization accordingly
-7. Note in your analysis when you relied on review comments rather than the description
+Per **Principle 2**: Review PR comments for context on what changed, examine merged code (especially test files), and use test files as the authoritative source for code examples.
 
 ## Desired Outcome
 
