@@ -311,7 +311,18 @@ Execute tests to ensure code snippets demonstrate working feature behavior.
 - You SHOULD run type checking if applicable (e.g., `npm run type-check`, `mypy`)
 - You SHOULD review test output to confirm behavioral assertions passed, not just that the test didn't error
 - You MAY need to adjust imports or setup code if tests fail
-- You MAY need to install additional dependencies if required
+
+**Installing Dependencies for Validation:**
+- You MUST attempt to install missing dependencies when tests fail due to import errors
+- You SHOULD check the project's `pyproject.toml`, `package.json`, or equivalent for optional dependency groups
+- You SHOULD use the project's package manager to install dependencies (e.g., `pip install`, `npm install`, `hatch`)
+- For Python projects with optional extras, try: `pip install -e ".[extra_name]"` or `pip install package_name`
+- You MUST NOT skip validation simply because a dependency is missing - attempt installation first
+- You SHOULD only fall back to mocking if the dependency cannot be installed (e.g., requires paid API keys, proprietary software)
+- Common optional dependencies to check for:
+  - Model provider SDKs: `openai`, `anthropic`, `google-generativeai`, `boto3`
+  - Testing utilities: `pytest`, `pytest-asyncio`, `moto`
+  - Type checking: `mypy`, `types-*` packages
 
 **What constitutes valid behavioral verification:**
 - Testing that a new API returns expected data structures
@@ -326,12 +337,57 @@ Execute tests to ensure code snippets demonstrate working feature behavior.
 - Functions can be called
 - Imports resolve successfully
 - Type hints are valid
+- "Source verification" or reviewing PR descriptions
+- "API structure validation" or checking import paths exist
+- "Conceptual correctness" or any form of manual review
+- Claiming external dependencies prevent testing (use mocks instead)
 
-**Fallback validation** (if full behavioral test execution is not possible):
-- You MUST still write assertions about expected behavior, even if mocked
-- You MUST document why full behavioral testing wasn't possible
-- You SHOULD use mocks that verify interaction patterns (e.g., mock.assert_called_with)
-- You MAY mark the example as "partially validated" in the validation comment if behavioral testing is limited
+**Handling External Dependencies:**
+When a feature requires external SDKs or services (e.g., OpenAI SDK, Google Gemini SDK, AWS services):
+1. **First, attempt to install the dependency** - Many SDKs can be installed and used for validation
+2. **If installation succeeds**, write tests that use the real SDK with mocked API responses
+3. **If installation fails or requires paid credentials**, mock the dependency entirely
+- You MUST still write and execute tests using mocks
+- You MUST mock the external dependency and verify the integration code works correctly
+- You MUST NOT skip validation because "external dependencies were not installed" without first attempting installation
+- You SHOULD use the project's existing test patterns for mocking external services
+- You SHOULD examine how the project's existing tests handle similar dependencies
+
+**Example of mocking external dependencies:**
+```python
+def test_custom_http_client():
+    """Verify custom HTTP client is passed to the provider."""
+    from unittest.mock import Mock, patch
+    
+    custom_client = Mock()
+    
+    with patch('strands.models.openai.OpenAI') as mock_openai:
+        from strands.models.openai import OpenAIModel
+        model = OpenAIModel(http_client=custom_client)
+        
+        # Verify the custom client was passed
+        mock_openai.assert_called_once()
+        call_kwargs = mock_openai.call_args[1]
+        assert call_kwargs.get('http_client') == custom_client
+```
+
+**Fallback: Excluding Features Without Validated Examples**
+If you genuinely cannot create a working test for a feature (after attempting mocks):
+- You MUST NOT include a code example for that feature in the release notes
+- You MUST document the feature in the Exclusions Comment (Step 6.3) explaining why validation failed
+- You MUST still include the feature in release notes with a placeholder indicating manual sample creation is needed:
+  ```markdown
+  ### Feature Name - [PR#123](link)
+
+  Description of the feature and its impact.
+
+  \`\`\`
+  # TODO: Could not verify a code sample successfully because [specific reason, e.g., "feature requires live AWS credentials", "complex integration with external service that cannot be mocked"]
+  # Manual code sample creation required
+  \`\`\`
+  ```
+- You MUST NOT invent alternative "validation" methods like source verification or API review
+- You MUST NOT include unvalidated code examples - use the placeholder instead
 
 #### 4.3 Handle Validation Failures
 
@@ -340,6 +396,7 @@ Address any validation failures before including snippets in release notes.
 **Constraints:**
 - You MUST NOT include unvalidated code snippets in release notes
 - You MUST NOT consider syntax-only tests as valid validation
+- You MUST NOT invent alternative validation methods (source verification, API review, conceptual correctness, etc.)
 - You MUST revise the code snippet if validation fails
 - You MUST re-run validation after making changes
 - You MUST ensure revised tests include behavioral assertions
@@ -351,6 +408,16 @@ Address any validation failures before including snippets in release notes.
 - You MUST preserve the test file content to include in the GitHub issue comment (Step 6.1)
 - You MUST note in the validation comment what specific behavior each test verifies
 - You MAY delete temporary test files after capturing their content, as the environment is ephemeral
+
+**If validation is not possible after reasonable attempts:**
+- You MUST use a placeholder code block instead of an unvalidated example:
+  ```
+  # TODO: Could not verify a code sample successfully because [reason]
+  # Manual code sample creation required
+  ```
+- You MUST document the exclusion in the Exclusions Comment (Step 6.3)
+- You MUST NOT include unvalidated code with a note that it was "validated through source review" or similar
+- The feature still appears in release notes with the placeholder, signaling that manual review is needed
 
 ### 5. Release Notes Formatting
 
@@ -457,7 +524,7 @@ This ordering allows reviewers to see the validation evidence, review the releas
 Batch all validation code into a single GitHub issue comment.
 
 **Constraints:**
-- You MUST post ONE comment containing ALL validation code for ALL features
+- You MUST post ONE comment containing ALL validation code for ALL features that have code examples
 - You MUST NOT post separate comments for each feature's validation
 - You MUST post this comment BEFORE the release notes comment
 - You MUST include all test files created during validation (Step 4) in this single comment
@@ -465,6 +532,9 @@ Batch all validation code into a single GitHub issue comment.
 - You MUST NOT reference local file paths—the ephemeral environment will be destroyed
 - You MUST clearly label this comment as "Code Validation Tests"
 - You MUST include a note explaining that this code was used to validate the snippets in the release notes
+- You MUST NOT include "batch validation notes" claiming features were validated through source review, API structure validation, or conceptual correctness
+- Every feature with a code example in the release notes MUST have a corresponding executed test in this comment
+- Features without executed tests MUST NOT have code examples in the release notes
 - You SHOULD use collapsible `<details>` sections to organize validation code by feature
 - You SHOULD include a brief description of what behavior is being verified for each test:
   ```markdown
