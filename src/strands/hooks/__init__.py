@@ -40,6 +40,7 @@ from .events import (
     MessageAddedEvent,
 )
 from .registry import BaseHookEvent, HookCallback, HookEvent, HookProvider, HookRegistry
+from .retry import ModelRetryStrategy, NoopRetryStrategy
 
 __all__ = [
     "AgentInitializedEvent",
@@ -56,4 +57,6 @@ __all__ = [
     "HookRegistry",
     "HookEvent",
     "BaseHookEvent",
+    "ModelRetryStrategy",
+    "NoopRetryStrategy",
 ]

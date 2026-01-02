@@ -51,9 +51,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-MAX_ATTEMPTS = 6
-INITIAL_DELAY = 4
-MAX_DELAY = 240  # 4 minutes
+# Maximum iterations for retry loop to prevent infinite loops
+MAX_RETRY_ITERATIONS = 100
 
 
 def _has_tool_use_in_latest_message(messages: "Messages") -> bool:
@@ -315,9 +314,9 @@ async def _handle_model_execution(
     stream_trace = Trace("stream_messages", parent_id=cycle_trace.id)
     cycle_trace.add_child(stream_trace)
 
-    # Retry loop for handling throttling exceptions
-    current_delay = INITIAL_DELAY
-    for attempt in range(MAX_ATTEMPTS):
+    # Retry loop - actual retry logic is handled by retry_strategy hook
+    # Use a large max iteration count to prevent infinite loops while allowing hooks to control retries
+    for attempt in range(MAX_RETRY_ITERATIONS):
         model_id = agent.model.config.get("model_id") if hasattr(agent.model, "config") else None
         model_invoke_span = tracer.start_model_invoke_span(
             messages=agent.messages,
@@ -368,6 +367,11 @@ async def _handle_model_execution(
                         stop_reason,
                         attempt + 1,
                     )
+                    # Emit EventLoopThrottleEvent for backwards compatibility with ModelRetryStrategy
+                    from ..hooks.retry import ModelRetryStrategy
+
+                    if isinstance(agent.retry_strategy, ModelRetryStrategy):
+                        yield EventLoopThrottleEvent(delay=agent.retry_strategy.current_delay)
                     continue  # Retry the model call
 
                 if stop_reason == "max_tokens":
@@ -394,27 +398,15 @@ async def _handle_model_execution(
                         type(e).__name__,
                         attempt + 1,
                     )
+                    # Emit EventLoopThrottleEvent for backwards compatibility with ModelRetryStrategy
+                    from ..hooks.retry import ModelRetryStrategy
+
+                    if isinstance(agent.retry_strategy, ModelRetryStrategy):
+                        yield EventLoopThrottleEvent(delay=agent.retry_strategy.current_delay)
                     continue  # Retry the model call
 
-                if isinstance(e, ModelThrottledException):
-                    if attempt + 1 == MAX_ATTEMPTS:
-                        yield ForceStopEvent(reason=e)
-                        raise e
-
-                    logger.debug(
-                        "retry_delay_seconds=<%s>, max_attempts=<%s>, current_attempt=<%s> "
-                        "| throttling exception encountered "
-                        "| delaying before next retry",
-                        current_delay,
-                        MAX_ATTEMPTS,
-                        attempt + 1,
-                    )
-                    await asyncio.sleep(current_delay)
-                    current_delay = min(current_delay * 2, MAX_DELAY)
-
-                    yield EventLoopThrottleEvent(delay=current_delay)
-                else:
-                    raise e
+                # No retry requested, raise the exception
+                raise e
 
     try:
         # Add message in trace and mark the end of the stream messages trace
