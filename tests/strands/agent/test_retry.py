@@ -16,20 +16,20 @@ class TestModelRetryStrategy:
     def test_init_with_defaults(self):
         """Test ModelRetryStrategy initialization with default parameters."""
         strategy = ModelRetryStrategy()
-        assert strategy.max_attempts == 6
-        assert strategy.initial_delay == 4
-        assert strategy.max_delay == 240
-        assert strategy.current_attempt == 0
-        assert strategy.current_delay == 4
+        assert strategy._max_attempts == 6
+        assert strategy._initial_delay == 4
+        assert strategy._max_delay == 240
+        assert strategy._current_attempt == 0
+        assert strategy._calculate_delay() == 4
 
     def test_init_with_custom_parameters(self):
         """Test ModelRetryStrategy initialization with custom parameters."""
         strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
-        assert strategy.max_attempts == 3
-        assert strategy.initial_delay == 2
-        assert strategy.max_delay == 60
-        assert strategy.current_attempt == 0
-        assert strategy.current_delay == 2
+        assert strategy._max_attempts == 3
+        assert strategy._initial_delay == 2
+        assert strategy._max_delay == 60
+        assert strategy._current_attempt == 0
+        assert strategy._calculate_delay() == 2
 
     def test_register_hooks(self):
         """Test that ModelRetryStrategy registers AfterModelCallEvent callback."""
@@ -69,8 +69,8 @@ class TestModelRetryStrategy:
             # Should sleep for initial_delay
             assert sleep_called_with == [2]
             # Should increment attempt and double delay
-            assert strategy.current_attempt == 1
-            assert strategy.current_delay == 4
+            assert strategy._current_attempt == 1
+            assert strategy._calculate_delay() == 4
         finally:
             asyncio.sleep = original_sleep
 
@@ -102,7 +102,7 @@ class TestModelRetryStrategy:
             # 2, 4, 8, 16 (capped), 16 (capped)
             assert sleep_called_with == [2, 4, 8, 16]
             # Delay should be capped at max_delay
-            assert strategy.current_delay == 16
+            assert strategy._calculate_delay() == 16
         finally:
             asyncio.sleep = original_sleep
 
@@ -126,7 +126,7 @@ class TestModelRetryStrategy:
             )
             await strategy._handle_after_model_call(event1)
             assert event1.retry is True
-            assert strategy.current_attempt == 1
+            assert strategy._current_attempt == 1
 
             # Second attempt (at max_attempts)
             event2 = AfterModelCallEvent(
@@ -136,7 +136,7 @@ class TestModelRetryStrategy:
             await strategy._handle_after_model_call(event2)
             # Should NOT retry after reaching max_attempts
             assert event2.retry is False
-            assert strategy.current_attempt == 2
+            assert strategy._current_attempt == 2
         finally:
             asyncio.sleep = original_sleep
 
@@ -155,7 +155,7 @@ class TestModelRetryStrategy:
 
         # Should not retry on non-throttling exceptions
         assert event.retry is False
-        assert strategy.current_attempt == 0
+        assert strategy._current_attempt == 0
 
     @pytest.mark.asyncio
     async def test_no_retry_on_success(self):
@@ -196,7 +196,7 @@ class TestModelRetryStrategy:
             )
             await strategy._handle_after_model_call(event1)
             assert event1.retry is True
-            assert strategy.current_attempt == 1
+            assert strategy._current_attempt == 1
 
             # Success - should reset
             event2 = AfterModelCallEvent(
@@ -209,8 +209,8 @@ class TestModelRetryStrategy:
             await strategy._handle_after_model_call(event2)
             assert event2.retry is False
             # Should reset to initial state
-            assert strategy.current_attempt == 0
-            assert strategy.current_delay == 2
+            assert strategy._current_attempt == 0
+            assert strategy._calculate_delay() == 2
         finally:
             asyncio.sleep = original_sleep
 
