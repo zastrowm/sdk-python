@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from strands.hooks import AfterModelCallEvent, HookRegistry
-from strands.hooks.retry import ModelRetryStrategy, NoopRetryStrategy
+from strands.agent.retry import ModelRetryStrategy, NoopRetryStrategy
 from strands.types.exceptions import ModelThrottledException
 
 

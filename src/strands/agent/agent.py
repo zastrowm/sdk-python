@@ -250,7 +250,7 @@ class Agent:
         self._interrupt_state = _InterruptState()
 
         # Initialize retry strategy
-        from ..hooks.retry import ModelRetryStrategy
+        from .retry import ModelRetryStrategy
 
         self._retry_strategy = retry_strategy if retry_strategy is not None else ModelRetryStrategy()
 

@@ -116,7 +116,7 @@ def tool_stream(tool):
 
 @pytest.fixture
 def hook_registry():
-    from strands.hooks.retry import ModelRetryStrategy
+    from strands.agent.retry import ModelRetryStrategy
 
     registry = HookRegistry()
     # Register default retry strategy
@@ -139,7 +139,7 @@ def tool_executor():
 
 @pytest.fixture
 def agent(model, system_prompt, messages, tool_registry, thread_pool, hook_registry, tool_executor):
-    from strands.hooks.retry import ModelRetryStrategy
+    from strands.agent.retry import ModelRetryStrategy
 
     mock = unittest.mock.Mock(name="agent")
     mock.__class__ = Agent

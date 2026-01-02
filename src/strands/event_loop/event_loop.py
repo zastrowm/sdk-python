@@ -51,9 +51,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Maximum iterations for retry loop to prevent infinite loops
-MAX_RETRY_ITERATIONS = 100
-
 
 def _has_tool_use_in_latest_message(messages: "Messages") -> bool:
     """Check if the latest message contains any ToolUse content blocks.
@@ -315,8 +312,8 @@ async def _handle_model_execution(
     cycle_trace.add_child(stream_trace)
 
     # Retry loop - actual retry logic is handled by retry_strategy hook
-    # Use a large max iteration count to prevent infinite loops while allowing hooks to control retries
-    for attempt in range(MAX_RETRY_ITERATIONS):
+    # Hooks control when to stop retrying via the event.retry flag
+    while True:
         model_id = agent.model.config.get("model_id") if hasattr(agent.model, "config") else None
         model_invoke_span = tracer.start_model_invoke_span(
             messages=agent.messages,
@@ -363,14 +360,13 @@ async def _handle_model_execution(
                 # Check if hooks want to retry the model call
                 if after_model_call_event.retry:
                     logger.debug(
-                        "stop_reason=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
+                        "stop_reason=<%s>, retry_requested=<True> | hook requested model retry",
                         stop_reason,
-                        attempt + 1,
                     )
-                    # Emit EventLoopThrottleEvent for backwards compatibility with ModelRetryStrategy
-                    from ..hooks.retry import ModelRetryStrategy
+                    # Emit EventLoopThrottleEvent for backwards compatibility if ModelRetryStrategy triggered retry
+                    from ..agent.retry import ModelRetryStrategy
 
-                    if isinstance(agent.retry_strategy, ModelRetryStrategy):
+                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy.did_trigger_retry:
                         yield EventLoopThrottleEvent(delay=agent.retry_strategy.current_delay)
                     continue  # Retry the model call
 
@@ -394,14 +390,13 @@ async def _handle_model_execution(
                 # Check if hooks want to retry the model call
                 if after_model_call_event.retry:
                     logger.debug(
-                        "exception=<%s>, retry_requested=<True>, attempt=<%d> | hook requested model retry",
+                        "exception=<%s>, retry_requested=<True> | hook requested model retry",
                         type(e).__name__,
-                        attempt + 1,
                     )
-                    # Emit EventLoopThrottleEvent for backwards compatibility with ModelRetryStrategy
-                    from ..hooks.retry import ModelRetryStrategy
+                    # Emit EventLoopThrottleEvent for backwards compatibility if ModelRetryStrategy triggered retry
+                    from ..agent.retry import ModelRetryStrategy
 
-                    if isinstance(agent.retry_strategy, ModelRetryStrategy):
+                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy.did_trigger_retry:
                         yield EventLoopThrottleEvent(delay=agent.retry_strategy.current_delay)
                     continue  # Retry the model call
 

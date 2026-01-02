@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from strands import Agent
-from strands.hooks.retry import ModelRetryStrategy, NoopRetryStrategy
+from strands.agent.retry import ModelRetryStrategy, NoopRetryStrategy
 from strands.types.exceptions import ModelThrottledException
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 

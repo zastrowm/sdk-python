@@ -11,8 +11,8 @@ import logging
 from typing import Any
 
 from ..types.exceptions import ModelThrottledException
-from .events import AfterModelCallEvent
-from .registry import HookProvider, HookRegistry
+from ..hooks.events import AfterInvocationEvent, AfterModelCallEvent
+from ..hooks.registry import HookProvider, HookRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -91,57 +91,59 @@ class ModelRetryStrategy(HookProvider):
         Args:
             event: The AfterModelCallEvent containing call results or exception.
         """
+        # If already retrying, skip processing (another hook may have triggered retry)
+        if event.retry:
+            return
+
         # If model call succeeded, reset retry state
         if event.stop_response is not None:
             logger.debug(
                 "stop_reason=<%s> | model call succeeded, resetting retry state",
                 event.stop_response.stop_reason,
             )
-            self.current_attempt = 0
-            self.current_delay = self.initial_delay
+            self._current_attempt = 0
+            self._did_trigger_retry = False
             return
 
-        # Check if we have an exception
+        # Check if we have an exception (and skip log if no exception)
         if event.exception is None:
             return
 
         # Only retry on ModelThrottledException
         if not isinstance(event.exception, ModelThrottledException):
-            logger.debug(
-                "exception_type=<%s> | not retrying non-throttle exception",
-                type(event.exception).__name__,
-            )
             return
 
         # Increment attempt counter first
-        self.current_attempt += 1
+        self._current_attempt += 1
 
         # Check if we've exceeded max attempts
-        if self.current_attempt >= self.max_attempts:
+        if self._current_attempt >= self._max_attempts:
             logger.debug(
                 "current_attempt=<%d>, max_attempts=<%d> | max retry attempts reached, not retrying",
-                self.current_attempt,
-                self.max_attempts,
+                self._current_attempt,
+                self._max_attempts,
             )
+            self._did_trigger_retry = False
             return
+
+        # Calculate delay for this attempt
+        delay = self._calculate_delay()
 
         # Retry the model call
         logger.debug(
             "retry_delay_seconds=<%s>, max_attempts=<%s>, current_attempt=<%s> "
             "| throttling exception encountered | delaying before next retry",
-            self.current_delay,
-            self.max_attempts,
-            self.current_attempt,
+            delay,
+            self._max_attempts,
+            self._current_attempt,
         )
 
         # Sleep for current delay
-        await asyncio.sleep(self.current_delay)
+        await asyncio.sleep(delay)
 
-        # Set retry flag
+        # Set retry flag and track that this strategy triggered it
         event.retry = True
-
-        # Calculate next delay with exponential backoff
-        self.current_delay = min(self.current_delay * 2, self.max_delay)
+        self._did_trigger_retry = True
 
 
 class NoopRetryStrategy(HookProvider):
