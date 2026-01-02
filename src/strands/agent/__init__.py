@@ -4,6 +4,7 @@ It includes:
 
 - Agent: The main interface for interacting with AI models and tools
 - ConversationManager: Classes for managing conversation history and context windows
+- Retry Strategies: Configurable retry behavior for model calls
 """
 
 from .agent import Agent
@@ -14,6 +15,7 @@ from .conversation_manager import (
     SlidingWindowConversationManager,
     SummarizingConversationManager,
 )
+from .retry import ModelRetryStrategy, NoopRetryStrategy
 
 __all__ = [
     "Agent",
@@ -22,4 +24,6 @@ __all__ = [
     "NullConversationManager",
     "SlidingWindowConversationManager",
     "SummarizingConversationManager",
+    "ModelRetryStrategy",
+    "NoopRetryStrategy",
 ]
