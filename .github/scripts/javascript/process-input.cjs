@@ -8,9 +8,10 @@ async function getIssueInfo(github, context, inputs) {
   const issueId = context.eventName === 'workflow_dispatch' 
     ? inputs.issue_id
     : context.payload.issue.number.toString();
+  const commentBody = context.payload.comment?.body || '';
   const command = context.eventName === 'workflow_dispatch'
     ? inputs.command
-    : (context.payload.comment.body.match(/^\/strands\s*(.*?)$/m)?.[1]?.trim() || '');
+    : (commentBody.startsWith('/strands') ? commentBody.slice('/strands'.length).trim() : '');
 
   console.log(`Event: ${context.eventName}, Issue ID: ${issueId}, Command: "${command}"`);
 
