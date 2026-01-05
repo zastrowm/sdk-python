@@ -399,6 +399,7 @@ async def _handle_model_execution(
                     continue  # Retry the model call
 
                 # No retry requested, raise the exception
+                yield ForceStopEvent(reason=e)
                 raise e
 
     try:

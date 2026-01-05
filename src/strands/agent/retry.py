@@ -12,7 +12,7 @@ from typing import Any
 
 from ..hooks.events import AfterInvocationEvent, AfterModelCallEvent
 from ..hooks.registry import HookProvider, HookRegistry
-from ..types._events import EventLoopThrottleEvent, ForceStopEvent, TypedEvent
+from ..types._events import EventLoopThrottleEvent, TypedEvent
 from ..types.exceptions import ModelThrottledException
 
 logger = logging.getLogger(__name__)
@@ -151,7 +151,6 @@ class ModelRetryStrategy(HookProvider):
                 self._current_attempt,
                 self._max_attempts,
             )
-            self._backwards_compatible_event_to_yield = ForceStopEvent(reason=event.exception)
             return
 
         self._backwards_compatible_event_to_yield = EventLoopThrottleEvent(delay=delay)
