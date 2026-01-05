@@ -8,7 +8,6 @@ The event loop allows agents to:
 4. Manage recursive execution cycles
 """
 
-import asyncio
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, AsyncGenerator
@@ -22,7 +21,6 @@ from ..tools._validator import validate_and_prepare_tools
 from ..tools.structured_output._structured_output_context import StructuredOutputContext
 from ..types._events import (
     EventLoopStopEvent,
-    EventLoopThrottleEvent,
     ForceStopEvent,
     ModelMessageEvent,
     ModelStopReason,
@@ -38,7 +36,6 @@ from ..types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
     MaxTokensReachedException,
-    ModelThrottledException,
     StructuredOutputException,
 )
 from ..types.streaming import StopReason
@@ -363,11 +360,6 @@ async def _handle_model_execution(
                         "stop_reason=<%s>, retry_requested=<True> | hook requested model retry",
                         stop_reason,
                     )
-                    # Emit EventLoopThrottleEvent for backwards compatibility if ModelRetryStrategy triggered retry
-                    from ..agent.retry import ModelRetryStrategy
-
-                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy._did_trigger_retry:
-                        yield EventLoopThrottleEvent(delay=agent.retry_strategy._current_delay)
                     continue  # Retry the model call
 
                 if stop_reason == "max_tokens":
@@ -387,17 +379,23 @@ async def _handle_model_execution(
                 )
                 await agent.hooks.invoke_callbacks_async(after_model_call_event)
 
+                # Emit backwards-compatible events if retry strategy supports it
+                # (prior to making the retry strategy configurable, this is what we emitted)
+                from ..agent import ModelRetryStrategy
+
+                if (
+                    isinstance(agent.retry_strategy, ModelRetryStrategy)
+                    and agent.retry_strategy._backwards_compatible_event_to_yield
+                ):
+                    yield agent.retry_strategy._backwards_compatible_event_to_yield
+
                 # Check if hooks want to retry the model call
                 if after_model_call_event.retry:
                     logger.debug(
                         "exception=<%s>, retry_requested=<True> | hook requested model retry",
                         type(e).__name__,
                     )
-                    # Emit EventLoopThrottleEvent for backwards compatibility if ModelRetryStrategy triggered retry
-                    from ..agent.retry import ModelRetryStrategy
 
-                    if isinstance(agent.retry_strategy, ModelRetryStrategy) and agent.retry_strategy._did_trigger_retry:
-                        yield EventLoopThrottleEvent(delay=agent.retry_strategy._current_delay)
                     continue  # Retry the model call
 
                 # No retry requested, raise the exception

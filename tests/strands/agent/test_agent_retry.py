@@ -9,7 +9,6 @@ from strands.agent.retry import ModelRetryStrategy, NoopRetryStrategy
 from strands.types.exceptions import ModelThrottledException
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
-
 # Agent Retry Strategy Initialization Tests
 
 
@@ -62,7 +61,9 @@ def test_retry_strategy_registered_as_hook():
     assert len(callbacks) > 0
 
     # Verify one of the callbacks is from the retry strategy
-    assert any(callback.__self__ is custom_strategy if hasattr(callback, "__self__") else False for callback in callbacks)
+    assert any(
+        callback.__self__ is custom_strategy if hasattr(callback, "__self__") else False for callback in callbacks
+    )
 
 
 # Agent Retry Behavior Tests
@@ -172,4 +173,3 @@ async def test_no_throttle_event_with_noop_strategy():
     # Should not have any EventLoopThrottleEvent
     throttle_events = [e for e in events if "event_loop_throttled_delay" in e]
     assert len(throttle_events) == 0
-

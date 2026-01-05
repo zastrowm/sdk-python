@@ -31,9 +31,7 @@ from tests.fixtures.mocked_model_provider import MockedModelProvider
 
 @pytest.fixture
 def mock_sleep():
-    with unittest.mock.patch.object(
-        strands.event_loop.event_loop.asyncio, "sleep", new_callable=unittest.mock.AsyncMock
-    ) as mock:
+    with patch.object(strands.agent.retry.asyncio, "sleep", new_callable=AsyncMock) as mock:
         yield mock
 
 

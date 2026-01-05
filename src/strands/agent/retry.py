@@ -10,9 +10,10 @@ import asyncio
 import logging
 from typing import Any
 
-from ..types.exceptions import ModelThrottledException
 from ..hooks.events import AfterInvocationEvent, AfterModelCallEvent
 from ..hooks.registry import HookProvider, HookRegistry
+from ..types._events import EventLoopThrottleEvent, ForceStopEvent, TypedEvent
+from ..types.exceptions import ModelThrottledException
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,12 @@ logger = logging.getLogger(__name__)
 class ModelRetryStrategy(HookProvider):
     """Default retry strategy for model throttling with exponential backoff.
 
-    This strategy implements automatic retry logic for model throttling exceptions,
-    using exponential backoff to handle rate limiting gracefully. It retries
-    model calls when ModelThrottledException is raised, up to a configurable
-    maximum number of attempts.
+    Retries model calls on ModelThrottledException using exponential backoff.
+    Delay doubles after each attempt: initial_delay, initial_delay*2, initial_delay*4,
+    etc., capped at max_delay. State resets after successful calls.
 
-    The delay between retries starts at initial_delay and doubles after each
-    retry, up to a maximum of max_delay. The strategy automatically resets
-    its state after a successful model call.
+    With defaults (initial_delay=4, max_delay=240, max_attempts=6), delays are:
+    4s → 8s → 16s → 32s → 64s (5 retries before giving up on the 6th attempt).
 
     Example:
         ```python
@@ -43,32 +42,32 @@ class ModelRetryStrategy(HookProvider):
         agent = Agent(retry_strategy=retry_strategy)
         ```
 
-    Attributes:
-        max_attempts: Maximum number of retry attempts before giving up.
-        initial_delay: Initial delay in seconds before the first retry.
-        max_delay: Maximum delay in seconds between retries.
-        current_attempt: Current retry attempt counter (resets on success).
-        current_delay: Current delay value for exponential backoff.
+    Args:
+        max_attempts: Total model attempts before re-raising the exception.
+        initial_delay: Base delay in seconds; used for first two retries, then doubles.
+        max_delay: Upper bound in seconds for the exponential backoff.
     """
 
     def __init__(
         self,
+        *,
         max_attempts: int = 6,
         initial_delay: int = 4,
         max_delay: int = 240,
     ):
-        """Initialize the retry strategy with the specified parameters.
+        """Initialize the retry strategy.
 
         Args:
-            max_attempts: Maximum number of retry attempts. Defaults to 6.
-            initial_delay: Initial delay in seconds before retrying. Defaults to 4.
-            max_delay: Maximum delay in seconds between retries. Defaults to 240 (4 minutes).
+            max_attempts: Total model attempts before re-raising the exception. Defaults to 6.
+            initial_delay: Base delay in seconds; used for first two retries, then doubles.
+                Defaults to 4.
+            max_delay: Upper bound in seconds for the exponential backoff. Defaults to 240.
         """
         self._max_attempts = max_attempts
         self._initial_delay = initial_delay
         self._max_delay = max_delay
         self._current_attempt = 0
-        self._did_trigger_retry = False
+        self._backwards_compatible_event_to_yield: TypedEvent | None = None
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         """Register callbacks for AfterModelCallEvent and AfterInvocationEvent.
@@ -80,36 +79,25 @@ class ModelRetryStrategy(HookProvider):
         registry.add_callback(AfterModelCallEvent, self._handle_after_model_call)
         registry.add_callback(AfterInvocationEvent, self._handle_after_invocation)
 
-    def _calculate_delay(self) -> float:
-        """Calculate the current retry delay based on attempt number.
-        
-        Uses exponential backoff: initial_delay * (2 ** attempt), capped at max_delay.
-        
-        Returns:
-            The delay in seconds for the current attempt.
-        """
-        if self._current_attempt == 0:
-            return self._initial_delay
-        delay = self._initial_delay * (2 ** (self._current_attempt - 1))
-        return min(delay, self._max_delay)
+    def _calculate_delay(self, attempt: int) -> int:
+        """Calculate retry delay using exponential backoff.
 
-    @property
-    def _current_delay(self) -> float:
-        """Get the current retry delay (for backwards compatibility with EventLoopThrottleEvent).
-        
-        This property is private and only exists for backwards compatibility with EventLoopThrottleEvent.
-        External code should not access this property.
+        Args:
+            attempt: The attempt number (0-indexed) to calculate delay for.
+
+        Returns:
+            Delay in seconds for the given attempt.
         """
-        return self._calculate_delay()
+        delay: int = self._initial_delay * (2**attempt)
+        return min(delay, self._max_delay)
 
     def _reset_retry_state(self) -> None:
         """Reset retry state to initial values."""
         self._current_attempt = 0
-        self._did_trigger_retry = False
 
     async def _handle_after_invocation(self, event: AfterInvocationEvent) -> None:
         """Reset retry state after invocation completes.
-        
+
         Args:
             event: The AfterInvocationEvent signaling invocation completion.
         """
@@ -127,6 +115,10 @@ class ModelRetryStrategy(HookProvider):
         Args:
             event: The AfterModelCallEvent containing call results or exception.
         """
+        delay = self._calculate_delay(self._current_attempt)
+
+        self._backwards_compatible_event_to_yield = None
+
         # If already retrying, skip processing (another hook may have triggered retry)
         if event.retry:
             return
@@ -159,11 +151,10 @@ class ModelRetryStrategy(HookProvider):
                 self._current_attempt,
                 self._max_attempts,
             )
-            self._did_trigger_retry = False
+            self._backwards_compatible_event_to_yield = ForceStopEvent(reason=event.exception)
             return
 
-        # Calculate delay for this attempt
-        delay = self._calculate_delay()
+        self._backwards_compatible_event_to_yield = EventLoopThrottleEvent(delay=delay)
 
         # Retry the model call
         logger.debug(
@@ -179,7 +170,6 @@ class ModelRetryStrategy(HookProvider):
 
         # Set retry flag and track that this strategy triggered it
         event.retry = True
-        self._did_trigger_retry = True
 
 
 class NoopRetryStrategy(HookProvider):
