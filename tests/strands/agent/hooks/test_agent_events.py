@@ -513,7 +513,8 @@ async def test_event_loop_cycle_text_response_throttling_early_end(
         {"event_loop_throttled_delay": 32, **common_props},
         {"event_loop_throttled_delay": 64, **common_props},
         {"event_loop_throttled_delay": 128, **common_props},
-        {"force_stop": True, "force_stop_reason": "ThrottlingException | ConverseStream"},
+        # Note: force_stop event is no longer emitted with hook-based retry strategy
+        # The exception is raised after max attempts without emitting force_stop
     ]
 
     assert tru_events == exp_events
