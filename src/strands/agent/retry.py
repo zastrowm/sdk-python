@@ -28,20 +28,6 @@ class ModelRetryStrategy(HookProvider):
     With defaults (initial_delay=4, max_delay=240, max_attempts=6), delays are:
     4s → 8s → 16s → 32s → 64s (5 retries before giving up on the 6th attempt).
 
-    Example:
-        ```python
-        from strands import Agent
-        from strands.hooks import ModelRetryStrategy
-
-        # Use custom retry parameters
-        retry_strategy = ModelRetryStrategy(
-            max_attempts=3,
-            initial_delay=2,
-            max_delay=60
-        )
-        agent = Agent(retry_strategy=retry_strategy)
-        ```
-
     Args:
         max_attempts: Total model attempts before re-raising the exception.
         initial_delay: Base delay in seconds; used for first two retries, then doubles.
@@ -177,15 +163,6 @@ class NoopRetryStrategy(HookProvider):
     This strategy can be used when you want to explicitly disable retry behavior
     and handle errors directly in your application code. It implements the
     HookProvider protocol but does not register any callbacks.
-
-    Example:
-        ```python
-        from strands import Agent
-        from strands.hooks import NoopRetryStrategy
-
-        # Disable automatic retries
-        agent = Agent(retry_strategy=NoopRetryStrategy())
-        ```
     """
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
