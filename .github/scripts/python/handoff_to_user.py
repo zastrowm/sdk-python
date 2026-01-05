@@ -11,7 +11,7 @@ from github_tools import add_issue_comment
 def handoff_to_user(
     message: str,
     tool_context: ToolContext,
-    post_comment: bool = False,
+    post_comment: bool,
     issue_number: int | None = None,
 ) -> str:
     """
@@ -22,9 +22,10 @@ def handoff_to_user(
         message: The message to give to the user
         post_comment: If true, post the message as a comment on the GitHub issue/PR.
             Only set this to true when user intervention or feedback is required
-            before the agent can continue (e.g., clarification needed, approval required,
+            before continuing (e.g., clarification needed, approval required,
             or a decision must be made). Do not post a comment for simple status updates
-            or completion messages.
+            or completion messages. If you are asking a question to the user this MUST
+            be true.
         issue_number: The issue or PR number to comment on (required if post_comment is true)
 
     Returns:
