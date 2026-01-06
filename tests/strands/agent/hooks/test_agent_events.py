@@ -8,7 +8,6 @@ from pydantic import BaseModel
 import strands
 from strands import Agent
 from strands.agent import AgentResult
-from strands.agent.retry import NoopRetryStrategy
 from strands.models import BedrockModel
 from strands.types._events import TypedEvent
 from strands.types.exceptions import ModelThrottledException
@@ -512,45 +511,6 @@ async def test_event_loop_cycle_text_response_throttling_early_end(
         {"event_loop_throttled_delay": 16, **common_props},
         {"event_loop_throttled_delay": 32, **common_props},
         {"event_loop_throttled_delay": 64, **common_props},
-        {"force_stop": True, "force_stop_reason": "ThrottlingException | ConverseStream"},
-    ]
-
-    assert tru_events == exp_events
-
-    exp_calls = [call(**event) for event in exp_events]
-    act_calls = mock_callback.call_args_list
-    assert act_calls == exp_calls
-
-    # Ensure that all events coming out of the agent are *not* typed events
-    typed_events = [event for event in tru_events if isinstance(event, TypedEvent)]
-    assert typed_events == []
-
-
-@pytest.mark.asyncio
-async def test_event_loop_cycle_noop_retry_strategy_no_throttle_events(
-    agenerator,
-    alist,
-):
-    """Test that NoopRetryStrategy emits no throttle events and raises immediately."""
-    model = MagicMock()
-    model.stream.side_effect = [
-        ModelThrottledException("ThrottlingException | ConverseStream"),
-    ]
-
-    mock_callback = unittest.mock.Mock()
-    with pytest.raises(ModelThrottledException):
-        agent = Agent(model=model, callback_handler=mock_callback, retry_strategy=NoopRetryStrategy())
-
-        # Because we're throwing an exception, we manually collect the items here
-        tru_events = []
-        stream = agent.stream_async("Do the stuff", arg1=1013)
-        async for event in stream:
-            tru_events.append(event)
-
-    exp_events = [
-        {"init_event_loop": True, "arg1": 1013},
-        {"start": True},
-        {"start_event_loop": True},
         {"force_stop": True, "force_stop_reason": "ThrottlingException | ConverseStream"},
     ]
 

@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from strands.agent.retry import ModelRetryStrategy, NoopRetryStrategy
+from strands.agent.retry import ModelRetryStrategy
 from strands.hooks import AfterModelCallEvent, HookRegistry
 from strands.types.exceptions import ModelThrottledException
 
@@ -205,37 +205,3 @@ async def test_model_retry_strategy_reset_on_success(mock_sleep):
     # Should reset to initial state
     assert strategy._current_attempt == 0
     assert strategy._calculate_delay(0) == 2
-
-
-# NoopRetryStrategy Tests
-
-
-def test_noop_retry_strategy_register_hooks_does_nothing():
-    """Test that NoopRetryStrategy does not register any callbacks."""
-    strategy = NoopRetryStrategy()
-    registry = HookRegistry()
-
-    strategy.register_hooks(registry)
-
-    # Verify no callbacks were registered
-    assert len(registry._registered_callbacks) == 0
-
-
-@pytest.mark.asyncio
-async def test_noop_retry_strategy_no_retry_on_throttle_exception():
-    """Test that NoopRetryStrategy does not retry on throttle exceptions."""
-    strategy = NoopRetryStrategy()
-    registry = HookRegistry()
-    strategy.register_hooks(registry)
-
-    mock_agent = Mock()
-    event = AfterModelCallEvent(
-        agent=mock_agent,
-        exception=ModelThrottledException("Throttled"),
-    )
-
-    # Invoke callbacks (should be none registered)
-    await registry.invoke_callbacks_async(event)
-
-    # event.retry should still be False (default)
-    assert event.retry is False

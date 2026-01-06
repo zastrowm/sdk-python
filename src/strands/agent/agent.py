@@ -176,7 +176,7 @@ class Agent:
             tool_executor: Definition of tool execution strategy (e.g., sequential, concurrent, etc.).
             retry_strategy: Strategy for retrying model calls on throttling or other transient errors.
                 Defaults to ModelRetryStrategy with max_attempts=6, initial_delay=4s, max_delay=240s.
-                Pass NoopRetryStrategy to disable retries, or implement a custom HookProvider for custom retry logic.
+                Implement a custom HookProvider for custom retry logic, or pass None to disable retries.
 
         Raises:
             ValueError: If agent id contains path separators.

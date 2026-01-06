@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from strands import Agent
-from strands.agent.retry import ModelRetryStrategy, NoopRetryStrategy
+from strands.agent.retry import ModelRetryStrategy
 from strands.types.exceptions import ModelThrottledException
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
@@ -36,15 +36,6 @@ def test_agent_with_custom_model_retry_strategy():
     assert agent.retry_strategy._max_attempts == 3
     assert agent.retry_strategy._initial_delay == 2
     assert agent.retry_strategy._max_delay == 60
-
-
-def test_agent_with_noop_retry_strategy():
-    """Test Agent initialization with NoopRetryStrategy."""
-    noop_strategy = NoopRetryStrategy()
-    agent = Agent(retry_strategy=noop_strategy)
-
-    assert agent.retry_strategy is noop_strategy
-    assert isinstance(agent.retry_strategy, NoopRetryStrategy)
 
 
 def test_retry_strategy_registered_as_hook():
@@ -97,22 +88,6 @@ async def test_agent_retries_with_default_strategy(mock_sleep):
 
 
 @pytest.mark.asyncio
-async def test_agent_no_retry_with_noop_strategy():
-    """Test that Agent does not retry with NoopRetryStrategy."""
-    # Create a model that always fails with throttling
-    model = Mock()
-    model.stream.side_effect = ModelThrottledException("ThrottlingException")
-
-    agent = Agent(model=model, retry_strategy=NoopRetryStrategy())
-
-    # Should raise exception immediately without retry
-    with pytest.raises(ModelThrottledException):
-        result = agent.stream_async("test prompt")
-        # Consume the stream to trigger the exception
-        _ = [event async for event in result]
-
-
-@pytest.mark.asyncio
 async def test_agent_respects_max_attempts(mock_sleep):
     """Test that Agent respects max_attempts in retry strategy."""
     # Create a model that always fails
@@ -157,19 +132,3 @@ async def test_event_loop_throttle_event_emitted(mock_sleep):
 
     # Should have the correct delay value
     assert throttle_events[0]["event_loop_throttled_delay"] > 0
-
-
-@pytest.mark.asyncio
-async def test_no_throttle_event_with_noop_strategy():
-    """Test that EventLoopThrottleEvent is not emitted with NoopRetryStrategy."""
-    # Create a model that succeeds immediately
-    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "Success"}]}])
-
-    agent = Agent(model=model, retry_strategy=NoopRetryStrategy())
-
-    result = agent.stream_async("test prompt")
-    events = [event async for event in result]
-
-    # Should not have any EventLoopThrottleEvent
-    throttle_events = [e for e in events if "event_loop_throttled_delay" in e]
-    assert len(throttle_events) == 0

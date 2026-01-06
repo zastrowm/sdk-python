@@ -155,24 +155,3 @@ class ModelRetryStrategy(HookProvider):
 
         # Set retry flag and track that this strategy triggered it
         event.retry = True
-
-
-class NoopRetryStrategy(HookProvider):
-    """No-op retry strategy that disables automatic retries.
-
-    This strategy can be used when you want to explicitly disable retry behavior
-    and handle errors directly in your application code. It implements the
-    HookProvider protocol but does not register any callbacks.
-    """
-
-    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
-        """Register hooks (no-op implementation).
-
-        This method intentionally does nothing, as this strategy disables retries.
-
-        Args:
-            registry: The hook registry to register callbacks with.
-            **kwargs: Additional keyword arguments for future extensibility.
-        """
-        # Intentionally empty - no callbacks to register
-        pass

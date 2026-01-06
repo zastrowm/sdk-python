@@ -15,7 +15,7 @@ from .conversation_manager import (
     SlidingWindowConversationManager,
     SummarizingConversationManager,
 )
-from .retry import ModelRetryStrategy, NoopRetryStrategy
+from .retry import ModelRetryStrategy
 
 __all__ = [
     "Agent",
@@ -25,5 +25,4 @@ __all__ = [
     "SlidingWindowConversationManager",
     "SummarizingConversationManager",
     "ModelRetryStrategy",
-    "NoopRetryStrategy",
 ]

@@ -2,7 +2,7 @@
 
 from . import agent, models, telemetry, types
 from .agent.agent import Agent
-from .agent.retry import ModelRetryStrategy, NoopRetryStrategy
+from .agent.retry import ModelRetryStrategy
 from .tools.decorator import tool
 from .types.tools import ToolContext
 
@@ -11,7 +11,6 @@ __all__ = [
     "agent",
     "models",
     "ModelRetryStrategy",
-    "NoopRetryStrategy",
     "tool",
     "ToolContext",
     "types",
