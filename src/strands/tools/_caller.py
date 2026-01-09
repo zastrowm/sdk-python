@@ -15,6 +15,7 @@ from .._async import run_async
 from ..tools.executors._executor import ToolExecutor
 from ..types._events import ToolInterruptEvent
 from ..types.content import ContentBlock, Message
+from ..types.exceptions import ConcurrencyException
 from ..types.tools import ToolResult, ToolUse
 
 if TYPE_CHECKING:
@@ -72,6 +73,12 @@ class _ToolCaller:
             """
             if self._agent._interrupt_state.activated:
                 raise RuntimeError("cannot directly call tool during interrupt")
+
+            # Check if agent is already processing an invocation
+            if self._agent._invocation_lock.locked():
+                raise ConcurrencyException(
+                    "Agent is already processing a request. Concurrent invocations are not supported."
+                )
 
             normalized_name = self._find_normalized_tool_name(name)
 

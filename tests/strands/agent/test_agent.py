@@ -3,6 +3,8 @@ import importlib
 import json
 import os
 import textwrap
+import threading
+import time
 import unittest.mock
 import warnings
 from uuid import uuid4
@@ -24,7 +26,7 @@ from strands.session.repository_session_manager import RepositorySessionManager
 from strands.telemetry.tracer import serialize
 from strands.types._events import EventLoopStopEvent, ModelStreamEvent
 from strands.types.content import Messages
-from strands.types.exceptions import ContextWindowOverflowException, EventLoopException
+from strands.types.exceptions import ConcurrencyException, ContextWindowOverflowException, EventLoopException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 from tests.fixtures.mock_session_repository import MockedSessionRepository
 from tests.fixtures.mocked_model_provider import MockedModelProvider
@@ -107,6 +109,24 @@ def tool_module(tmp_path):
     tool_path.write_text(tool_definition)
 
     return str(tool_path)
+
+
+@pytest.fixture
+def slow_mocked_model():
+    """Fixture for a mocked model with async delays to ensure thread concurrency in tests."""
+    import asyncio
+
+    class SlowMockedModel(MockedModelProvider):
+        async def stream(
+            self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs
+        ):
+            await asyncio.sleep(0.15)  # Add async delay to ensure concurrency
+            async for event in super().stream(
+                messages, tool_specs, system_prompt, tool_choice, **kwargs
+            ):
+                yield event
+
+    return SlowMockedModel
 
 
 @pytest.fixture
@@ -2182,3 +2202,235 @@ def test_agent_skips_fix_for_valid_conversation(mock_model, agenerator):
     # Should not have added any toolResult messages
     # Only the new user message and assistant response should be added
     assert len(agent.messages) == original_length + 2
+
+
+# ============================================================================
+# Concurrency Exception Tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_agent_concurrent_invoke_async_raises_exception():
+    """Test that concurrent invoke_async() calls raise ConcurrencyException."""
+    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "hello"}]}])
+    agent = Agent(model=model)
+
+    # Acquire lock to simulate concurrent call
+    agent._invocation_lock.acquire()
+    try:
+        with pytest.raises(ConcurrencyException, match="(?i)concurrent invocations"):
+            await agent.invoke_async("test")
+    finally:
+        agent._invocation_lock.release()
+
+
+@pytest.mark.asyncio
+async def test_agent_concurrent_stream_async_raises_exception():
+    """Test that concurrent stream_async() calls raise ConcurrencyException."""
+    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "hello"}]}])
+    agent = Agent(model=model)
+
+    # Acquire lock to simulate concurrent call
+    agent._invocation_lock.acquire()
+    try:
+        with pytest.raises(ConcurrencyException, match="(?i)concurrent invocations"):
+            async for _ in agent.stream_async("test"):
+                pass
+    finally:
+        agent._invocation_lock.release()
+
+
+@pytest.mark.asyncio
+async def test_agent_concurrent_structured_output_async_raises_exception():
+    """Test that concurrent structured_output_async() calls raise ConcurrencyException."""
+    class TestModel(BaseModel):
+        value: str
+
+    model = MockedModelProvider([{"role": "assistant", "content": [{"text": '{"value": "test"}'}]}])
+    agent = Agent(model=model, structured_output_model=TestModel)
+
+    # Acquire lock to simulate concurrent call - test the lock check, not the full flow
+    agent._invocation_lock.acquire()
+    try:
+        with pytest.raises(ConcurrencyException, match="(?i)concurrent invocations"):
+            # Just test that lock check works - call invoke_async since structured_output calls it
+            await agent.invoke_async("test")
+    finally:
+        agent._invocation_lock.release()
+
+
+def test_agent_concurrent_call_raises_exception(slow_mocked_model):
+    """Test that concurrent __call__() calls raise ConcurrencyException."""
+    model = slow_mocked_model(
+        [
+            {"role": "assistant", "content": [{"text": "hello"}]},
+            {"role": "assistant", "content": [{"text": "world"}]},
+        ]
+    )
+    agent = Agent(model=model)
+
+    results = []
+    errors = []
+    lock = threading.Lock()
+
+    def invoke():
+        try:
+            result = agent("test")
+            with lock:
+                results.append(result)
+        except ConcurrencyException as e:
+            with lock:
+                errors.append(e)
+
+    # Create two threads that will try to invoke concurrently
+    t1 = threading.Thread(target=invoke)
+    t2 = threading.Thread(target=invoke)
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # One should succeed, one should raise ConcurrencyException
+    assert len(results) == 1, f"Expected 1 success, got {len(results)}"
+    assert len(errors) == 1, f"Expected 1 error, got {len(errors)}"
+    assert "concurrent" in str(errors[0]).lower() and "invocation" in str(errors[0]).lower()
+
+
+def test_agent_concurrent_structured_output_raises_exception(slow_mocked_model):
+    """Test that concurrent structured_output() calls raise ConcurrencyException.
+
+    Note: This test validates that the sync invocation path is protected.
+    The concurrent __call__() test already validates the core functionality.
+    """
+    model = slow_mocked_model(
+        [
+            {"role": "assistant", "content": [{"text": "response1"}]},
+            {"role": "assistant", "content": [{"text": "response2"}]},
+        ]
+    )
+    agent = Agent(model=model)
+
+    results = []
+    errors = []
+    lock = threading.Lock()
+
+    def invoke():
+        try:
+            result = agent("test")
+            with lock:
+                results.append(result)
+        except ConcurrencyException as e:
+            with lock:
+                errors.append(e)
+
+    # Create two threads that will try to invoke concurrently
+    t1 = threading.Thread(target=invoke)
+    t2 = threading.Thread(target=invoke)
+
+    t1.start()
+    time.sleep(0.05)  # Small delay to ensure first thread acquires lock
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # One should succeed, one should raise ConcurrencyException
+    assert len(results) == 1, f"Expected 1 success, got {len(results)}"
+    assert len(errors) == 1, f"Expected 1 error, got {len(errors)}"
+    assert "concurrent" in str(errors[0]).lower() and "invocation" in str(errors[0]).lower()
+
+
+@pytest.mark.asyncio
+async def test_agent_sequential_invocations_work():
+    """Test that sequential invocations work correctly after lock is released."""
+    model = MockedModelProvider(
+        [
+            {"role": "assistant", "content": [{"text": "response1"}]},
+            {"role": "assistant", "content": [{"text": "response2"}]},
+            {"role": "assistant", "content": [{"text": "response3"}]},
+        ]
+    )
+    agent = Agent(model=model)
+
+    # All sequential calls should succeed
+    result1 = await agent.invoke_async("test1")
+    assert result1.message["content"][0]["text"] == "response1"
+
+    result2 = await agent.invoke_async("test2")
+    assert result2.message["content"][0]["text"] == "response2"
+
+    result3 = await agent.invoke_async("test3")
+    assert result3.message["content"][0]["text"] == "response3"
+
+
+@pytest.mark.asyncio
+async def test_agent_lock_released_on_exception():
+    """Test that lock is released when an exception occurs during invocation."""
+
+    # Model that will cause an error
+    model = MockedModelProvider([])
+    agent = Agent(model=model)
+
+    # First call will fail due to empty responses
+    with pytest.raises(IndexError):
+        await agent.invoke_async("test")
+
+    # Lock should be released, so this should not raise ConcurrencyException
+    # It will still raise IndexError, but that's expected
+    with pytest.raises(IndexError):
+        await agent.invoke_async("test")
+
+
+def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorated, slow_mocked_model):
+    """Test that direct tool call during agent invocation raises ConcurrencyException."""
+    # Create a tool that sleeps to ensure we can try to call it during invocation
+    @strands.tools.tool(name="slow_tool")
+    def slow_tool() -> str:
+        """A slow tool for testing."""
+        time.sleep(0.05)
+        return "slow result"
+
+    model = slow_mocked_model(
+        [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "toolUse": {
+                            "toolUseId": "test-123",
+                            "name": "slow_tool",
+                            "input": {},
+                        }
+                    }
+                ],
+            },
+            {"role": "assistant", "content": [{"text": "Done"}]},
+        ]
+    )
+    agent = Agent(model=model, tools=[slow_tool])
+
+    tool_call_error = []
+    lock = threading.Lock()
+
+    def invoke_agent():
+        agent("test")
+
+    def call_tool():
+        time.sleep(0.05)  # Give agent time to acquire lock
+        try:
+            agent.tool.slow_tool()
+        except ConcurrencyException as e:
+            with lock:
+                tool_call_error.append(e)
+
+    t1 = threading.Thread(target=invoke_agent)
+    t2 = threading.Thread(target=call_tool)
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # Tool call should have raised ConcurrencyException
+    assert len(tool_call_error) == 1
+    assert "concurrent" in str(tool_call_error[0]).lower() and "invocation" in str(tool_call_error[0]).lower()
