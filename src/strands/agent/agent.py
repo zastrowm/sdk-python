@@ -570,16 +570,16 @@ class Agent:
                     yield event["data"]
             ```
         """
-        # Check if lock is already acquired to fail fast on concurrent invocations
-        if self._invocation_lock.locked():
+        # Acquire lock to prevent concurrent invocations
+        # Using threading.Lock instead of asyncio.Lock because run_async() creates
+        # separate event loops in different threads
+        acquired = self._invocation_lock.acquire(blocking=False)
+        if not acquired:
             raise ConcurrencyException(
                 "Agent is already processing a request. Concurrent invocations are not supported."
             )
 
-        # Acquire lock to prevent concurrent invocations
-        # Using threading.Lock instead of asyncio.Lock because run_async() creates
-        # separate event loops in different threads
-        with self._invocation_lock:
+        try:
             self._interrupt_state.resume(prompt)
 
             self.event_loop_metrics.reset_usage_metrics()
@@ -624,6 +624,9 @@ class Agent:
                 except Exception as e:
                     self._end_agent_trace_span(error=e)
                     raise
+
+        finally:
+            self._invocation_lock.release()
 
     async def _run_loop(
         self,
