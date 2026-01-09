@@ -3,6 +3,8 @@ import importlib
 import json
 import os
 import textwrap
+import threading
+import time
 import unittest.mock
 import warnings
 from uuid import uuid4
@@ -24,7 +26,7 @@ from strands.session.repository_session_manager import RepositorySessionManager
 from strands.telemetry.tracer import serialize
 from strands.types._events import EventLoopStopEvent, ModelStreamEvent
 from strands.types.content import Messages
-from strands.types.exceptions import ContextWindowOverflowException, EventLoopException
+from strands.types.exceptions import ConcurrencyException, ContextWindowOverflowException, EventLoopException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 from tests.fixtures.mock_session_repository import MockedSessionRepository
 from tests.fixtures.mocked_model_provider import MockedModelProvider
@@ -107,6 +109,24 @@ def tool_module(tmp_path):
     tool_path.write_text(tool_definition)
 
     return str(tool_path)
+
+
+@pytest.fixture
+def slow_mocked_model():
+    """Fixture for a mocked model with async delays to ensure thread concurrency in tests."""
+    import asyncio
+
+    class SlowMockedModel(MockedModelProvider):
+        async def stream(
+            self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs
+        ):
+            await asyncio.sleep(0.15)  # Add async delay to ensure concurrency
+            async for event in super().stream(
+                messages, tool_specs, system_prompt, tool_choice, **kwargs
+            ):
+                yield event
+
+    return SlowMockedModel
 
 
 @pytest.fixture
@@ -2192,8 +2212,6 @@ def test_agent_skips_fix_for_valid_conversation(mock_model, agenerator):
 @pytest.mark.asyncio
 async def test_agent_concurrent_invoke_async_raises_exception():
     """Test that concurrent invoke_async() calls raise ConcurrencyException."""
-    from strands.types.exceptions import ConcurrencyException
-
     model = MockedModelProvider([{"role": "assistant", "content": [{"text": "hello"}]}])
     agent = Agent(model=model)
 
@@ -2209,8 +2227,6 @@ async def test_agent_concurrent_invoke_async_raises_exception():
 @pytest.mark.asyncio
 async def test_agent_concurrent_stream_async_raises_exception():
     """Test that concurrent stream_async() calls raise ConcurrencyException."""
-    from strands.types.exceptions import ConcurrencyException
-
     model = MockedModelProvider([{"role": "assistant", "content": [{"text": "hello"}]}])
     agent = Agent(model=model)
 
@@ -2227,8 +2243,6 @@ async def test_agent_concurrent_stream_async_raises_exception():
 @pytest.mark.asyncio
 async def test_agent_concurrent_structured_output_async_raises_exception():
     """Test that concurrent structured_output_async() calls raise ConcurrencyException."""
-    from strands.types.exceptions import ConcurrencyException
-
     class TestModel(BaseModel):
         value: str
 
@@ -2245,19 +2259,9 @@ async def test_agent_concurrent_structured_output_async_raises_exception():
         agent._invocation_lock.release()
 
 
-def test_agent_concurrent_call_raises_exception():
+def test_agent_concurrent_call_raises_exception(slow_mocked_model):
     """Test that concurrent __call__() calls raise ConcurrencyException."""
-    import threading
-    import time
-    from strands.types.exceptions import ConcurrencyException
-
-    # Create a slow model to ensure threads overlap
-    class SlowMockedModel(MockedModelProvider):
-        def map_agent_message_to_events(self, agent_message):
-            time.sleep(0.1)  # Add delay to ensure concurrency
-            return super().map_agent_message_to_events(agent_message)
-
-    model = SlowMockedModel(
+    model = slow_mocked_model(
         [
             {"role": "assistant", "content": [{"text": "hello"}]},
             {"role": "assistant", "content": [{"text": "world"}]},
@@ -2293,25 +2297,13 @@ def test_agent_concurrent_call_raises_exception():
     assert "concurrent" in str(errors[0]).lower() and "invocation" in str(errors[0]).lower()
 
 
-def test_agent_concurrent_structured_output_raises_exception():
+def test_agent_concurrent_structured_output_raises_exception(slow_mocked_model):
     """Test that concurrent structured_output() calls raise ConcurrencyException.
 
     Note: This test validates that the sync invocation path is protected.
     The concurrent __call__() test already validates the core functionality.
     """
-    import asyncio
-    import threading
-    import time
-    from strands.types.exceptions import ConcurrencyException
-
-    # Create an async slow model to ensure threads overlap
-    class SlowAsyncMockedModel(MockedModelProvider):
-        async def stream(self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs):
-            await asyncio.sleep(0.15)  # Add async delay to ensure concurrency
-            async for event in super().stream(messages, tool_specs, system_prompt, tool_choice, **kwargs):
-                yield event
-
-    model = SlowAsyncMockedModel(
+    model = slow_mocked_model(
         [
             {"role": "assistant", "content": [{"text": "response1"}]},
             {"role": "assistant", "content": [{"text": "response2"}]},
@@ -2374,7 +2366,6 @@ async def test_agent_sequential_invocations_work():
 @pytest.mark.asyncio
 async def test_agent_lock_released_on_exception():
     """Test that lock is released when an exception occurs during invocation."""
-    from strands.types.exceptions import ConcurrencyException
 
     # Model that will cause an error
     model = MockedModelProvider([])
@@ -2390,12 +2381,8 @@ async def test_agent_lock_released_on_exception():
         await agent.invoke_async("test")
 
 
-def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorated):
+def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorated, slow_mocked_model):
     """Test that direct tool call during agent invocation raises ConcurrencyException."""
-    import threading
-    import time
-    from strands.types.exceptions import ConcurrencyException
-
     # Create a tool that sleeps to ensure we can try to call it during invocation
     @strands.tools.tool(name="slow_tool")
     def slow_tool() -> str:
@@ -2403,13 +2390,7 @@ def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorate
         time.sleep(0.05)
         return "slow result"
 
-    # Create a slow model to ensure agent invocation takes time
-    class SlowMockedModel(MockedModelProvider):
-        def map_agent_message_to_events(self, agent_message):
-            time.sleep(0.1)  # Add delay to ensure concurrency
-            return super().map_agent_message_to_events(agent_message)
-
-    model = SlowMockedModel(
+    model = slow_mocked_model(
         [
             {
                 "role": "assistant",

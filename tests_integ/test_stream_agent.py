@@ -78,6 +78,7 @@ def test_basic_interaction():
 def test_concurrent_invocations_with_threading():
     """Integration test: Concurrent agent invocations with real threading."""
     import threading
+
     from strands.types.exceptions import ConcurrencyException
     from tests.fixtures.mocked_model_provider import MockedModelProvider
 
@@ -121,74 +122,3 @@ def test_concurrent_invocations_with_threading():
     assert "concurrent" in str(errors[0]).lower() and "invocation" in str(errors[0]).lower()
 
     print("Concurrent invocation test passed")
-
-
-def test_retry_scenario_with_timeout():
-    """Integration test: Simulate client timeout retry scenario."""
-    import threading
-    import time
-    from strands.types.exceptions import ConcurrencyException
-    from tests.fixtures.mocked_model_provider import MockedModelProvider
-
-    # Create a slow-responding model
-    class SlowMockedModel(MockedModelProvider):
-        async def stream(self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs):
-            # Simulate slow response
-            import asyncio
-
-            await asyncio.sleep(0.2)
-            async for event in super().stream(messages, tool_specs, system_prompt, tool_choice, **kwargs):
-                yield event
-
-    model = SlowMockedModel(
-        [
-            {"role": "assistant", "content": [{"text": "slow response"}]},
-            {"role": "assistant", "content": [{"text": "retry response"}]},
-        ]
-    )
-    agent = Agent(model=model, callback_handler=None)
-
-    first_result = []
-    retry_error = []
-    lock = threading.Lock()
-
-    def first_request():
-        try:
-            result = agent("process this request")
-            with lock:
-                first_result.append(result)
-        except Exception as e:
-            with lock:
-                first_result.append(e)
-
-    def retry_request():
-        # Wait a bit before retrying (simulating client timeout retry)
-        time.sleep(0.1)
-        try:
-            result = agent("process this request")  # Same request, retry
-            with lock:
-                retry_error.append(f"Unexpected success: {result}")
-        except ConcurrencyException as e:
-            with lock:
-                retry_error.append(e)
-
-    print("\nTesting retry scenario with timeout")
-
-    t1 = threading.Thread(target=first_request)
-    t2 = threading.Thread(target=retry_request)
-
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-
-    # First request should succeed
-    assert len(first_result) == 1
-    print(f"First request: {'Success' if hasattr(first_result[0], 'message') else 'Failed'}")
-
-    # Retry should raise ConcurrencyException
-    assert len(retry_error) == 1
-    assert isinstance(retry_error[0], ConcurrencyException)
-    print(f"Retry raised: {type(retry_error[0]).__name__}")
-
-    print("Retry scenario test passed")
