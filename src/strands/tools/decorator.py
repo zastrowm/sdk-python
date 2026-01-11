@@ -201,17 +201,16 @@ class FunctionToolMetadata:
             if self._is_special_parameter(name):
                 continue
 
-            # Handle PEP 563 (from __future__ import annotations) compatibility.
-            # When __future__.annotations is active, param.annotation is a string literal
-            # that Pydantic 2.12+ can't resolve. We detect this and use get_type_hints()
-            # only in that case. For non-PEP 563 modules, param.annotation directly gives
-            # us the actual type with Annotated metadata intact, which is more reliable
-            # across Python versions.
+            # Handle PEP 563 (from __future__ import annotations):
+            # - When PEP 563 is active, param.annotation is a string literal that needs resolution
+            # - When PEP 563 is not active, param.annotation is the actual type object (may include Annotated)
+            # We check if param.annotation is a string to determine if we need type hint resolution.
+            # This preserves Annotated metadata correctly in both cases and is consistent across Python versions.
             if isinstance(param.annotation, str):
-                # PEP 563: annotation is a forward reference string, need to resolve it
+                # PEP 563 active: resolve string annotation
                 param_type = self.type_hints.get(name, param.annotation)
             else:
-                # Standard: annotation is already the actual type
+                # PEP 563 not active: use the actual type object directly
                 param_type = param.annotation
             if param_type is inspect.Parameter.empty:
                 param_type = Any
