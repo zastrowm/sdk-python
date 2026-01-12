@@ -79,10 +79,9 @@ class _ToolCaller:
             else:
                 should_record_direct_tool_call = self._agent.record_direct_tool_call
 
-            # TODO: https://github.com/strands-agents/sdk-python/issues/1311
-            from ..agent import Agent
-
             should_lock = should_record_direct_tool_call
+
+            from ..agent import Agent  # Locally imported to avoid circular reference
 
             acquired_lock = (
                 should_lock
@@ -124,6 +123,7 @@ class _ToolCaller:
 
                 tool_result = run_async(acall)
 
+                # TODO: https://github.com/strands-agents/sdk-python/issues/1311
                 if isinstance(self._agent, Agent):
                     self._agent.conversation_manager.apply_management(self._agent)
 

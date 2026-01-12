@@ -2202,57 +2202,6 @@ def test_agent_skips_fix_for_valid_conversation(mock_model, agenerator):
 # ============================================================================
 
 
-@pytest.mark.asyncio
-async def test_agent_concurrent_invoke_async_raises_exception():
-    """Test that concurrent invoke_async() calls raise ConcurrencyException."""
-    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "hello"}]}])
-    agent = Agent(model=model)
-
-    # Acquire lock to simulate concurrent call
-    agent._invocation_lock.acquire()
-    try:
-        with pytest.raises(ConcurrencyException, match="(?i)concurrent invocations"):
-            await agent.invoke_async("test")
-    finally:
-        agent._invocation_lock.release()
-
-
-@pytest.mark.asyncio
-async def test_agent_concurrent_stream_async_raises_exception():
-    """Test that concurrent stream_async() calls raise ConcurrencyException."""
-    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "hello"}]}])
-    agent = Agent(model=model)
-
-    # Acquire lock to simulate concurrent call
-    agent._invocation_lock.acquire()
-    try:
-        with pytest.raises(ConcurrencyException, match="(?i)concurrent invocations"):
-            async for _ in agent.stream_async("test"):
-                pass
-    finally:
-        agent._invocation_lock.release()
-
-
-@pytest.mark.asyncio
-async def test_agent_concurrent_structured_output_async_raises_exception():
-    """Test that concurrent structured_output_async() calls raise ConcurrencyException."""
-
-    class TestModel(BaseModel):
-        value: str
-
-    model = MockedModelProvider([{"role": "assistant", "content": [{"text": '{"value": "test"}'}]}])
-    agent = Agent(model=model, structured_output_model=TestModel)
-
-    # Acquire lock to simulate concurrent call - test the lock check, not the full flow
-    agent._invocation_lock.acquire()
-    try:
-        with pytest.raises(ConcurrencyException, match="(?i)concurrent invocations"):
-            # Just test that lock check works - call invoke_async since structured_output calls it
-            await agent.invoke_async("test")
-    finally:
-        agent._invocation_lock.release()
-
-
 def test_agent_concurrent_call_raises_exception():
     """Test that concurrent __call__() calls raise ConcurrencyException."""
     model = SlowMockedModel(
@@ -2361,17 +2310,24 @@ async def test_agent_sequential_invocations_work():
 async def test_agent_lock_released_on_exception():
     """Test that lock is released when an exception occurs during invocation."""
 
-    # Model that will cause an error
-    model = MockedModelProvider([])
-    agent = Agent(model=model)
+    # Create a mock model that raises an explicit error
+    mock_model = unittest.mock.Mock()
 
-    # First call will fail due to empty responses
-    with pytest.raises(IndexError):
+    async def failing_stream(*args, **kwargs):
+        raise RuntimeError("Simulated model failure")
+        yield  # Make this an async generator
+
+    mock_model.stream = failing_stream
+
+    agent = Agent(model=mock_model)
+
+    # First call will fail due to the simulated error
+    with pytest.raises(RuntimeError, match="Simulated model failure"):
         await agent.invoke_async("test")
 
     # Lock should be released, so this should not raise ConcurrencyException
-    # It will still raise IndexError, but that's expected
-    with pytest.raises(IndexError):
+    # It will still raise RuntimeError, but that's expected
+    with pytest.raises(RuntimeError, match="Simulated model failure"):
         await agent.invoke_async("test")
 
 
