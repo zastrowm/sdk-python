@@ -246,8 +246,8 @@ Validation tests MUST verify the actual behavior of the feature, not just syntax
 
 **Available Testing Resources:**
 - **Amazon Bedrock**: You have access to Bedrock models for testing. Use Bedrock when a feature requires a real model provider.
-- **Project test fixtures**: The project includes mocked model providers and test utilities in `tests/fixtures/`
-- **Integration test patterns**: Examine `tests_integ/` for patterns that test real model interactions
+- **Project test fixtures**: The project includes mocked model providers and test utilities (commonly in `tests/fixtures/`, `__mocks__/`, or similar)
+- **Integration test patterns**: Examine integration test directories (commonly in `tests_integ/` or `test/integ`) for patterns that test real model interactions
 
 **Features that genuinely cannot be validated (rare):**
 - Features requiring paid third-party API credentials with no mock option AND no Bedrock alternative
@@ -274,7 +274,7 @@ Validation tests MUST verify the actual behavior of the feature, not just syntax
 - You MAY need to setup test fixtures that enable behavioral verification
 - You MAY include additional test code that doesn't appear in the release notes
 
-**Example of GOOD validation** (verifies behavior):
+**Example of GOOD validation** (verifies behavior) - adapt syntax to project language:
 ```python
 def test_structured_output_validation():
     """Verify that structured output actually validates against the schema."""
@@ -294,7 +294,7 @@ def test_structured_output_validation():
     assert isinstance(result.output.age, int)
 ```
 
-**Example of BAD validation** (only verifies syntax):
+**Example of BAD validation** (only verifies syntax) - adapt syntax to project language:
 ```python
 def test_structured_output_syntax():
     """BAD: This only verifies the code runs without errors."""
@@ -320,7 +320,7 @@ For each Major Feature, follow this workflow in order:
    - Try using Bedrock instead of other model providers
    - Try installing missing dependencies
    - Try mocking external services
-   - Try using project test fixtures (`tests/fixtures/mocked_model_provider.py`)
+   - Try using project test fixtures (e.g., mocked model providers)
    - Try simplifying the example
 4. **Document each attempt** and its result in the Validation Comment
 5. **Only after documented failures** can you use the engineer review fallback
@@ -337,12 +337,12 @@ For each Major Feature, follow this workflow in order:
 
 **Installing Dependencies:**
 - You MUST attempt to install missing dependencies when tests fail due to import errors
-- You SHOULD check the project's `pyproject.toml`, `package.json`, or equivalent for optional dependency groups
-- You SHOULD use the project's package manager to install dependencies (e.g., `pip install`, `npm install`, `hatch`)
-- For Python projects with optional extras, try: `pip install -e ".[extra_name]"` or `pip install package_name`
+- You SHOULD check the project's dependency manifest (`pyproject.toml`, `package.json`, `Cargo.toml`, etc.) for optional dependency groups
+- You SHOULD use the project's package manager to install dependencies (e.g., `pip install`, `npm install`, `cargo add`)
+- For projects with optional extras, use the appropriate syntax (e.g., `pip install -e ".[extra]"` for Python, `npm install --save-dev` for Node.js)
 - You SHOULD only fall back to mocking if the dependency cannot be installed (e.g., requires paid API keys, proprietary software)
 
-**Example of mocking external dependencies:**
+**Example of mocking external dependencies** - adapt syntax to project language:
 ```python
 def test_custom_http_client():
     """Verify custom HTTP client is passed to the provider."""
