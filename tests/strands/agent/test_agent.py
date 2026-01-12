@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import importlib
 import json
@@ -7,13 +8,14 @@ import threading
 import time
 import unittest.mock
 import warnings
+from typing import Any, AsyncGenerator
 from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel
 
 import strands
-from strands import Agent
+from strands import Agent, ToolContext
 from strands.agent import AgentResult
 from strands.agent.conversation_manager.null_conversation_manager import NullConversationManager
 from strands.agent.conversation_manager.sliding_window_conversation_manager import SlidingWindowConversationManager
@@ -112,24 +114,6 @@ def tool_module(tmp_path):
 
 
 @pytest.fixture
-def slow_mocked_model():
-    """Fixture for a mocked model with async delays to ensure thread concurrency in tests."""
-    import asyncio
-
-    class SlowMockedModel(MockedModelProvider):
-        async def stream(
-            self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs
-        ):
-            await asyncio.sleep(0.15)  # Add async delay to ensure concurrency
-            async for event in super().stream(
-                messages, tool_specs, system_prompt, tool_choice, **kwargs
-            ):
-                yield event
-
-    return SlowMockedModel
-
-
-@pytest.fixture
 def tool_imported(tmp_path, monkeypatch):
     tool_definition = textwrap.dedent("""
         TOOL_SPEC = {
@@ -203,6 +187,15 @@ def user():
         email: str
 
     return User(name="Jane Doe", age=30, email="jane@doe.com")
+
+
+class SlowMockedModel(MockedModelProvider):
+    async def stream(
+        self, messages, tool_specs=None, system_prompt=None, tool_choice=None, **kwargs
+    ) -> AsyncGenerator[Any, None]:
+        await asyncio.sleep(0.15)  # Add async delay to ensure concurrency
+        async for event in super().stream(messages, tool_specs, system_prompt, tool_choice, **kwargs):
+            yield event
 
 
 def test_agent__init__tool_loader_format(tool_decorated, tool_module, tool_imported, tool_registry):
@@ -2243,6 +2236,7 @@ async def test_agent_concurrent_stream_async_raises_exception():
 @pytest.mark.asyncio
 async def test_agent_concurrent_structured_output_async_raises_exception():
     """Test that concurrent structured_output_async() calls raise ConcurrencyException."""
+
     class TestModel(BaseModel):
         value: str
 
@@ -2259,9 +2253,9 @@ async def test_agent_concurrent_structured_output_async_raises_exception():
         agent._invocation_lock.release()
 
 
-def test_agent_concurrent_call_raises_exception(slow_mocked_model):
+def test_agent_concurrent_call_raises_exception():
     """Test that concurrent __call__() calls raise ConcurrencyException."""
-    model = slow_mocked_model(
+    model = SlowMockedModel(
         [
             {"role": "assistant", "content": [{"text": "hello"}]},
             {"role": "assistant", "content": [{"text": "world"}]},
@@ -2297,13 +2291,13 @@ def test_agent_concurrent_call_raises_exception(slow_mocked_model):
     assert "concurrent" in str(errors[0]).lower() and "invocation" in str(errors[0]).lower()
 
 
-def test_agent_concurrent_structured_output_raises_exception(slow_mocked_model):
+def test_agent_concurrent_structured_output_raises_exception():
     """Test that concurrent structured_output() calls raise ConcurrencyException.
 
     Note: This test validates that the sync invocation path is protected.
     The concurrent __call__() test already validates the core functionality.
     """
-    model = slow_mocked_model(
+    model = SlowMockedModel(
         [
             {"role": "assistant", "content": [{"text": "response1"}]},
             {"role": "assistant", "content": [{"text": "response2"}]},
@@ -2381,16 +2375,22 @@ async def test_agent_lock_released_on_exception():
         await agent.invoke_async("test")
 
 
-def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorated, slow_mocked_model):
+def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorated):
     """Test that direct tool call during agent invocation raises ConcurrencyException."""
-    # Create a tool that sleeps to ensure we can try to call it during invocation
-    @strands.tools.tool(name="slow_tool")
-    def slow_tool() -> str:
-        """A slow tool for testing."""
-        time.sleep(0.05)
-        return "slow result"
 
-    model = slow_mocked_model(
+    tool_calls = []
+
+    @strands.tool
+    def tool_to_invoke():
+        tool_calls.append("tool_to_invoke")
+        return "called"
+
+    @strands.tool(context=True)
+    def agent_tool(tool_context: ToolContext) -> str:
+        tool_context.agent.tool.tool_to_invoke(record_direct_tool_call=True)
+        return "tool result"
+
+    model = MockedModelProvider(
         [
             {
                 "role": "assistant",
@@ -2398,7 +2398,7 @@ def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorate
                     {
                         "toolUse": {
                             "toolUseId": "test-123",
-                            "name": "slow_tool",
+                            "name": "agent_tool",
                             "input": {},
                         }
                     }
@@ -2407,30 +2407,78 @@ def test_agent_direct_tool_call_during_invocation_raises_exception(tool_decorate
             {"role": "assistant", "content": [{"text": "Done"}]},
         ]
     )
-    agent = Agent(model=model, tools=[slow_tool])
+    agent = Agent(model=model, tools=[agent_tool, tool_to_invoke])
+    agent("Hi")
 
-    tool_call_error = []
-    lock = threading.Lock()
+    # Tool call should have not succeeded
+    assert len(tool_calls) == 0
 
-    def invoke_agent():
-        agent("test")
+    assert agent.messages[-2] == {
+        "content": [
+            {
+                "toolResult": {
+                    "content": [
+                        {
+                            "text": "Error: ConcurrencyException - Direct tool call cannot be made while the agent is "
+                            "in the middle of an invocation. Set record_direct_tool_call=False to allow direct tool "
+                            "calls during agent invocation."
+                        }
+                    ],
+                    "status": "error",
+                    "toolUseId": "test-123",
+                }
+            }
+        ],
+        "role": "user",
+    }
 
-    def call_tool():
-        time.sleep(0.05)  # Give agent time to acquire lock
-        try:
-            agent.tool.slow_tool()
-        except ConcurrencyException as e:
-            with lock:
-                tool_call_error.append(e)
 
-    t1 = threading.Thread(target=invoke_agent)
-    t2 = threading.Thread(target=call_tool)
+def test_agent_direct_tool_call_during_invocation_succeeds_with_record_false(tool_decorated):
+    """Test that direct tool call during agent invocation succeeds when record_direct_tool_call=False."""
+    tool_calls = []
 
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
+    @strands.tool
+    def tool_to_invoke():
+        tool_calls.append("tool_to_invoke")
+        return "called"
 
-    # Tool call should have raised ConcurrencyException
-    assert len(tool_call_error) == 1
-    assert "concurrent" in str(tool_call_error[0]).lower() and "invocation" in str(tool_call_error[0]).lower()
+    @strands.tool(context=True)
+    def agent_tool(tool_context: ToolContext) -> str:
+        tool_context.agent.tool.tool_to_invoke(record_direct_tool_call=False)
+        return "tool result"
+
+    model = MockedModelProvider(
+        [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "toolUse": {
+                            "toolUseId": "test-123",
+                            "name": "agent_tool",
+                            "input": {},
+                        }
+                    }
+                ],
+            },
+            {"role": "assistant", "content": [{"text": "Done"}]},
+        ]
+    )
+    agent = Agent(model=model, tools=[agent_tool, tool_to_invoke])
+    agent("Hi")
+
+    # Tool call should have succeeded
+    assert len(tool_calls) == 1
+
+    assert agent.messages[-2] == {
+        "content": [
+            {
+                "toolResult": {
+                    "content": [{"text": "tool result"}],
+                    "status": "success",
+                    "toolUseId": "test-123",
+                }
+            }
+        ],
+        "role": "user",
+    }
