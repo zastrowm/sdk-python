@@ -9,6 +9,7 @@ It includes:
 
 from .agent import Agent
 from .agent_result import AgentResult
+from .base import AgentBase
 from .conversation_manager import (
     ConversationManager,
     NullConversationManager,
@@ -19,6 +20,7 @@ from .retry import ModelRetryStrategy
 
 __all__ = [
     "Agent",
+    "AgentBase",
     "AgentResult",
     "ConversationManager",
     "NullConversationManager",
