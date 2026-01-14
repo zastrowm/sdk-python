@@ -38,6 +38,37 @@ def test_agent_with_custom_model_retry_strategy():
     assert agent.retry_strategy._max_delay == 60
 
 
+def test_agent_rejects_invalid_retry_strategy_type():
+    """Test that Agent raises ValueError for non-ModelRetryStrategy retry_strategy."""
+
+    class FakeRetryStrategy:
+        pass
+
+    with pytest.raises(ValueError, match="retry_strategy must be an instance of ModelRetryStrategy"):
+        Agent(retry_strategy=FakeRetryStrategy())
+
+
+def test_agent_rejects_subclass_of_model_retry_strategy():
+    """Test that Agent rejects subclasses of ModelRetryStrategy (strict type check)."""
+
+    class CustomRetryStrategy(ModelRetryStrategy):
+        pass
+
+    with pytest.raises(ValueError, match="retry_strategy must be an instance of ModelRetryStrategy"):
+        Agent(retry_strategy=CustomRetryStrategy())
+
+
+def test_agent_default_retry_strategy_uses_event_loop_constants():
+    """Test that default retry strategy uses constants from event_loop module."""
+    from strands.event_loop.event_loop import INITIAL_DELAY, MAX_ATTEMPTS, MAX_DELAY
+
+    agent = Agent()
+
+    assert agent.retry_strategy._max_attempts == MAX_ATTEMPTS
+    assert agent.retry_strategy._initial_delay == INITIAL_DELAY
+    assert agent.retry_strategy._max_delay == MAX_DELAY
+
+
 def test_retry_strategy_registered_as_hook():
     """Test that retry_strategy is registered with the hook system."""
     custom_strategy = ModelRetryStrategy(max_attempts=3)

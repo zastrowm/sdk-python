@@ -55,15 +55,21 @@ def test_model_retry_strategy_calculate_delay_respects_max_delay():
 
 
 def test_model_retry_strategy_register_hooks():
-    """Test that ModelRetryStrategy registers AfterModelCallEvent callback."""
+    """Test that ModelRetryStrategy registers AfterModelCallEvent and AfterInvocationEvent callbacks."""
+    from strands.hooks import AfterInvocationEvent
+
     strategy = ModelRetryStrategy()
     registry = HookRegistry()
 
     strategy.register_hooks(registry)
 
-    # Verify callback was registered
+    # Verify AfterModelCallEvent callback was registered
     assert AfterModelCallEvent in registry._registered_callbacks
     assert len(registry._registered_callbacks[AfterModelCallEvent]) == 1
+
+    # Verify AfterInvocationEvent callback was registered
+    assert AfterInvocationEvent in registry._registered_callbacks
+    assert len(registry._registered_callbacks[AfterInvocationEvent]) == 1
 
 
 @pytest.mark.asyncio
@@ -205,3 +211,125 @@ async def test_model_retry_strategy_reset_on_success(mock_sleep):
     # Should reset to initial state
     assert strategy._current_attempt == 0
     assert strategy._calculate_delay(0) == 2
+
+
+@pytest.mark.asyncio
+async def test_model_retry_strategy_skips_if_already_retrying():
+    """Test that strategy skips processing if event.retry is already True."""
+    strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
+    mock_agent = Mock()
+
+    event = AfterModelCallEvent(
+        agent=mock_agent,
+        exception=ModelThrottledException("Throttled"),
+    )
+    # Simulate another hook already set retry to True
+    event.retry = True
+
+    await strategy._handle_after_model_call(event)
+
+    # Should not modify state since another hook already triggered retry
+    assert strategy._current_attempt == 0
+    assert event.retry is True
+
+
+@pytest.mark.asyncio
+async def test_model_retry_strategy_reset_on_after_invocation():
+    """Test that strategy resets state on AfterInvocationEvent."""
+    from strands.hooks import AfterInvocationEvent
+
+    strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
+    mock_agent = Mock()
+
+    # Simulate some retry attempts
+    strategy._current_attempt = 3
+
+    event = AfterInvocationEvent(agent=mock_agent, result=Mock())
+    await strategy._handle_after_invocation(event)
+
+    # Should reset to initial state
+    assert strategy._current_attempt == 0
+
+
+@pytest.mark.asyncio
+async def test_model_retry_strategy_backwards_compatible_event_set_on_retry(mock_sleep):
+    """Test that _backwards_compatible_event_to_yield is set when retrying."""
+    from strands.types._events import EventLoopThrottleEvent
+
+    strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
+    mock_agent = Mock()
+
+    event = AfterModelCallEvent(
+        agent=mock_agent,
+        exception=ModelThrottledException("Throttled"),
+    )
+
+    await strategy._handle_after_model_call(event)
+
+    # Should have set the backwards compatible event
+    assert strategy._backwards_compatible_event_to_yield is not None
+    assert isinstance(strategy._backwards_compatible_event_to_yield, EventLoopThrottleEvent)
+    assert strategy._backwards_compatible_event_to_yield["event_loop_throttled_delay"] == 2
+
+
+@pytest.mark.asyncio
+async def test_model_retry_strategy_backwards_compatible_event_cleared_on_success():
+    """Test that _backwards_compatible_event_to_yield is cleared on success."""
+    from strands.types._events import EventLoopThrottleEvent
+
+    strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
+    mock_agent = Mock()
+
+    # Set a previous backwards compatible event
+    strategy._backwards_compatible_event_to_yield = EventLoopThrottleEvent(delay=2)
+
+    event = AfterModelCallEvent(
+        agent=mock_agent,
+        stop_response=AfterModelCallEvent.ModelStopResponse(
+            message={"role": "assistant", "content": [{"text": "Success"}]},
+            stop_reason="end_turn",
+        ),
+    )
+
+    await strategy._handle_after_model_call(event)
+
+    # Should have cleared the backwards compatible event
+    assert strategy._backwards_compatible_event_to_yield is None
+
+
+@pytest.mark.asyncio
+async def test_model_retry_strategy_backwards_compatible_event_not_set_on_max_attempts(mock_sleep):
+    """Test that _backwards_compatible_event_to_yield is not set when max attempts reached."""
+    strategy = ModelRetryStrategy(max_attempts=1, initial_delay=2, max_delay=60)
+    mock_agent = Mock()
+
+    event = AfterModelCallEvent(
+        agent=mock_agent,
+        exception=ModelThrottledException("Throttled"),
+    )
+
+    await strategy._handle_after_model_call(event)
+
+    # Should not have set the backwards compatible event since max attempts reached
+    assert strategy._backwards_compatible_event_to_yield is None
+    assert event.retry is False
+
+
+@pytest.mark.asyncio
+async def test_model_retry_strategy_no_retry_when_no_exception_and_no_stop_response():
+    """Test that retry is not set when there's no exception and no stop_response."""
+    strategy = ModelRetryStrategy()
+    mock_agent = Mock()
+
+    # Event with neither exception nor stop_response
+    event = AfterModelCallEvent(
+        agent=mock_agent,
+        exception=None,
+        stop_response=None,
+    )
+
+    await strategy._handle_after_model_call(event)
+
+    # Should not retry and should reset state
+    assert event.retry is False
+    assert strategy._current_attempt == 0

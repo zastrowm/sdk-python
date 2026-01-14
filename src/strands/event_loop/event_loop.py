@@ -48,6 +48,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+MAX_ATTEMPTS = 6
+INITIAL_DELAY = 4
+MAX_DELAY = 240  # 4 minutes
+
 
 def _has_tool_use_in_latest_message(messages: "Messages") -> bool:
     """Check if the latest message contains any ToolUse content blocks.

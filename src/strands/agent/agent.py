@@ -31,8 +31,9 @@ from pydantic import BaseModel
 
 from .. import _identifier
 from .._async import run_async
-from ..event_loop.event_loop import event_loop_cycle
+from ..event_loop.event_loop import INITIAL_DELAY, MAX_ATTEMPTS, MAX_DELAY, event_loop_cycle
 from ..tools._tool_helpers import generate_missing_tool_result_content
+from .retry import ModelRetryStrategy
 
 if TYPE_CHECKING:
     from ..experimental.tools import ToolProvider
@@ -125,7 +126,7 @@ class Agent:
         hooks: Optional[list[HookProvider]] = None,
         session_manager: Optional[SessionManager] = None,
         tool_executor: Optional[ToolExecutor] = None,
-        retry_strategy: Optional[HookProvider] = None,
+        retry_strategy: Optional[ModelRetryStrategy] = None,
     ):
         """Initialize the Agent with the specified configuration.
 
@@ -255,10 +256,17 @@ class Agent:
         # separate event loops in different threads, so asyncio.Lock wouldn't work
         self._invocation_lock = threading.Lock()
 
-        # Initialize retry strategy
-        from .retry import ModelRetryStrategy
+        # In the future, we'll have a RetryStrategy base class but until
+        # that API is determined we only allow ModelRetryStrategy
+        if retry_strategy and type(retry_strategy) is not ModelRetryStrategy:
+            raise ValueError("retry_strategy must be an instance of ModelRetryStrategy")
 
-        self._retry_strategy = retry_strategy if retry_strategy is not None else ModelRetryStrategy()
+        self._retry_strategy = (
+            retry_strategy
+            if retry_strategy is not None
+            else ModelRetryStrategy(max_attempts=MAX_ATTEMPTS, max_delay=MAX_DELAY, initial_delay=INITIAL_DELAY)
+        )
+
         # Initialize session management functionality
         self._session_manager = session_manager
         if self._session_manager:
