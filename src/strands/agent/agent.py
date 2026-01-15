@@ -119,7 +119,7 @@ class Agent:
         hooks: list[HookProvider] | None = None,
         session_manager: SessionManager | None = None,
         tool_executor: ToolExecutor | None = None,
-        retry_strategy: Optional[ModelRetryStrategy] = None,
+        retry_strategy: ModelRetryStrategy | None = None,
     ):
         """Initialize the Agent with the specified configuration.
 
