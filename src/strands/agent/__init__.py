@@ -7,6 +7,7 @@ It includes:
 - Retry Strategies: Configurable retry behavior for model calls
 """
 
+from ..event_loop.retry import ModelRetryStrategy
 from .agent import Agent
 from .agent_result import AgentResult
 from .base import AgentBase
@@ -16,7 +17,6 @@ from .conversation_manager import (
     SlidingWindowConversationManager,
     SummarizingConversationManager,
 )
-from ..event_loop.retry import ModelRetryStrategy
 
 __all__ = [
     "Agent",

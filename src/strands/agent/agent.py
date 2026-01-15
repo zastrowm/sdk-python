@@ -27,8 +27,8 @@ from pydantic import BaseModel
 from .. import _identifier
 from .._async import run_async
 from ..event_loop.event_loop import INITIAL_DELAY, MAX_ATTEMPTS, MAX_DELAY, event_loop_cycle
-from ..tools._tool_helpers import generate_missing_tool_result_content
 from ..event_loop.retry import ModelRetryStrategy
+from ..tools._tool_helpers import generate_missing_tool_result_content
 
 if TYPE_CHECKING:
     from ..experimental.tools import ToolProvider
