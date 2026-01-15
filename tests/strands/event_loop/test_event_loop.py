@@ -31,7 +31,7 @@ from tests.fixtures.mocked_model_provider import MockedModelProvider
 
 @pytest.fixture
 def mock_sleep():
-    with patch.object(strands.event_loop.retry.asyncio, "sleep", new_callable=AsyncMock) as mock:
+    with patch.object(strands.event_loop._retry.asyncio, "sleep", new_callable=AsyncMock) as mock:
         yield mock
 
 
@@ -114,7 +114,7 @@ def tool_stream(tool):
 
 @pytest.fixture
 def hook_registry():
-    from strands.event_loop.retry import ModelRetryStrategy
+    from strands.event_loop._retry import ModelRetryStrategy
 
     registry = HookRegistry()
     # Register default retry strategy
@@ -137,7 +137,7 @@ def tool_executor():
 
 @pytest.fixture
 def agent(model, system_prompt, messages, tool_registry, thread_pool, hook_registry, tool_executor):
-    from strands.event_loop.retry import ModelRetryStrategy
+    from strands.event_loop._retry import ModelRetryStrategy
 
     mock = unittest.mock.Mock(name="agent")
     mock.__class__ = Agent

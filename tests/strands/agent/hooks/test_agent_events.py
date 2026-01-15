@@ -34,7 +34,7 @@ async def streaming_tool():
 
 @pytest.fixture
 def mock_sleep():
-    with patch.object(strands.event_loop.retry.asyncio, "sleep", new_callable=AsyncMock) as mock:
+    with patch.object(strands.event_loop._retry.asyncio, "sleep", new_callable=AsyncMock) as mock:
         yield mock
 
 

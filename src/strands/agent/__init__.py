@@ -7,7 +7,7 @@ It includes:
 - Retry Strategies: Configurable retry behavior for model calls
 """
 
-from ..event_loop.retry import ModelRetryStrategy
+from ..event_loop._retry import ModelRetryStrategy
 from .agent import Agent
 from .agent_result import AgentResult
 from .base import AgentBase

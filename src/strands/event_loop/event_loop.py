@@ -42,7 +42,7 @@ from ..types.exceptions import (
 from ..types.streaming import StopReason
 from ..types.tools import ToolResult, ToolUse
 from ._recover_message_on_max_tokens_reached import recover_message_on_max_tokens_reached
-from .retry import ModelRetryStrategy
+from ._retry import ModelRetryStrategy
 from .streaming import stream_messages
 
 if TYPE_CHECKING:
