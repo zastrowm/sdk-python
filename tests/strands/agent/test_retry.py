@@ -5,7 +5,8 @@ from unittest.mock import Mock
 import pytest
 
 from strands.agent.retry import ModelRetryStrategy
-from strands.hooks import AfterModelCallEvent, HookRegistry
+from strands.hooks import AfterInvocationEvent, AfterModelCallEvent, HookRegistry
+from strands.types._events import EventLoopThrottleEvent
 from strands.types.exceptions import ModelThrottledException
 
 # ModelRetryStrategy Tests
@@ -56,8 +57,6 @@ def test_model_retry_strategy_calculate_delay_respects_max_delay():
 
 def test_model_retry_strategy_register_hooks():
     """Test that ModelRetryStrategy registers AfterModelCallEvent and AfterInvocationEvent callbacks."""
-    from strands.hooks import AfterInvocationEvent
-
     strategy = ModelRetryStrategy()
     registry = HookRegistry()
 
@@ -236,8 +235,6 @@ async def test_model_retry_strategy_skips_if_already_retrying():
 @pytest.mark.asyncio
 async def test_model_retry_strategy_reset_on_after_invocation():
     """Test that strategy resets state on AfterInvocationEvent."""
-    from strands.hooks import AfterInvocationEvent
-
     strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
     mock_agent = Mock()
 
@@ -254,8 +251,6 @@ async def test_model_retry_strategy_reset_on_after_invocation():
 @pytest.mark.asyncio
 async def test_model_retry_strategy_backwards_compatible_event_set_on_retry(mock_sleep):
     """Test that _backwards_compatible_event_to_yield is set when retrying."""
-    from strands.types._events import EventLoopThrottleEvent
-
     strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
     mock_agent = Mock()
 
@@ -275,8 +270,6 @@ async def test_model_retry_strategy_backwards_compatible_event_set_on_retry(mock
 @pytest.mark.asyncio
 async def test_model_retry_strategy_backwards_compatible_event_cleared_on_success():
     """Test that _backwards_compatible_event_to_yield is cleared on success."""
-    from strands.types._events import EventLoopThrottleEvent
-
     strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
     mock_agent = Mock()
 
