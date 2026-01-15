@@ -12,7 +12,7 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from ..agent.agent_result import AgentResult
 
-from ..types.content import Message
+from ..types.content import Message, Messages
 from ..types.interrupt import _Interruptible
 from ..types.streaming import StopReason
 from ..types.tools import AgentTool, ToolResult, ToolUse
@@ -43,9 +43,16 @@ class BeforeInvocationEvent(HookEvent):
       - Agent.__call__
       - Agent.stream_async
       - Agent.structured_output
+
+    Attributes:
+        messages: The input messages for this invocation. Can be modified by hooks
+            to redact or transform content before processing.
     """
 
-    pass
+    messages: Messages | None = None
+
+    def _can_write(self, name: str) -> bool:
+        return name == "messages"
 
 
 @dataclass
