@@ -4,8 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from strands import Agent
-from strands.agent.retry import ModelRetryStrategy
+from strands import Agent, ModelRetryStrategy
 from strands.types.exceptions import ModelThrottledException
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 

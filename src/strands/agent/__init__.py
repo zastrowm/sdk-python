@@ -16,7 +16,7 @@ from .conversation_manager import (
     SlidingWindowConversationManager,
     SummarizingConversationManager,
 )
-from .retry import ModelRetryStrategy
+from ..event_loop.retry import ModelRetryStrategy
 
 __all__ = [
     "Agent",

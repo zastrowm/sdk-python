@@ -43,6 +43,7 @@ from ..types.streaming import StopReason
 from ..types.tools import ToolResult, ToolUse
 from ._recover_message_on_max_tokens_reached import recover_message_on_max_tokens_reached
 from .streaming import stream_messages
+from .retry import ModelRetryStrategy
 
 if TYPE_CHECKING:
     from ..agent import Agent
@@ -387,7 +388,6 @@ async def _handle_model_execution(
 
                 # Emit backwards-compatible events if retry strategy supports it
                 # (prior to making the retry strategy configurable, this is what we emitted)
-                from ..agent import ModelRetryStrategy
 
                 if (
                     isinstance(agent.retry_strategy, ModelRetryStrategy)
