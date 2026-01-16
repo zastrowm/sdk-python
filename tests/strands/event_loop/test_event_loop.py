@@ -1,3 +1,4 @@
+import asyncio
 import concurrent
 import unittest.mock
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
@@ -7,6 +8,7 @@ import pytest
 import strands
 import strands.telemetry
 from strands import Agent
+from strands.event_loop._retry import ModelRetryStrategy
 from strands.hooks import (
     AfterModelCallEvent,
     BeforeModelCallEvent,
@@ -114,8 +116,6 @@ def tool_stream(tool):
 
 @pytest.fixture
 def hook_registry():
-    from strands.event_loop._retry import ModelRetryStrategy
-
     registry = HookRegistry()
     # Register default retry strategy
     retry_strategy = ModelRetryStrategy()
@@ -137,8 +137,6 @@ def tool_executor():
 
 @pytest.fixture
 def agent(model, system_prompt, messages, tool_registry, thread_pool, hook_registry, tool_executor):
-    from strands.event_loop._retry import ModelRetryStrategy
-
     mock = unittest.mock.Mock(name="agent")
     mock.__class__ = Agent
     mock.config.cache_points = []
@@ -700,7 +698,6 @@ async def test_event_loop_tracing_with_throttling_exception(
     ]
 
     # Mock the time.sleep function to speed up the test
-    import asyncio
 
     with patch.object(asyncio, "sleep", new_callable=unittest.mock.AsyncMock):
         stream = strands.event_loop.event_loop.event_loop_cycle(

@@ -5,6 +5,8 @@ from unittest.mock import Mock
 import pytest
 
 from strands import Agent, ModelRetryStrategy
+from strands.event_loop.event_loop import INITIAL_DELAY, MAX_ATTEMPTS, MAX_DELAY
+from strands.hooks import AfterModelCallEvent
 from strands.types.exceptions import ModelThrottledException
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
@@ -59,8 +61,6 @@ def test_agent_rejects_subclass_of_model_retry_strategy():
 
 def test_agent_default_retry_strategy_uses_event_loop_constants():
     """Test that default retry strategy uses constants from event_loop module."""
-    from strands.event_loop.event_loop import INITIAL_DELAY, MAX_ATTEMPTS, MAX_DELAY
-
     agent = Agent()
 
     assert agent.retry_strategy._max_attempts == MAX_ATTEMPTS
@@ -74,8 +74,6 @@ def test_retry_strategy_registered_as_hook():
     agent = Agent(retry_strategy=custom_strategy)
 
     # Verify retry strategy callback is registered
-    from strands.hooks import AfterModelCallEvent
-
     callbacks = list(agent.hooks.get_callbacks_for(AfterModelCallEvent(agent=agent, exception=None)))
 
     # Should have at least one callback (from retry strategy)
