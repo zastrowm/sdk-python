@@ -698,7 +698,6 @@ async def test_event_loop_tracing_with_throttling_exception(
     ]
 
     # Mock the time.sleep function to speed up the test
-
     with patch.object(asyncio, "sleep", new_callable=unittest.mock.AsyncMock):
         stream = strands.event_loop.event_loop.event_loop_cycle(
             agent=agent,
