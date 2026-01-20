@@ -390,10 +390,10 @@ async def _handle_model_execution(
                 # (prior to making the retry strategy configurable, this is what we emitted)
 
                 if (
-                    isinstance(agent.retry_strategy, ModelRetryStrategy)
-                    and agent.retry_strategy._backwards_compatible_event_to_yield
+                    isinstance(agent._retry_strategy, ModelRetryStrategy)
+                    and agent._retry_strategy._backwards_compatible_event_to_yield
                 ):
-                    yield agent.retry_strategy._backwards_compatible_event_to_yield
+                    yield agent._retry_strategy._backwards_compatible_event_to_yield
 
                 # Check if hooks want to retry the model call
                 if after_model_call_event.retry:

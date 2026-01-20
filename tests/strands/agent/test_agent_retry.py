@@ -18,14 +18,13 @@ def test_agent_with_default_retry_strategy():
     agent = Agent()
 
     # Should have a retry_strategy
-    assert hasattr(agent, "retry_strategy")
-    assert agent.retry_strategy is not None
+    assert agent._retry_strategy is not None
 
     # Should be ModelRetryStrategy with default parameters
-    assert isinstance(agent.retry_strategy, ModelRetryStrategy)
-    assert agent.retry_strategy._max_attempts == 6
-    assert agent.retry_strategy._initial_delay == 4
-    assert agent.retry_strategy._max_delay == 240
+    assert isinstance(agent._retry_strategy, ModelRetryStrategy)
+    assert agent._retry_strategy._max_attempts == 6
+    assert agent._retry_strategy._initial_delay == 4
+    assert agent._retry_strategy._max_delay == 240
 
 
 def test_agent_with_custom_model_retry_strategy():
@@ -33,10 +32,10 @@ def test_agent_with_custom_model_retry_strategy():
     custom_strategy = ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60)
     agent = Agent(retry_strategy=custom_strategy)
 
-    assert agent.retry_strategy is custom_strategy
-    assert agent.retry_strategy._max_attempts == 3
-    assert agent.retry_strategy._initial_delay == 2
-    assert agent.retry_strategy._max_delay == 60
+    assert agent._retry_strategy is custom_strategy
+    assert agent._retry_strategy._max_attempts == 3
+    assert agent._retry_strategy._initial_delay == 2
+    assert agent._retry_strategy._max_delay == 60
 
 
 def test_agent_rejects_invalid_retry_strategy_type():
@@ -63,9 +62,9 @@ def test_agent_default_retry_strategy_uses_event_loop_constants():
     """Test that default retry strategy uses constants from event_loop module."""
     agent = Agent()
 
-    assert agent.retry_strategy._max_attempts == MAX_ATTEMPTS
-    assert agent.retry_strategy._initial_delay == INITIAL_DELAY
-    assert agent.retry_strategy._max_delay == MAX_DELAY
+    assert agent._retry_strategy._max_attempts == MAX_ATTEMPTS
+    assert agent._retry_strategy._initial_delay == INITIAL_DELAY
+    assert agent._retry_strategy._max_delay == MAX_DELAY
 
 
 def test_retry_strategy_registered_as_hook():
