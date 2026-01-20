@@ -308,7 +308,7 @@ class Agent:
         self._system_prompt, self._system_prompt_content = self._initialize_system_prompt(value)
 
     @property
-    def retry_strategy(self) -> HookProvider:
+    def retry_strategy(self) -> ModelRetryStrategy:
         """Get the retry strategy for this agent.
 
         Returns:
