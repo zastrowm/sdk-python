@@ -174,6 +174,69 @@ class AfterToolCallEvent(HookEvent):
 
 
 @dataclass
+class BeforeToolsEvent(HookEvent, _Interruptible):
+    """Event triggered before a batch of tools are executed.
+
+    This event is fired after the model returns tool use blocks but before
+    the tools are executed. Hook providers can use this event to inspect,
+    log, or implement approval workflows for tool batches.
+
+    The event is interruptible, allowing hook callbacks to pause execution
+    and request user approval before proceeding with tool execution.
+
+    Attributes:
+        message: The message from the model containing tool use blocks.
+        tool_uses: List of tools that will be executed in this batch.
+    """
+
+    message: Message
+    tool_uses: list[ToolUse]
+
+    @override
+    def _interrupt_id(self, name: str) -> str:
+        """Unique id for the interrupt.
+
+        Args:
+            name: User defined name for the interrupt.
+
+        Returns:
+            Interrupt id.
+        """
+        # Use a stable ID based on the tool use IDs in the batch
+        tool_ids = "|".join(str(tool_use.get("toolUseId", "")) for tool_use in self.tool_uses)
+        return f"v1:before_tools:{tool_ids}:{uuid.uuid5(uuid.NAMESPACE_OID, name)}"
+
+
+@dataclass
+class AfterToolsEvent(HookEvent):
+    """Event triggered after a batch of tools complete execution.
+
+    This event is fired after all tools in a batch have been executed,
+    before the tool results are added to the conversation. Hook providers
+    can use this event for cleanup, logging, or batch-level post-processing.
+
+    Note: This event uses reverse callback ordering, meaning callbacks registered
+    later will be invoked first during cleanup.
+
+    Note: Tool results are available in the tool result message created after
+    this event. This event receives the original assistant message with tool uses,
+    not the result message.
+
+    Attributes:
+        message: The original message from the model containing tool use blocks.
+        tool_uses: List of tools that were executed in this batch.
+    """
+
+    message: Message
+    tool_uses: list[ToolUse]
+
+    @property
+    def should_reverse_callbacks(self) -> bool:
+        """True to invoke callbacks in reverse order."""
+        return True
+
+
+@dataclass
 class BeforeModelCallEvent(HookEvent):
     """Event triggered before the model is invoked.
 

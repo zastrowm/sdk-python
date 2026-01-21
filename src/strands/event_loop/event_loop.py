@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from opentelemetry import trace as trace_api
 
-from ..hooks import AfterModelCallEvent, BeforeModelCallEvent, MessageAddedEvent
+from ..hooks import AfterModelCallEvent, AfterToolsEvent, BeforeModelCallEvent, BeforeToolsEvent, MessageAddedEvent
 from ..telemetry.metrics import Trace
 from ..telemetry.tracer import Tracer, get_tracer
 from ..tools._validator import validate_and_prepare_tools
@@ -31,6 +31,7 @@ from ..types._events import (
     StructuredOutputEvent,
     ToolInterruptEvent,
     ToolResultMessageEvent,
+    ToolsInterruptEvent,
     TypedEvent,
 )
 from ..types.content import Message, Messages
@@ -485,14 +486,34 @@ async def _handle_tool_execution(
         tool_uses = [tool_use for tool_use in tool_uses if tool_use["toolUseId"] not in tool_use_ids]
 
     interrupts = []
-    tool_events = agent.tool_executor._execute(
-        agent, tool_uses, tool_results, cycle_trace, cycle_span, invocation_state, structured_output_context
-    )
-    async for tool_event in tool_events:
-        if isinstance(tool_event, ToolInterruptEvent):
-            interrupts.extend(tool_event["tool_interrupt_event"]["interrupts"])
+    batch_interrupted = False
+    
+    # Fire BeforeToolsEvent if there are tools to execute
+    if tool_uses:
+        before_event = BeforeToolsEvent(agent=agent, message=message, tool_uses=tool_uses)
+        _, batch_interrupts = await agent.hooks.invoke_callbacks_async(before_event)
+        
+        if batch_interrupts:
+            batch_interrupted = True
+            interrupts.extend(batch_interrupts)
+            # Yield ToolsInterruptEvent for batch-level interrupts
+            yield ToolsInterruptEvent(tool_uses, batch_interrupts)
 
-        yield tool_event
+    # Only execute tools if not interrupted at batch level
+    if not batch_interrupted:
+        tool_events = agent.tool_executor._execute(
+            agent, tool_uses, tool_results, cycle_trace, cycle_span, invocation_state, structured_output_context
+        )
+        async for tool_event in tool_events:
+            if isinstance(tool_event, ToolInterruptEvent):
+                interrupts.extend(tool_event["tool_interrupt_event"]["interrupts"])
+
+            yield tool_event
+    
+    # Fire AfterToolsEvent if there are tools and no batch-level interrupt
+    if tool_uses and not batch_interrupted:
+        after_event = AfterToolsEvent(agent=agent, message=message, tool_uses=tool_uses)
+        await agent.hooks.invoke_callbacks_async(after_event)
 
     structured_output_result = None
     if structured_output_context.is_enabled:

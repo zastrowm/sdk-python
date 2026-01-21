@@ -324,6 +324,9 @@ class ToolExecutor(abc.ABC):
     ) -> AsyncGenerator[TypedEvent, None]:
         """Execute the given tools according to this executor's strategy.
 
+        BeforeToolsEvent and AfterToolsEvent hooks are triggered by the event loop,
+        not by the executor implementations.
+
         Args:
             agent: The agent for which tools are being executed.
             tool_uses: Metadata and inputs for the tools to be executed.

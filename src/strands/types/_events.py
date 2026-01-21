@@ -358,6 +358,28 @@ class ToolInterruptEvent(TypedEvent):
         return cast(list[Interrupt], self["tool_interrupt_event"]["interrupts"])
 
 
+class ToolsInterruptEvent(TypedEvent):
+    """Event emitted when a batch of tools is interrupted before execution.
+    
+    This event is fired when BeforeToolsEvent callbacks raise interrupts,
+    preventing the batch of tools from executing.
+    """
+
+    def __init__(self, tool_uses: list[ToolUse], interrupts: list[Interrupt]) -> None:
+        """Set batch interrupt in the event payload.
+        
+        Args:
+            tool_uses: The list of tools that would have been executed
+            interrupts: The interrupts raised during BeforeToolsEvent
+        """
+        super().__init__({"tools_interrupt_event": {"tool_uses": tool_uses, "interrupts": interrupts}})
+
+    @property
+    def interrupts(self) -> list[Interrupt]:
+        """The interrupt instances."""
+        return cast(list[Interrupt], self["tools_interrupt_event"]["interrupts"])
+
+
 class ModelMessageEvent(TypedEvent):
     """Event emitted when the model invocation has completed.
 
