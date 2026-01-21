@@ -486,7 +486,7 @@ async def _handle_tool_execution(
 
     interrupts = []
     tool_events = agent.tool_executor._execute(
-        agent, tool_uses, tool_results, cycle_trace, cycle_span, invocation_state, structured_output_context
+        agent, message, tool_uses, tool_results, cycle_trace, cycle_span, invocation_state, structured_output_context
     )
     async for tool_event in tool_events:
         if isinstance(tool_event, ToolInterruptEvent):

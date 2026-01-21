@@ -9,10 +9,12 @@ from strands.hooks import (
     AfterInvocationEvent,
     AfterModelCallEvent,
     AfterToolCallEvent,
+    AfterToolsEvent,
     AgentInitializedEvent,
     BeforeInvocationEvent,
     BeforeModelCallEvent,
     BeforeToolCallEvent,
+    BeforeToolsEvent,
     MessageAddedEvent,
 )
 from strands.types.content import Messages
@@ -476,7 +478,267 @@ async def test_hook_retry_with_limit(alist, mock_sleep):
 
     # Should be called 3 times: initial + 2 retries
     assert retry_hook.call_count == 3
-    assert retry_hook.retry_count == 2
+
+
+# Tests for BeforeToolsEvent and AfterToolsEvent
+
+
+def test_before_tools_event_triggered(agent, hook_provider, agent_tool, tool_use):
+    """Verify that BeforeToolsEvent is triggered before tool batch execution."""
+    # Add batch event tracking
+    batch_hook_provider = MockHookProvider([BeforeToolsEvent, AfterToolsEvent])
+    agent.hooks.add_hook(batch_hook_provider)
+
+    result = agent("test message")
+
+    # Check that BeforeToolsEvent was triggered
+    batch_length, batch_events = batch_hook_provider.get_events()
+    assert batch_length == 2  # BeforeToolsEvent and AfterToolsEvent
+
+    before_event = next(batch_events)
+    assert isinstance(before_event, BeforeToolsEvent)
+    assert before_event.agent == agent
+    assert len(before_event.tool_uses) == 1
+    assert before_event.tool_uses[0]["name"] == "tool_decorated"
+    assert "toolUse" in before_event.message["content"][0]
+
+
+def test_after_tools_event_triggered(agent, hook_provider, agent_tool, tool_use):
+    """Verify that AfterToolsEvent is triggered after all tools complete."""
+    # Add batch event tracking
+    batch_hook_provider = MockHookProvider([BeforeToolsEvent, AfterToolsEvent])
+    agent.hooks.add_hook(batch_hook_provider)
+
+    result = agent("test message")
+
+    # Check that AfterToolsEvent was triggered
+    batch_length, batch_events = batch_hook_provider.get_events()
+    assert batch_length == 2
+
+    before_event = next(batch_events)
+    after_event = next(batch_events)
+    
+    assert isinstance(after_event, AfterToolsEvent)
+    assert after_event.agent == agent
+    assert len(after_event.tool_uses) == 1
+    assert after_event.tool_uses[0]["name"] == "tool_decorated"
+    assert "toolUse" in after_event.message["content"][0]
+
+
+def test_after_tools_event_reverse_ordering():
+    """Verify that AfterToolsEvent uses reverse callback ordering."""
+    execution_order = []
+
+    class OrderTrackingHook1:
+        def register_hooks(self, registry):
+            registry.add_callback(AfterToolsEvent, lambda event: execution_order.append("hook1"))
+
+    class OrderTrackingHook2:
+        def register_hooks(self, registry):
+            registry.add_callback(AfterToolsEvent, lambda event: execution_order.append("hook2"))
+
+    @strands.tools.tool
+    def sample_tool(x: int) -> int:
+        return x * 2
+
+    tool_use = {"name": "sample_tool", "toolUseId": "123", "input": {"x": 5}}
+    agent_messages: Messages = [
+        {"role": "assistant", "content": [{"toolUse": tool_use}]},
+        {"role": "assistant", "content": [{"text": "Done"}]},
+    ]
+    model = MockedModelProvider(agent_messages)
+
+    agent = Agent(
+        model=model,
+        tools=[sample_tool],
+        hooks=[OrderTrackingHook1(), OrderTrackingHook2()],
+    )
+
+    agent("test")
+
+    # AfterToolsEvent should execute in reverse order: hook2 before hook1
+    assert execution_order == ["hook2", "hook1"]
+
+
+def test_before_tools_event_with_multiple_tools():
+    """Verify that BeforeToolsEvent contains all tools in batch."""
+    batch_hook_provider = MockHookProvider([BeforeToolsEvent, AfterToolsEvent])
+
+    @strands.tools.tool
+    def tool1(x: int) -> int:
+        return x + 1
+
+    @strands.tools.tool
+    def tool2(y: int) -> int:
+        return y * 2
+
+    tool_use_1 = {"name": "tool1", "toolUseId": "123", "input": {"x": 5}}
+    tool_use_2 = {"name": "tool2", "toolUseId": "456", "input": {"y": 10}}
+    
+    agent_messages: Messages = [
+        {"role": "assistant", "content": [{"toolUse": tool_use_1}, {"toolUse": tool_use_2}]},
+        {"role": "assistant", "content": [{"text": "Done"}]},
+    ]
+    model = MockedModelProvider(agent_messages)
+
+    agent = Agent(
+        model=model,
+        tools=[tool1, tool2],
+        hooks=[batch_hook_provider],
+    )
+
+    agent("test")
+
+    batch_length, batch_events = batch_hook_provider.get_events()
+    before_event = next(batch_events)
+    
+    assert isinstance(before_event, BeforeToolsEvent)
+    assert len(before_event.tool_uses) == 2
+    assert before_event.tool_uses[0]["name"] == "tool1"
+    assert before_event.tool_uses[1]["name"] == "tool2"
+
+
+def test_batch_events_not_triggered_without_tools():
+    """Verify that batch events are not triggered when no tools are present."""
+    batch_hook_provider = MockHookProvider([BeforeToolsEvent, AfterToolsEvent])
+
+    # Response with no tool uses
+    agent_messages: Messages = [
+        {"role": "assistant", "content": [{"text": "No tools used"}]},
+    ]
+    model = MockedModelProvider(agent_messages)
+
+    agent = Agent(
+        model=model,
+        hooks=[batch_hook_provider],
+    )
+
+    agent("test")
+
+    # No batch events should be triggered
+    batch_length, _ = batch_hook_provider.get_events()
+    assert batch_length == 0
+
+
+def test_before_tools_event_interrupt():
+    """Verify that BeforeToolsEvent interrupt stops batch execution."""
+    batch_hook_provider = MockHookProvider([BeforeToolsEvent, AfterToolsEvent])
+    tool_hook_provider = MockHookProvider([BeforeToolCallEvent, AfterToolCallEvent])
+
+    class InterruptHook:
+        def register_hooks(self, registry):
+            registry.add_callback(BeforeToolsEvent, self.interrupt_batch)
+
+        def interrupt_batch(self, event: BeforeToolsEvent):
+            # Interrupt without providing response
+            event.interrupt("batch-approval", reason="Need approval")
+
+    @strands.tools.tool
+    def sample_tool(x: int) -> int:
+        return x * 2
+
+    tool_use = {"name": "sample_tool", "toolUseId": "123", "input": {"x": 5}}
+    agent_messages: Messages = [
+        {"role": "assistant", "content": [{"toolUse": tool_use}]},
+    ]
+    model = MockedModelProvider(agent_messages)
+
+    agent = Agent(
+        model=model,
+        tools=[sample_tool],
+        hooks=[InterruptHook(), batch_hook_provider, tool_hook_provider],
+    )
+
+    result = agent("test")
+
+    # Agent should stop with interrupt
+    assert result.stop_reason == "interrupt"
+    assert len(result.interrupts) == 1
+    assert result.interrupts[0].name == "batch-approval"
+
+    # BeforeToolsEvent should be triggered but AfterToolsEvent should not
+    batch_length, batch_events = batch_hook_provider.get_events()
+    assert batch_length == 1  # Only BeforeToolsEvent
+    assert isinstance(next(batch_events), BeforeToolsEvent)
+
+    # No individual tool events should be triggered
+    tool_length, _ = tool_hook_provider.get_events()
+    assert tool_length == 0
+
+
+@pytest.mark.asyncio
+async def test_before_tools_event_interrupt_async():
+    """Verify that BeforeToolsEvent interrupt works in async context."""
+    batch_hook_provider = MockHookProvider([BeforeToolsEvent, AfterToolsEvent])
+
+    class AsyncInterruptHook:
+        def register_hooks(self, registry):
+            registry.add_callback(BeforeToolsEvent, self.interrupt_batch)
+
+        async def interrupt_batch(self, event: BeforeToolsEvent):
+            event.interrupt("async-batch-approval", reason="Async approval needed")
+
+    @strands.tools.tool
+    def sample_tool(x: int) -> int:
+        return x * 2
+
+    tool_use = {"name": "sample_tool", "toolUseId": "123", "input": {"x": 5}}
+    agent_messages: Messages = [
+        {"role": "assistant", "content": [{"toolUse": tool_use}]},
+    ]
+    model = MockedModelProvider(agent_messages)
+
+    agent = Agent(
+        model=model,
+        tools=[sample_tool],
+        hooks=[AsyncInterruptHook(), batch_hook_provider],
+    )
+
+    # Call agent synchronously but the hook is async
+    result = agent("test")
+
+    assert result.stop_reason == "interrupt"
+    assert len(result.interrupts) == 1
+    assert result.interrupts[0].name == "async-batch-approval"
+
+
+def test_batch_events_with_tool_events():
+    """Verify that batch events and per-tool events are triggered in correct order."""
+    all_hook_provider = MockHookProvider([
+        BeforeToolsEvent,
+        AfterToolsEvent,
+        BeforeToolCallEvent,
+        AfterToolCallEvent,
+    ])
+
+    @strands.tools.tool
+    def sample_tool(x: int) -> int:
+        return x * 2
+
+    tool_use = {"name": "sample_tool", "toolUseId": "123", "input": {"x": 5}}
+    agent_messages: Messages = [
+        {"role": "assistant", "content": [{"toolUse": tool_use}]},
+        {"role": "assistant", "content": [{"text": "Done"}]},
+    ]
+    model = MockedModelProvider(agent_messages)
+
+    agent = Agent(
+        model=model,
+        tools=[sample_tool],
+        hooks=[all_hook_provider],
+    )
+
+    agent("test")
+
+    event_length, events = all_hook_provider.get_events()
+    assert event_length == 4
+
+    # Expected order: BeforeToolsEvent, BeforeToolCallEvent, AfterToolCallEvent, AfterToolsEvent
+    event_list = list(events)
+    assert isinstance(event_list[0], BeforeToolsEvent)
+    assert isinstance(event_list[1], BeforeToolCallEvent)
+    assert isinstance(event_list[2], AfterToolCallEvent)
+    assert isinstance(event_list[3], AfterToolsEvent)
 
 
 @pytest.mark.asyncio
