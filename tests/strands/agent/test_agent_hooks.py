@@ -656,12 +656,15 @@ def test_before_tools_event_interrupt():
     assert len(result.interrupts) == 1
     assert result.interrupts[0].name == "batch-approval"
 
-    # BeforeToolsEvent should be triggered but AfterToolsEvent should not
+    # Both BeforeToolsEvent and AfterToolsEvent should be triggered
     batch_length, batch_events = batch_hook_provider.get_events()
-    assert batch_length == 1  # Only BeforeToolsEvent
-    assert isinstance(next(batch_events), BeforeToolsEvent)
+    assert batch_length == 2  # BeforeToolsEvent and AfterToolsEvent
+    event1 = next(batch_events)
+    event2 = next(batch_events)
+    assert isinstance(event1, BeforeToolsEvent)
+    assert isinstance(event2, AfterToolsEvent)
 
-    # No individual tool events should be triggered
+    # No individual tool events should be triggered (tools didn't execute)
     tool_length, _ = tool_hook_provider.get_events()
     assert tool_length == 0
 
@@ -700,6 +703,10 @@ async def test_before_tools_event_interrupt_async():
     assert result.stop_reason == "interrupt"
     assert len(result.interrupts) == 1
     assert result.interrupts[0].name == "async-batch-approval"
+    
+    # Both BeforeToolsEvent and AfterToolsEvent should be triggered
+    batch_length, _ = batch_hook_provider.get_events()
+    assert batch_length == 2
 
 
 def test_batch_events_with_tool_events():

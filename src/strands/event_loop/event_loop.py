@@ -31,6 +31,7 @@ from ..types._events import (
     StructuredOutputEvent,
     ToolInterruptEvent,
     ToolResultMessageEvent,
+    ToolsInterruptEvent,
     TypedEvent,
 )
 from ..types.content import Message, Messages
@@ -485,12 +486,15 @@ async def _handle_tool_execution(
         tool_uses = [tool_use for tool_use in tool_uses if tool_use["toolUseId"] not in tool_use_ids]
 
     interrupts = []
+    
     tool_events = agent.tool_executor._execute(
         agent, message, tool_uses, tool_results, cycle_trace, cycle_span, invocation_state, structured_output_context
     )
     async for tool_event in tool_events:
         if isinstance(tool_event, ToolInterruptEvent):
             interrupts.extend(tool_event["tool_interrupt_event"]["interrupts"])
+        elif isinstance(tool_event, ToolsInterruptEvent):
+            interrupts.extend(tool_event["tools_interrupt_event"]["interrupts"])
 
         yield tool_event
 
