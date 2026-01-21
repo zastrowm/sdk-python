@@ -315,7 +315,6 @@ class ToolExecutor(abc.ABC):
     def _execute(
         self,
         agent: "Agent",
-        message: Message,
         tool_uses: list[ToolUse],
         tool_results: list[ToolResult],
         cycle_trace: Trace,
@@ -325,12 +324,11 @@ class ToolExecutor(abc.ABC):
     ) -> AsyncGenerator[TypedEvent, None]:
         """Execute the given tools according to this executor's strategy.
 
-        This method is responsible for executing the tools in a batch and triggering
-        the BeforeToolsEvent and AfterToolsEvent hooks at the appropriate times.
+        BeforeToolsEvent and AfterToolsEvent hooks are triggered by the event loop,
+        not by the executor implementations.
 
         Args:
             agent: The agent for which tools are being executed.
-            message: The message from the model containing tool use blocks.
             tool_uses: Metadata and inputs for the tools to be executed.
             tool_results: List of tool results from each tool execution.
             cycle_trace: Trace object for the current event loop cycle.
