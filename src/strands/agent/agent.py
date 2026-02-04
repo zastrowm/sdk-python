@@ -78,7 +78,14 @@ class _DefaultCallbackHandlerSentinel:
     pass
 
 
+class _DefaultRetryStrategySentinel:
+    """Sentinel class to distinguish between explicit None and default parameter value for retry_strategy."""
+
+    pass
+
+
 _DEFAULT_CALLBACK_HANDLER = _DefaultCallbackHandlerSentinel()
+_DEFAULT_RETRY_STRATEGY = _DefaultRetryStrategySentinel()
 _DEFAULT_AGENT_NAME = "Strands Agents"
 _DEFAULT_AGENT_ID = "default"
 
@@ -120,7 +127,7 @@ class Agent:
         session_manager: SessionManager | None = None,
         structured_output_prompt: str | None = None,
         tool_executor: ToolExecutor | None = None,
-        retry_strategy: ModelRetryStrategy | None = None,
+        retry_strategy: ModelRetryStrategy | _DefaultRetryStrategySentinel | None = _DEFAULT_RETRY_STRATEGY,
     ):
         """Initialize the Agent with the specified configuration.
 
@@ -258,14 +265,25 @@ class Agent:
 
         # In the future, we'll have a RetryStrategy base class but until
         # that API is determined we only allow ModelRetryStrategy
-        if retry_strategy and type(retry_strategy) is not ModelRetryStrategy:
+        if (
+            retry_strategy is not None
+            and not isinstance(retry_strategy, _DefaultRetryStrategySentinel)
+            and type(retry_strategy) is not ModelRetryStrategy
+        ):
             raise ValueError("retry_strategy must be an instance of ModelRetryStrategy")
 
-        self._retry_strategy = (
-            retry_strategy
-            if retry_strategy is not None
-            else ModelRetryStrategy(max_attempts=MAX_ATTEMPTS, max_delay=MAX_DELAY, initial_delay=INITIAL_DELAY)
-        )
+        # If not provided (using the default), create a new ModelRetryStrategy instance
+        # If explicitly set to None, disable retries (max_attempts=1 means no retries)
+        # Otherwise use the passed retry_strategy
+        if isinstance(retry_strategy, _DefaultRetryStrategySentinel):
+            self._retry_strategy = ModelRetryStrategy(
+                max_attempts=MAX_ATTEMPTS, max_delay=MAX_DELAY, initial_delay=INITIAL_DELAY
+            )
+        elif retry_strategy is None:
+            # If no retry strategy is passed in, then we turn retries off
+            self._retry_strategy = ModelRetryStrategy(max_attempts=1)
+        else:
+            self._retry_strategy = retry_strategy
 
         # Initialize session management functionality
         self._session_manager = session_manager
