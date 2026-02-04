@@ -4,7 +4,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, call, patch
 
 import pytest
 
-from strands.agent import Agent, AgentResult
+from strands.agent import Agent, AgentBase, AgentResult
 from strands.agent.state import AgentState
 from strands.hooks import AgentInitializedEvent, BeforeNodeCallEvent
 from strands.hooks.registry import HookProvider, HookRegistry
@@ -1102,9 +1102,6 @@ async def test_state_reset_only_with_cycles_enabled():
 
     # Create GraphNode
     node = GraphNode("test_node", agent)
-
-    # Simulate agent being in completed_nodes (as if revisited)
-    from strands.multiagent.graph import GraphState
 
     state = GraphState()
     state.completed_nodes.add(node)
@@ -2354,3 +2351,57 @@ def test_graph_interrupt_on_multiagent(agenerator):
     assert len(multiagent_result.results) == 1
 
     multiagent.stream_async.assert_called_once_with(responses, {})
+
+
+@pytest.mark.asyncio
+async def test_graph_with_agentbase_implementation(mock_strands_tracer, mock_use_span):
+    """Test that Graph accepts any AgentBase implementation (not just Agent)."""
+
+    # Create a minimal AgentBase implementation
+    class CustomAgentBase:
+        """Custom AgentBase implementation for testing."""
+
+        def __init__(self, name: str, response_text: str):
+            self.name = name
+            self.id = f"{name}_id"
+            self._response_text = response_text
+
+        def __call__(self, prompt=None, **kwargs):
+            return AgentResult(
+                message={"role": "assistant", "content": [{"text": self._response_text}]},
+                stop_reason="end_turn",
+                state={},
+                metrics=Mock(
+                    accumulated_usage={"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
+                    accumulated_metrics={"latencyMs": 100.0},
+                ),
+            )
+
+        async def invoke_async(self, prompt=None, **kwargs):
+            return self(prompt, **kwargs)
+
+        async def stream_async(self, prompt=None, **kwargs):
+            yield {"start": True}
+            yield {"result": self(prompt, **kwargs)}
+
+    # Verify it satisfies AgentBase protocol
+    custom_agent = CustomAgentBase("custom", "Custom response")
+    assert isinstance(custom_agent, AgentBase)
+
+    # Create a regular mock agent
+    regular_agent = create_mock_agent("regular", "Regular response")
+
+    # Build graph with both
+    builder = GraphBuilder()
+    builder.add_node(custom_agent, "custom_node")
+    builder.add_node(regular_agent, "regular_node")
+    builder.add_edge("custom_node", "regular_node")
+    builder.set_entry_point("custom_node")
+    graph = builder.build()
+
+    result = await graph.invoke_async("Test task")
+
+    assert result.status == Status.COMPLETED
+    assert result.completed_nodes == 2
+    assert "custom_node" in result.results
+    assert "regular_node" in result.results
