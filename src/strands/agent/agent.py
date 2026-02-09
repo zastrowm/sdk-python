@@ -78,7 +78,14 @@ class _DefaultCallbackHandlerSentinel:
     pass
 
 
+class _DefaultRetryStrategySentinel:
+    """Sentinel class to distinguish between explicit None and default retry strategy."""
+
+    pass
+
+
 _DEFAULT_CALLBACK_HANDLER = _DefaultCallbackHandlerSentinel()
+_DEFAULT_RETRY_STRATEGY = _DefaultRetryStrategySentinel()
 _DEFAULT_AGENT_NAME = "Strands Agents"
 _DEFAULT_AGENT_ID = "default"
 
@@ -119,7 +126,7 @@ class Agent:
         hooks: list[HookProvider] | None = None,
         session_manager: SessionManager | None = None,
         tool_executor: ToolExecutor | None = None,
-        retry_strategy: ModelRetryStrategy | None = None,
+        retry_strategy: ModelRetryStrategy | _DefaultRetryStrategySentinel | None = _DEFAULT_RETRY_STRATEGY,
     ):
         """Initialize the Agent with the specified configuration.
 
@@ -251,14 +258,26 @@ class Agent:
 
         # In the future, we'll have a RetryStrategy base class but until
         # that API is determined we only allow ModelRetryStrategy
-        if retry_strategy and type(retry_strategy) is not ModelRetryStrategy:
+        # Skip validation for sentinel (default) and None (disabled)
+        if (
+            retry_strategy is not None
+            and not isinstance(retry_strategy, _DefaultRetryStrategySentinel)
+            and type(retry_strategy) is not ModelRetryStrategy
+        ):
             raise ValueError("retry_strategy must be an instance of ModelRetryStrategy")
 
-        self._retry_strategy = (
-            retry_strategy
-            if retry_strategy is not None
-            else ModelRetryStrategy(max_attempts=MAX_ATTEMPTS, max_delay=MAX_DELAY, initial_delay=INITIAL_DELAY)
-        )
+        # If not provided (sentinel), create default ModelRetryStrategy
+        # If explicitly set to None, disable retries
+        # Otherwise use the provided retry_strategy
+        self._retry_strategy: ModelRetryStrategy | None
+        if isinstance(retry_strategy, _DefaultRetryStrategySentinel):
+            self._retry_strategy = ModelRetryStrategy(
+                max_attempts=MAX_ATTEMPTS, max_delay=MAX_DELAY, initial_delay=INITIAL_DELAY
+            )
+        elif retry_strategy is None:
+            self._retry_strategy = None
+        else:
+            self._retry_strategy = retry_strategy
 
         # Initialize session management functionality
         self._session_manager = session_manager
@@ -268,8 +287,9 @@ class Agent:
         # Allow conversation_managers to subscribe to hooks
         self.hooks.add_hook(self.conversation_manager)
 
-        # Register retry strategy as a hook
-        self.hooks.add_hook(self._retry_strategy)
+        # Register retry strategy as a hook (only if not disabled)
+        if self._retry_strategy is not None:
+            self.hooks.add_hook(self._retry_strategy)
 
         self.tool_executor = tool_executor or ConcurrentToolExecutor()
 

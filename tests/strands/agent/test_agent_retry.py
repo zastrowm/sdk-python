@@ -14,7 +14,7 @@ from tests.fixtures.mocked_model_provider import MockedModelProvider
 
 
 def test_agent_with_default_retry_strategy():
-    """Test that Agent uses ModelRetryStrategy by default when retry_strategy=None."""
+    """Test that Agent uses ModelRetryStrategy by default when retry_strategy is not provided."""
     agent = Agent()
 
     # Should have a retry_strategy
@@ -25,6 +25,27 @@ def test_agent_with_default_retry_strategy():
     assert agent._retry_strategy._max_attempts == 6
     assert agent._retry_strategy._initial_delay == 4
     assert agent._retry_strategy._max_delay == 240
+
+
+def test_agent_with_retry_strategy_none_disables_retries():
+    """Test that retry_strategy=None explicitly disables retries."""
+    agent = Agent(retry_strategy=None)
+
+    # Should have no retry_strategy
+    assert agent._retry_strategy is None
+
+
+def test_agent_with_retry_strategy_none_does_not_register_retry_hook():
+    """Test that retry_strategy=None does not register retry hook."""
+    agent = Agent(retry_strategy=None)
+
+    # Check that no ModelRetryStrategy callback is registered
+    callbacks = list(agent.hooks.get_callbacks_for(AfterModelCallEvent(agent=agent, exception=None)))
+
+    # None of the callbacks should be from ModelRetryStrategy
+    for callback in callbacks:
+        if hasattr(callback, "__self__"):
+            assert not isinstance(callback.__self__, ModelRetryStrategy)
 
 
 def test_agent_with_custom_model_retry_strategy():
@@ -133,6 +154,27 @@ async def test_agent_respects_max_attempts(mock_sleep):
     # Attempt 0: fail, sleep
     # Attempt 1: fail, no more attempts
     assert len(mock_sleep.sleep_calls) == 1
+
+
+# Retry Strategy None Tests
+
+
+@pytest.mark.asyncio
+async def test_agent_with_retry_strategy_none_does_not_retry_on_throttle(mock_sleep):
+    """Test that retry_strategy=None causes throttling exceptions to propagate immediately."""
+    # Create a model that fails with throttling
+    model = Mock()
+    model.stream.side_effect = ModelThrottledException("ThrottlingException")
+
+    # Explicitly disable retries
+    agent = Agent(model=model, retry_strategy=None)
+
+    with pytest.raises(ModelThrottledException):
+        result = agent.stream_async("test prompt")
+        _ = [event async for event in result]
+
+    # Should NOT have slept at all since retries are disabled
+    assert len(mock_sleep.sleep_calls) == 0
 
 
 # Backwards Compatibility Tests
