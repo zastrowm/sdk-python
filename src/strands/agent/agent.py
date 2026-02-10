@@ -962,6 +962,7 @@ class Agent(AgentBase):
             agent.load_snapshot(snapshot)
             ```
         """
+        from ..hooks import SnapshotCreatedEvent
         from .snapshot import SNAPSHOT_VERSION, Snapshot, create_timestamp
 
         logger.debug("agent_id=<%s> | taking snapshot", self.agent_id)
@@ -972,12 +973,15 @@ class Agent(AgentBase):
             "timestamp": create_timestamp(),
             "state": {
                 "messages": list(self.messages),
-                "agent_state": self.state.get(),
+                "state": self.state.get(),
                 "conversation_manager_state": self.conversation_manager.get_state(),
                 "interrupt_state": self._interrupt_state.to_dict(),
             },
             "metadata": metadata or {},
         }
+
+        # Fire hook to allow custom data to be added to the snapshot
+        self.hooks.invoke_callbacks(SnapshotCreatedEvent(agent=self, snapshot=snapshot))
 
         logger.debug("agent_id=<%s>, message_count=<%d> | snapshot taken", self.agent_id, len(self.messages))
         return snapshot
@@ -1015,10 +1019,12 @@ class Agent(AgentBase):
         state = snapshot["state"]
 
         # Restore messages
-        self.messages = list(state["messages"])
+        if "messages" in state:
+            self.messages = list(state["messages"])
 
         # Restore agent state
-        self.state = AgentState(state["agent_state"])
+        if "state" in state:
+            self.state = AgentState(state["state"])
 
         # Restore conversation manager state
         if "conversation_manager_state" in state:

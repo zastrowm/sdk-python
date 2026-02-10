@@ -44,6 +44,8 @@ from .events import (
     BeforeToolCallEvent,
     MessageAddedEvent,
     MultiAgentInitializedEvent,
+    # Snapshot hook events
+    SnapshotCreatedEvent,
 )
 from .registry import BaseHookEvent, HookCallback, HookEvent, HookProvider, HookRegistry
 
@@ -67,4 +69,5 @@ __all__ = [
     "BeforeMultiAgentInvocationEvent",
     "BeforeNodeCallEvent",
     "MultiAgentInitializedEvent",
+    "SnapshotCreatedEvent",
 ]

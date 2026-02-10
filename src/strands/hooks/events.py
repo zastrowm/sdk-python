@@ -387,3 +387,33 @@ class AfterMultiAgentInvocationEvent(BaseHookEvent):
     def should_reverse_callbacks(self) -> bool:
         """True to invoke callbacks in reverse order."""
         return True
+
+
+# Snapshot hook events
+@dataclass
+class SnapshotCreatedEvent(HookEvent):
+    """Event triggered after a snapshot has been created.
+
+    This event is fired after the agent has created a snapshot, allowing hook
+    providers to add their own custom data to the snapshot's metadata field
+    before it is returned to the caller.
+
+    Attributes:
+        snapshot: The snapshot that was created. Hook providers can modify
+            the metadata field to add application-specific data.
+
+    Example:
+        ```python
+        class CustomDataHook(HookProvider):
+            def register_hooks(self, registry: HookRegistry) -> None:
+                registry.add_callback(SnapshotCreatedEvent, self.on_snapshot_created)
+
+            def on_snapshot_created(self, event: SnapshotCreatedEvent) -> None:
+                event.snapshot["metadata"]["custom_key"] = "custom_value"
+        ```
+    """
+
+    snapshot: dict[str, Any]  # Snapshot TypedDict
+
+    def _can_write(self, name: str) -> bool:
+        return name == "snapshot"

@@ -41,7 +41,7 @@ class TestSnapshotTypedDict:
             "type": "agent",
             "version": "1.0",
             "timestamp": "2024-01-01T00:00:00+00:00",
-            "state": {"messages": [], "agent_state": {"key": "value"}},
+            "state": {"messages": [], "state": {"key": "value"}},
             "metadata": {"user_id": "123", "session_name": "test"},
         }
 
@@ -78,7 +78,7 @@ class TestAgentTakeSnapshot:
         assert snapshot["version"] == "1.0"
         assert "timestamp" in snapshot
         assert snapshot["state"]["messages"] == []
-        assert snapshot["state"]["agent_state"] == {}
+        assert snapshot["state"]["state"] == {}
         assert snapshot["metadata"] == {}
 
     def test_take_snapshot_with_messages(self):
@@ -100,7 +100,7 @@ class TestAgentTakeSnapshot:
 
         snapshot = agent.take_snapshot()
 
-        assert snapshot["state"]["agent_state"] == {"counter": 42, "name": "test"}
+        assert snapshot["state"]["state"] == {"counter": 42, "name": "test"}
 
     def test_take_snapshot_with_metadata(self):
         """Take snapshot with application-provided metadata."""
@@ -151,7 +151,7 @@ class TestAgentLoadSnapshot:
             "timestamp": "2024-01-01T00:00:00+00:00",
             "state": {
                 "messages": [{"role": "user", "content": [{"text": "Hello"}]}],
-                "agent_state": {},
+                "state": {},
                 "conversation_manager_state": {
                     "__name__": "SlidingWindowConversationManager",
                     "removed_message_count": 0,
@@ -175,7 +175,7 @@ class TestAgentLoadSnapshot:
             "timestamp": "2024-01-01T00:00:00+00:00",
             "state": {
                 "messages": [],
-                "agent_state": {"counter": 42, "name": "restored"},
+                "state": {"counter": 42, "name": "restored"},
                 "conversation_manager_state": {
                     "__name__": "SlidingWindowConversationManager",
                     "removed_message_count": 0,
@@ -364,3 +364,46 @@ class TestMetadataPreservation:
             assert loaded["metadata"] == metadata
         finally:
             Path(path).unlink(missing_ok=True)
+
+
+class TestSnapshotCreatedHook:
+    """Tests for SnapshotCreatedEvent hook."""
+
+    def test_snapshot_created_hook_is_fired(self):
+        """Verify SnapshotCreatedEvent hook is fired after taking snapshot."""
+        from strands.hooks import HookProvider, HookRegistry, SnapshotCreatedEvent
+
+        hook_called = []
+
+        class TestHook(HookProvider):
+            def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+                registry.add_callback(SnapshotCreatedEvent, self.on_snapshot_created)
+
+            def on_snapshot_created(self, event: SnapshotCreatedEvent) -> None:
+                hook_called.append(True)
+                event.snapshot["metadata"]["hook_added"] = "test_value"
+
+        agent = Agent(model=MockedModelProvider([]), hooks=[TestHook()])
+        snapshot = agent.take_snapshot()
+
+        assert len(hook_called) == 1
+        assert snapshot["metadata"]["hook_added"] == "test_value"
+
+    def test_hook_can_add_custom_data_to_metadata(self):
+        """Verify hooks can add custom data to snapshot metadata."""
+        from strands.hooks import HookProvider, HookRegistry, SnapshotCreatedEvent
+
+        class CustomDataHook(HookProvider):
+            def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+                registry.add_callback(SnapshotCreatedEvent, self.on_snapshot_created)
+
+            def on_snapshot_created(self, event: SnapshotCreatedEvent) -> None:
+                event.snapshot["metadata"]["custom_key"] = "custom_value"
+                event.snapshot["metadata"]["timestamp_added"] = "2024-01-01"
+
+        agent = Agent(model=MockedModelProvider([]), hooks=[CustomDataHook()])
+        snapshot = agent.take_snapshot(metadata={"original": "data"})
+
+        assert snapshot["metadata"]["original"] == "data"
+        assert snapshot["metadata"]["custom_key"] == "custom_value"
+        assert snapshot["metadata"]["timestamp_added"] == "2024-01-01"
