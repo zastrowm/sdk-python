@@ -32,6 +32,7 @@ from ..tools._tool_helpers import generate_missing_tool_result_content
 
 if TYPE_CHECKING:
     from ..tools import ToolProvider
+    from .snapshot import Snapshot
 from ..handlers.callback_handler import PrintingCallbackHandler, null_callback_handler
 from ..hooks import (
     AfterInvocationEvent,
@@ -931,3 +932,100 @@ class Agent(AgentBase):
             redacted_content = [{"text": redact_message}]
 
         return redacted_content
+
+    def take_snapshot(self, metadata: dict[str, Any] | None = None) -> "Snapshot":
+        """Capture current agent state as a snapshot.
+
+        Creates a point-in-time capture of the agent's evolving state, including:
+        - messages: Conversation history
+        - agent state: Custom application state
+        - conversation_manager_state: Internal state of the conversation manager
+        - interrupt_state: State of any active interrupts
+
+        The snapshot does not capture agent definition (system_prompt, tools, model)
+        as these are considered configuration rather than evolving state.
+
+        Args:
+            metadata: Optional application-owned data to include in the snapshot.
+                Strands does not read or modify this data. Use it to store
+                application-specific context like user IDs, session names, etc.
+
+        Returns:
+            A Snapshot containing the complete current state.
+
+        Example:
+            ```python
+            # Take a snapshot before a risky operation
+            snapshot = agent.take_snapshot(metadata={"checkpoint": "before_update"})
+
+            # Later, restore if needed
+            agent.load_snapshot(snapshot)
+            ```
+        """
+        from .snapshot import SNAPSHOT_VERSION, Snapshot, create_timestamp
+
+        logger.debug("agent_id=<%s> | taking snapshot", self.agent_id)
+
+        snapshot: Snapshot = {
+            "type": "agent",
+            "version": SNAPSHOT_VERSION,
+            "timestamp": create_timestamp(),
+            "state": {
+                "messages": list(self.messages),
+                "agent_state": self.state.get(),
+                "conversation_manager_state": self.conversation_manager.get_state(),
+                "interrupt_state": self._interrupt_state.to_dict(),
+            },
+            "metadata": metadata or {},
+        }
+
+        logger.debug("agent_id=<%s>, message_count=<%d> | snapshot taken", self.agent_id, len(self.messages))
+        return snapshot
+
+    def load_snapshot(self, snapshot: "Snapshot") -> None:
+        """Restore agent state from a snapshot.
+
+        Restores the agent's evolving state from a previously captured snapshot:
+        - messages: Replaces current conversation history
+        - agent state: Replaces current application state
+        - conversation_manager_state: Restores conversation manager state
+        - interrupt_state: Restores interrupt state
+
+        Note: Agent definition (system_prompt, tools, model) is not affected.
+        The current agent must be configured with compatible settings.
+
+        Args:
+            snapshot: The snapshot to restore from.
+
+        Raises:
+            ValueError: If the snapshot type is not "agent".
+
+        Example:
+            ```python
+            # Load a previously saved snapshot
+            snapshot = FileSystemPersister("checkpoint.json").load()
+            agent.load_snapshot(snapshot)
+            ```
+        """
+        logger.debug("agent_id=<%s> | loading snapshot", self.agent_id)
+
+        if snapshot["type"] != "agent":
+            raise ValueError(f"snapshot type=<{snapshot['type']}> | expected snapshot type 'agent'")
+
+        state = snapshot["state"]
+
+        # Restore messages
+        self.messages = list(state["messages"])
+
+        # Restore agent state
+        self.state = AgentState(state["agent_state"])
+
+        # Restore conversation manager state
+        if "conversation_manager_state" in state:
+            self.conversation_manager.restore_from_session(state["conversation_manager_state"])
+
+        # Restore interrupt state
+        if "interrupt_state" in state:
+            self._interrupt_state = _InterruptState.from_dict(state["interrupt_state"])
+
+        logger.debug("agent_id=<%s>, message_count=<%d> | snapshot loaded", self.agent_id, len(self.messages))
