@@ -15,31 +15,43 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
 # Current snapshot version for forward compatibility
 SNAPSHOT_VERSION = "1.0"
 
+# Named preset for include parameter
+SnapshotPreset = Literal["session"]
+
+# All available snapshot fields
+ALL_SNAPSHOT_FIELDS = frozenset(["messages", "state", "conversation_manager_state", "interrupt_state", "system_prompt"])
+
+# Fields included in the "session" preset (excludes system_prompt)
+SESSION_PRESET_FIELDS = frozenset(["messages", "state", "conversation_manager_state", "interrupt_state"])
+
 
 class Snapshot(TypedDict):
     """Point-in-time capture of agent state.
 
     A Snapshot captures the complete evolving state of an agent at a specific moment.
-    It is designed for easy JSON serialization and supports both Strands-managed state
-    and application-owned metadata.
+    It is designed for easy JSON serialization and supports both Strands-managed data
+    and application-owned data.
 
     Attributes:
         type: String identifying the snapshot type (e.g., "agent"). Strands-owned.
         version: Version string for forward compatibility. Strands-owned.
         timestamp: ISO 8601 timestamp of when the snapshot was taken. Strands-owned.
-        state: Dict containing the agent's evolving state. Strands-owned, opaque to callers.
-        metadata: Dict for application-owned data. Strands does not read or modify this.
+        data: Dict containing the agent's evolving state. This is Strands-managed and
+            opaque to callers - applications should not rely on its internal structure.
+        app_data: Dict for application-owned data. Strands does not read or modify this.
+            Use this field to store application-specific context like user IDs, session
+            names, checkpoints, or any custom data your application needs.
 
     Example:
         ```python
-        snapshot = agent.take_snapshot(metadata={"user_id": "123"})
+        snapshot = agent.take_snapshot(app_data={"user_id": "123"})
         # Later...
         agent.load_snapshot(snapshot)
         ```
@@ -48,8 +60,8 @@ class Snapshot(TypedDict):
     type: str
     version: str
     timestamp: str
-    state: dict[str, Any]
-    metadata: dict[str, Any]
+    data: dict[str, Any]
+    app_data: dict[str, Any]
 
 
 @runtime_checkable
@@ -62,20 +74,28 @@ class Snapshottable(Protocol):
     Example:
         ```python
         def checkpoint(obj: Snapshottable, path: str) -> None:
-            snapshot = obj.take_snapshot()
+            snapshot = obj.take_snapshot(include="session")
             FileSystemPersister(path).save(snapshot)
         ```
     """
 
-    def take_snapshot(self, metadata: dict[str, Any] | None = None) -> Snapshot:
+    def take_snapshot(
+        self,
+        app_data: dict[str, Any] | None = None,
+        include: SnapshotPreset | list[str] | None = None,
+        exclude: list[str] | None = None,
+    ) -> Snapshot:
         """Capture current state as a snapshot.
 
         Args:
-            metadata: Optional application-owned data to include in the snapshot.
+            app_data: Optional application-owned data to include in the snapshot.
                 Strands does not read or modify this data.
+            include: Fields to include in the snapshot. Can be a named preset
+                (e.g., "session") or a list of field names. Required if exclude is not set.
+            exclude: Fields to exclude from the snapshot. Applied after include.
 
         Returns:
-            A Snapshot containing the complete current state.
+            A Snapshot containing the captured state.
         """
         ...
 
@@ -102,7 +122,7 @@ class FileSystemPersister:
         ```python
         # Save a snapshot
         persister = FileSystemPersister(path="checkpoints/snapshot.json")
-        persister.save(agent.take_snapshot())
+        persister.save(agent.take_snapshot(include="session"))
 
         # Load a snapshot
         snapshot = persister.load()
@@ -131,7 +151,7 @@ class FileSystemPersister:
 
         Example:
             ```python
-            snapshot = agent.take_snapshot()
+            snapshot = agent.take_snapshot(include="session")
             FileSystemPersister("state.json").save(snapshot)
             ```
         """
@@ -170,3 +190,45 @@ def create_timestamp() -> str:
         ISO 8601 formatted timestamp string.
     """
     return datetime.now(timezone.utc).isoformat()
+
+
+def resolve_snapshot_fields(
+    include: SnapshotPreset | list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> set[str]:
+    """Resolve the final set of fields to include in a snapshot.
+
+    Args:
+        include: Fields to include. Can be a preset name or list of field names.
+        exclude: Fields to exclude from the included set.
+
+    Returns:
+        Set of field names to include in the snapshot.
+
+    Raises:
+        ValueError: If neither include nor exclude is specified, or if invalid fields are specified.
+    """
+    if include is None and exclude is None:
+        raise ValueError("Either 'include' or 'exclude' must be specified")
+
+    # Determine base fields from include
+    if include is None:
+        fields = set(ALL_SNAPSHOT_FIELDS)
+    elif include == "session":
+        fields = set(SESSION_PRESET_FIELDS)
+    elif isinstance(include, list):
+        invalid_fields = set(include) - ALL_SNAPSHOT_FIELDS
+        if invalid_fields:
+            raise ValueError(f"Invalid snapshot fields: {invalid_fields}. Valid fields: {ALL_SNAPSHOT_FIELDS}")
+        fields = set(include)
+    else:
+        raise ValueError(f"Invalid include value: {include}. Must be 'session' or a list of field names.")
+
+    # Apply exclusions
+    if exclude:
+        invalid_fields = set(exclude) - ALL_SNAPSHOT_FIELDS
+        if invalid_fields:
+            raise ValueError(f"Invalid exclude fields: {invalid_fields}. Valid fields: {ALL_SNAPSHOT_FIELDS}")
+        fields -= set(exclude)
+
+    return fields

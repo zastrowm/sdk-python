@@ -395,12 +395,12 @@ class SnapshotCreatedEvent(HookEvent):
     """Event triggered after a snapshot has been created.
 
     This event is fired after the agent has created a snapshot, allowing hook
-    providers to add their own custom data to the snapshot's metadata field
+    providers to add their own custom data to the snapshot's app_data field
     before it is returned to the caller.
 
     Attributes:
         snapshot: The snapshot that was created. Hook providers can modify
-            the metadata field to add application-specific data.
+            the app_data field to add application-specific data.
 
     Example:
         ```python
@@ -409,7 +409,7 @@ class SnapshotCreatedEvent(HookEvent):
                 registry.add_callback(SnapshotCreatedEvent, self.on_snapshot_created)
 
             def on_snapshot_created(self, event: SnapshotCreatedEvent) -> None:
-                event.snapshot["metadata"]["custom_key"] = "custom_value"
+                event.snapshot["app_data"]["custom_key"] = "custom_value"
         ```
     """
 
