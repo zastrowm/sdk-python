@@ -102,22 +102,6 @@ The intent is that anything stored or restored by session-management would be st
 - **`type`, `version`, `timestamp`, and `data`** — Strands-owned. These fields are managed internally and should be treated as opaque. The format of `data` is subject to change; do not modify or depend on its structure.
 - **Serialization** — Strands guarantees that all Strands-owned fields will only contain JSON-serializable values.
 
-### FileSystemPersister
-
-A `FileSystemPersister` helper class is provided for basic persistence:
-
-```python
-from strands.agent.snapshot import FileSystemPersister
-
-# Save a snapshot
-persister = FileSystemPersister(path="checkpoints/snapshot.json")
-persister.save(agent.take_snapshot(include="session"))
-
-# Load a snapshot
-snapshot = persister.load()
-agent.load_snapshot(snapshot)
-```
-
 ### Future Concerns
 
 - Snapshotting for MultiAgent constructs - Snapshot is designed in a way that the snapshot could be reused for multi-agent with a similar api
@@ -157,18 +141,22 @@ later_agent.load_snapshot(snapshot)
 
 ### Persisting Snapshots
 
+Snapshots are plain JSON-serializable dicts, so persistence is straightforward. The SDK includes a `FileSystemPersister` as a reference implementation, but this is provided as an example pattern rather than a production-ready utility. Applications should implement their own persistence strategy based on their storage requirements.
+
 ```python
-from strands.agent.snapshot import FileSystemPersister
+import json
 
 agent = Agent(tools=[tool1, tool2])
 agent("Remember that my favorite color is orange.")
 
 # Save to file
 snapshot = agent.take_snapshot(include="session", app_data={"user_id": "123"})
-FileSystemPersister("snapshot.json").save(snapshot)
+with open("snapshot.json", "w") as f:
+    json.dump(snapshot, f)
 
 # Later, restore from file
-snapshot = FileSystemPersister("snapshot.json").load()
+with open("snapshot.json") as f:
+    snapshot = json.load(f)
 
 agent = Agent(tools=[tool1, tool2])
 agent.load_snapshot(snapshot)
