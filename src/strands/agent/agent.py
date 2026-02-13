@@ -32,6 +32,7 @@ from ..tools._tool_helpers import generate_missing_tool_result_content
 
 if TYPE_CHECKING:
     from ..tools import ToolProvider
+    from .snapshot import Snapshot, SnapshotPreset
 from ..handlers.callback_handler import PrintingCallbackHandler, null_callback_handler
 from ..hooks import (
     AfterInvocationEvent,
@@ -931,3 +932,148 @@ class Agent(AgentBase):
             redacted_content = [{"text": redact_message}]
 
         return redacted_content
+
+    def take_snapshot(
+        self,
+        app_data: dict[str, Any] | None = None,
+        include: "SnapshotPreset | list[str] | None" = None,
+        exclude: list[str] | None = None,
+    ) -> "Snapshot":
+        """Capture current agent state as a snapshot.
+
+        Creates a point-in-time capture of the agent's evolving state. The fields
+        included in the snapshot are controlled by the `include` and `exclude` parameters.
+
+        Available fields:
+        - messages: Conversation history
+        - state: Custom application state (agent.state)
+        - conversation_manager_state: Internal state of the conversation manager
+        - interrupt_state: State of any active interrupts
+        - system_prompt: The agent's system prompt
+
+        Args:
+            app_data: Optional application-owned data to include in the snapshot.
+                Strands does not read or modify this data. Use it to store
+                application-specific context like user IDs, session names, etc.
+            include: Fields to include in the snapshot. Can be:
+                - "session": Preset that includes messages, state, conversation_manager_state,
+                  and interrupt_state (excludes system_prompt)
+                - A list of field names to include
+                Required if exclude is not set.
+            exclude: Fields to exclude from the snapshot. Applied after include.
+                For example: `take_snapshot(include="session", exclude=["messages"])`
+
+        Returns:
+            A Snapshot containing the captured state.
+
+        Raises:
+            ValueError: If neither include nor exclude is specified.
+
+        Example:
+            ```python
+            # Take a snapshot with session preset
+            snapshot = agent.take_snapshot(include="session", app_data={"checkpoint": "before_update"})
+
+            # Take a snapshot with custom fields
+            snapshot = agent.take_snapshot(include=["messages", "state"])
+
+            # Exclude specific fields from session preset
+            snapshot = agent.take_snapshot(include="session", exclude=["interrupt_state"])
+
+            # Later, restore if needed
+            agent.load_snapshot(snapshot)
+            ```
+        """
+        from .snapshot import SNAPSHOT_VERSION, Snapshot, create_timestamp, resolve_snapshot_fields
+
+        logger.debug("agent_id=<%s> | taking snapshot", self.agent_id)
+
+        # Resolve which fields to include
+        fields = resolve_snapshot_fields(include, exclude)
+
+        # Build the data dict with only the requested fields
+        data: dict[str, Any] = {}
+
+        if "messages" in fields:
+            data["messages"] = list(self.messages)
+
+        if "state" in fields:
+            data["state"] = self.state.get()
+
+        if "conversation_manager_state" in fields:
+            data["conversation_manager_state"] = self.conversation_manager.get_state()
+
+        if "interrupt_state" in fields:
+            data["interrupt_state"] = self._interrupt_state.to_dict()
+
+        if "system_prompt" in fields:
+            data["system_prompt"] = self._system_prompt
+
+        snapshot: Snapshot = {
+            "type": "agent",
+            "version": SNAPSHOT_VERSION,
+            "timestamp": create_timestamp(),
+            "data": data,
+            "app_data": app_data or {},
+        }
+
+        logger.debug("agent_id=<%s>, message_count=<%d> | snapshot taken", self.agent_id, len(self.messages))
+        return snapshot
+
+    def load_snapshot(self, snapshot: "Snapshot") -> None:
+        """Restore agent state from a snapshot.
+
+        Restores the agent's evolving state from a previously captured snapshot.
+        Only fields that were included when the snapshot was taken will be restored.
+
+        Restorable fields:
+        - messages: Replaces current conversation history
+        - state: Replaces current application state
+        - conversation_manager_state: Restores conversation manager state
+        - interrupt_state: Restores interrupt state
+        - system_prompt: Restores the system prompt
+
+        Note: Agent definition aspects not included in the snapshot (tools, model,
+        conversation_manager instance) are not affected.
+
+        Args:
+            snapshot: The snapshot to restore from.
+
+        Raises:
+            ValueError: If the snapshot type is not "agent".
+
+        Example:
+            ```python
+            # Load a previously saved snapshot
+            snapshot = FileSystemPersister("checkpoint.json").load()
+            agent.load_snapshot(snapshot)
+            ```
+        """
+        logger.debug("agent_id=<%s> | loading snapshot", self.agent_id)
+
+        if snapshot["type"] != "agent":
+            raise ValueError(f"snapshot type=<{snapshot['type']}> | expected snapshot type 'agent'")
+
+        data = snapshot["data"]
+
+        # Restore messages
+        if "messages" in data:
+            self.messages = list(data["messages"])
+
+        # Restore agent state
+        if "state" in data:
+            self.state = AgentState(data["state"])
+
+        # Restore conversation manager state
+        if "conversation_manager_state" in data:
+            self.conversation_manager.restore_from_session(data["conversation_manager_state"])
+
+        # Restore interrupt state
+        if "interrupt_state" in data:
+            self._interrupt_state = _InterruptState.from_dict(data["interrupt_state"])
+
+        # Restore system prompt
+        if "system_prompt" in data:
+            self.system_prompt = data["system_prompt"]
+
+        logger.debug("agent_id=<%s>, message_count=<%d> | snapshot loaded", self.agent_id, len(self.messages))
