@@ -6,6 +6,13 @@
 
 **Issue**: https://github.com/strands-agents/sdk-python/issues/1138
 
+## Goals
+
+- [x] On-demand state capture — Developers can explicitly capture agent state at any point, independent of automatic session management.
+- [ ] Foundation for session management — Snapshots provide a primitive that session managers can use internally, enabling alternative persistence strategies beyond incremental message recording.
+- [x] Extensibility via hooks — Plugins and hook providers can contribute additional data to snapshots, allowing custom state to be captured and restored alongside core agent state.
+- [x] Configurable scope — Developers control which properties are included in a snapshot, enabling use cases that require only a subset of state (e.g., messages without interrupt state).
+
 ## Motivation
 
 Today, developers who want to manually snapshot and restore agent state can *almost* do so by saving and loading these properties directly:
@@ -18,13 +25,6 @@ Today, developers who want to manually snapshot and restore agent state can *alm
 However, this approach is fragile: it requires knowledge of internal implementation details, and the set of properties may change between versions. This proposal introduces a stable, convenient API to accomplish the same thing without relying on internals.
 
 **This API does not change agent behavior** — it simply provides a clean way to serialize and restore the existing state that already exists on the agent.
-
-## Goals
-
-- [ ] On-demand state capture — Developers can explicitly capture agent state at any point, independent of automatic session management.
-- [ ] Foundation for session management — Snapshots provide a primitive that session managers can use internally, enabling alternative persistence strategies beyond incremental message recording.
-- [ ] Extensibility via hooks — Plugins and hook providers can contribute additional data to snapshots, allowing custom state to be captured and restored alongside core agent state.
-- [ ] Configurable scope — Developers control which properties are included in a snapshot, enabling use cases that require only a subset of state (e.g., messages without interrupt state).
 
 ## Context
 
@@ -41,10 +41,7 @@ Add a low-level, explicit snapshot API as an alternative to automatic session-ma
 ### API
 
 ```python
-from typing import Literal
-
-# Named preset for include parameter
-SnapshotPreset = Literal["session"]
+from strands.agent import Snapshotter
 
 class Snapshot(TypedDict):
     type: str                # the type of data stored (e.g., "agent"). Strands-owned.
@@ -53,8 +50,16 @@ class Snapshot(TypedDict):
     data: dict[str, Any]     # opaque; do not modify — format subject to change. Strands-owned.
     app_data: dict[str, Any] # application-owned data to store with the snapshot
 
-class Agent:
-    def take_snapshot(
+class Snapshotter:
+    def __init__(
+        self,
+        include: SnapshotPreset | list[str] | None = None,
+        exclude: list[str] | None = None,
+    ) -> None:
+        """Initialize with default include/exclude settings."""
+        ...
+
+    def take(
         self,
         app_data: dict[str, Any] | None = None,
         include: SnapshotPreset | list[str] | None = None,
@@ -63,9 +68,29 @@ class Agent:
         """Capture the current agent state as a snapshot."""
         ...
 
-    def load_snapshot(self, snapshot: Snapshot) -> None:
+    async def take_async(
+        self,
+        app_data: dict[str, Any] | None = None,
+        include: SnapshotPreset | list[str] | None = None,
+        exclude: list[str] | None = None,
+    ) -> Snapshot:
+        """Capture the current agent state as a snapshot (async)."""
+        ...
+
+    def load(self, snapshot: Snapshot) -> None:
         """Restore agent state from a snapshot."""
         ...
+
+class Agent:
+    def __init__(
+        self,
+        ...,
+        snapshots: Snapshotter | None = None,
+    ):
+        ...
+
+    # Access via agent.snapshots
+    snapshots: Snapshotter
 ```
 
 ### Available Snapshot Fields
@@ -86,7 +111,7 @@ The `include` and `exclude` parameters control which fields are captured:
 - **`include=["field1", "field2"]`** — Explicit list of fields to include
 - **`exclude=["field1"]`** — Fields to exclude (applied after include)
 
-Either `include` or `exclude` must be specified.
+Either `include` or `exclude` must be specified (either as defaults on the Snapshotter or per-call).
 
 ### Behavior
 
@@ -105,7 +130,7 @@ The intent is that anything stored or restored by session-management would be st
 
 ### Hooks
 
-A `SnapshotCreatedEvent` hook is fired after `take_snapshot()` completes, allowing hook providers to add custom data to the snapshot's `app_data` field:
+A `SnapshotCreatedEvent` hook is fired after `take()` completes, allowing hook providers to add custom data to the snapshot's `app_data` field:
 
 ```python
 class CustomDataHook(HookProvider):
@@ -114,23 +139,6 @@ class CustomDataHook(HookProvider):
 
     def on_snapshot_created(self, event: SnapshotCreatedEvent) -> None:
         event.snapshot["app_data"]["custom_key"] = "custom_value"
-```
-
-### Snapshottable Protocol
-
-A `Snapshottable` protocol is provided for type-safe operations on objects that support snapshots:
-
-```python
-@runtime_checkable
-class Snapshottable(Protocol):
-    def take_snapshot(
-        self,
-        app_data: dict[str, Any] | None = None,
-        include: SnapshotPreset | list[str] | None = None,
-        exclude: list[str] | None = None,
-    ) -> Snapshot: ...
-
-    def load_snapshot(self, snapshot: Snapshot) -> None: ...
 ```
 
 ### FileSystemPersister
@@ -142,11 +150,11 @@ from strands.agent.snapshot import FileSystemPersister
 
 # Save a snapshot
 persister = FileSystemPersister(path="checkpoints/snapshot.json")
-persister.save(agent.take_snapshot(include="session"))
+persister.save(agent.snapshots.take())
 
 # Load a snapshot
 snapshot = persister.load()
-agent.load_snapshot(snapshot)
+agent.snapshots.load(snapshot)
 ```
 
 ### Future Concerns
@@ -158,18 +166,37 @@ agent.load_snapshot(snapshot)
 
 ## Developer Experience
 
+### Basic Usage with Defaults
+
+```python
+from strands import Agent
+from strands.agent import Snapshotter
+
+# Configure defaults once
+snapshotter = Snapshotter(include="session")
+agent = Agent(tools=[tool1, tool2], snapshots=snapshotter)
+
+# Take snapshots without repeating configuration
+snapshot = agent.snapshots.take()
+snapshot = agent.snapshots.take(app_data={"checkpoint": "before_update"})
+
+# Restore
+agent.snapshots.load(snapshot)
+```
+
 ### Evaluations via Rewind and Replay
 
 ```python
-agent = Agent(tools=[tool1, tool2])
-snapshot = agent.take_snapshot(include="session")
+snapshotter = Snapshotter(include="session")
+agent = Agent(tools=[tool1, tool2], snapshots=snapshotter)
+snapshot = agent.snapshots.take()
 
 result1 = agent("What is the weather?")
 
 # ...
 
-agent2 = Agent(tools=[tool3, tool4])
-agent2.load_snapshot(snapshot)
+agent2 = Agent(tools=[tool3, tool4], snapshots=snapshotter)
+agent2.snapshots.load(snapshot)
 result2 = agent2("What is the weather?")
 # ... 
 # Human/manual evaluation if one outcome was better than the other
@@ -179,45 +206,54 @@ result2 = agent2("What is the weather?")
 ### Advanced Context Management
 
 ```python
-agent = Agent(conversation_manager=CompactingConversationManager())
-snapshot = agent.take_snapshot(include="session", app_data={"checkpoint": "before_long_task"})
+snapshotter = Snapshotter(include="session")
+agent = Agent(
+    conversation_manager=CompactingConversationManager(),
+    snapshots=snapshotter,
+)
+snapshot = agent.snapshots.take(app_data={"checkpoint": "before_long_task"})
 
 # ... later ...
-later_agent = Agent(conversation_manager=CompactingConversationManager())
-later_agent.load_snapshot(snapshot)
+later_agent = Agent(
+    conversation_manager=CompactingConversationManager(),
+    snapshots=snapshotter,
+)
+later_agent.snapshots.load(snapshot)
 ```
 
 ### Persisting Snapshots
 
 ```python
-from strands.agent.snapshot import FileSystemPersister
+from strands.agent.snapshot import FileSystemPersister, Snapshotter
 
-agent = Agent(tools=[tool1, tool2])
+snapshotter = Snapshotter(include="session")
+agent = Agent(tools=[tool1, tool2], snapshots=snapshotter)
 agent("Remember that my favorite color is orange.")
 
 # Save to file
-snapshot = agent.take_snapshot(include="session", app_data={"user_id": "123"})
+snapshot = agent.snapshots.take(app_data={"user_id": "123"})
 FileSystemPersister("snapshot.json").save(snapshot)
 
 # Later, restore from file
 snapshot = FileSystemPersister("snapshot.json").load()
 
-agent = Agent(tools=[tool1, tool2])
-agent.load_snapshot(snapshot)
+agent = Agent(tools=[tool1, tool2], snapshots=snapshotter)
+agent.snapshots.load(snapshot)
 agent("What is my favorite color?")  # "Your favorite color is orange."
 ```
 
-### Selective Field Inclusion
+### Overriding Defaults Per-Call
 
 ```python
-# Include only messages and state
-snapshot = agent.take_snapshot(include=["messages", "state"])
+snapshotter = Snapshotter(include="session")
+agent = Agent(snapshots=snapshotter)
 
-# Use session preset but exclude interrupt_state
-snapshot = agent.take_snapshot(include="session", exclude=["interrupt_state"])
+# Use defaults
+snapshot = agent.snapshots.take()
 
-# Include everything except system_prompt (equivalent to include="session")
-snapshot = agent.take_snapshot(exclude=["system_prompt"])
+# Override for this call only
+snapshot = agent.snapshots.take(include=["messages", "state"])
+snapshot = agent.snapshots.take(exclude=["interrupt_state"])
 ```
 
 ### Edge cases
@@ -225,8 +261,9 @@ snapshot = agent.take_snapshot(exclude=["system_prompt"])
 Restoring runtime behavior (e.g., tools) is explicitly not supported:
 
 ```python
-agent1 = Agent(tools=[tool1, tool2])
-snapshot = agent1.take_snapshot(include="session")
+snapshotter = Snapshotter(include="session")
+agent1 = Agent(tools=[tool1, tool2], snapshots=snapshotter)
+snapshot = agent1.snapshots.take()
 agent_no = Agent(snapshot)  # tools are NOT restored
 ```
 
@@ -258,4 +295,4 @@ The `system_prompt` field is available but excluded from the "session" preset si
 
 ## Willingness to Implement
 
-Yes — Implemented in commits 571c476f, 301c3cd0, and 24cac465.
+Yes — Implemented.

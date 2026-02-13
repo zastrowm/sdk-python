@@ -20,7 +20,7 @@ from .conversation_manager import (
     SlidingWindowConversationManager,
     SummarizingConversationManager,
 )
-from .snapshot import FileSystemPersister, Snapshot, Snapshottable
+from .snapshot import FileSystemPersister, Snapshot, Snapshotter
 
 __all__ = [
     "Agent",
@@ -31,7 +31,7 @@ __all__ = [
     "NullConversationManager",
     "SlidingWindowConversationManager",
     "Snapshot",
-    "Snapshottable",
+    "Snapshotter",
     "SummarizingConversationManager",
     "ModelRetryStrategy",
 ]
