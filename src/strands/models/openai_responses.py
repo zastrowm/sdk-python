@@ -50,7 +50,7 @@ except Exception as e:
 
 import openai  # noqa: E402 - must import after version check
 
-from ..types.content import ContentBlock, Messages  # noqa: E402
+from ..types.content import ContentBlock, Messages, Role  # noqa: E402
 from ..types.exceptions import ContextWindowOverflowException, ModelThrottledException  # noqa: E402
 from ..types.streaming import StreamEvent  # noqa: E402
 from ..types.tools import ToolChoice, ToolResult, ToolSpec, ToolUse  # noqa: E402
@@ -467,7 +467,7 @@ class OpenAIResponsesModel(Model):
             contents = message["content"]
 
             formatted_contents = [
-                cls._format_request_message_content(content)
+                cls._format_request_message_content(content, role=role)
                 for content in contents
                 if not any(block_type in content for block_type in ["toolResult", "toolUse"])
             ]
@@ -502,11 +502,15 @@ class OpenAIResponsesModel(Model):
         ]
 
     @classmethod
-    def _format_request_message_content(cls, content: ContentBlock) -> dict[str, Any]:
+    def _format_request_message_content(
+        cls, content: ContentBlock, *, role: Role = "user"
+    ) -> dict[str, Any]:
         """Format an OpenAI compatible content block.
 
         Args:
             content: Message content.
+            role: Message role ("user" or "assistant"). Controls text content
+                type: "input_text" for user, "output_text" for assistant.
 
         Returns:
             OpenAI compatible content block.
@@ -526,7 +530,8 @@ class OpenAIResponsesModel(Model):
             return {"type": "input_image", "image_url": data_url}
 
         if "text" in content:
-            return {"type": "input_text", "text": content["text"]}
+            text_type = "output_text" if role == "assistant" else "input_text"
+            return {"type": text_type, "text": content["text"]}
 
         raise TypeError(f"content_type=<{next(iter(content))}> | unsupported type")
 
