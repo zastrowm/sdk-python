@@ -240,6 +240,9 @@ class Agent(AgentBase):
         self.record_direct_tool_call = record_direct_tool_call
         self.load_tools_from_directory = load_tools_from_directory
 
+        # Create internal cancel signal for graceful cancellation using threading.Event
+        self._cancel_signal = threading.Event()
+
         self.tool_registry = ToolRegistry()
 
         # Process tool list if provided
@@ -326,6 +329,37 @@ class Agent(AgentBase):
                 self._plugin_registry.add_and_init(plugin)
 
         self.hooks.invoke_callbacks(AgentInitializedEvent(agent=self))
+
+    def cancel(self) -> None:
+        """Cancel the currently running agent invocation.
+
+        This method is thread-safe and can be called from any context
+        (e.g., another thread, web request handler, background task).
+
+        The agent will stop gracefully at the next checkpoint:
+        - During model response streaming
+        - Before tool execution
+
+        The agent will return a result with stop_reason="cancelled".
+
+        Example:
+            ```python
+            agent = Agent(model=model)
+
+            # Start agent in background
+            task = asyncio.create_task(agent.invoke_async("Hello"))
+
+            # Cancel from another context
+            agent.cancel()
+
+            result = await task
+            assert result.stop_reason == "cancelled"
+            ```
+
+        Note:
+            Multiple calls to cancel() are safe and idempotent.
+        """
+        self._cancel_signal.set()
 
     @property
     def system_prompt(self) -> str | None:
@@ -756,6 +790,9 @@ class Agent(AgentBase):
                     raise
 
         finally:
+            # Clear cancel signal to allow agent reuse after cancellation
+            self._cancel_signal.clear()
+
             if self._invocation_lock.locked():
                 self._invocation_lock.release()
 
