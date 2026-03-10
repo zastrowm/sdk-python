@@ -6,8 +6,11 @@ extend agent behavior through automatic hook and tool registration.
 
 from .decorator import hook
 from .plugin import Plugin
+from .skills import AgentSkills, Skill
 
 __all__ = [
+    "AgentSkills",
     "Plugin",
+    "Skill",
     "hook",
 ]
