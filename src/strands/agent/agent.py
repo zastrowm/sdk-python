@@ -29,7 +29,7 @@ from .._async import run_async
 from ..event_loop._retry import ModelRetryStrategy
 from ..event_loop.event_loop import INITIAL_DELAY, MAX_ATTEMPTS, MAX_DELAY, event_loop_cycle
 from ..tools._tool_helpers import generate_missing_tool_result_content
-from ._snapshot import (
+from ..types._snapshot import (
     SNAPSHOT_SCHEMA_VERSION,
     Snapshot,
     SnapshotField,
@@ -1147,7 +1147,9 @@ class Agent(AgentBase):
         if "interrupt_state" in fields:
             data["interrupt_state"] = self._interrupt_state.to_dict()
         if "system_prompt" in fields:
-            data["system_prompt"] = self._system_prompt_content
+            # Store the content-block representation so round-trips preserve caching hints and
+            # other block-level metadata. The key name reflects what is actually stored.
+            data["system_prompt_content"] = self._system_prompt_content
 
         return Snapshot(
             schema_version=SNAPSHOT_SCHEMA_VERSION,
@@ -1167,11 +1169,7 @@ class Agent(AgentBase):
         Raises:
             SnapshotException: If snapshot.schema_version is not "1.0".
         """
-        if snapshot.schema_version != SNAPSHOT_SCHEMA_VERSION:
-            raise SnapshotException(
-                f"Unsupported snapshot schema version: {snapshot.schema_version!r}. "
-                f"Current version: {SNAPSHOT_SCHEMA_VERSION}"
-            )
+        snapshot.validate()
 
         data = snapshot.data
 
@@ -1183,8 +1181,8 @@ class Agent(AgentBase):
             self.conversation_manager.restore_from_session(data["conversation_manager_state"])
         if "interrupt_state" in data:
             self._interrupt_state = _InterruptState.from_dict(data["interrupt_state"])
-        if "system_prompt" in data:
-            self.system_prompt = data["system_prompt"]
+        if "system_prompt_content" in data:
+            self.system_prompt = data["system_prompt_content"]
 
     def _redact_user_content(self, content: list[ContentBlock], redact_message: str) -> list[ContentBlock]:
         """Redact user content preserving toolResult blocks.
