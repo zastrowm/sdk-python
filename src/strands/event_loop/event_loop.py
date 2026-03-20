@@ -337,6 +337,7 @@ async def _handle_model_execution(
                     tool_choice=structured_output_context.tool_choice,
                     invocation_state=invocation_state,
                     cancel_signal=agent._cancel_signal,
+                    agent=agent,
                 ):
                     yield event
 

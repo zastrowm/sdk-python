@@ -6,7 +6,7 @@ import threading
 import time
 import warnings
 from collections.abc import AsyncGenerator, AsyncIterable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..models.model import Model
 from ..tools import InvalidToolUseNameException
@@ -39,6 +39,11 @@ from ..types.streaming import (
     Usage,
 )
 from ..types.tools import ToolSpec, ToolUse
+
+if TYPE_CHECKING:
+    from ..agent import Agent
+    from ..hooks import HookRegistry
+    from ..hooks.events import ModelStreamChunkEvent as ModelStreamChunkHookEvent
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +392,7 @@ async def process_stream(
     chunks: AsyncIterable[StreamEvent],
     start_time: float | None = None,
     cancel_signal: threading.Event | None = None,
+    agent: "Agent | None" = None,
 ) -> AsyncGenerator[TypedEvent, None]:
     """Processes the response stream from the API, constructing the final message and extracting usage metrics.
 
@@ -394,10 +400,14 @@ async def process_stream(
         chunks: The chunks of the response stream from the model.
         start_time: Time when the model request is initiated
         cancel_signal: Optional threading.Event to check for cancellation during streaming.
+        agent: Optional agent instance to invoke ModelStreamChunkEvent hooks.
 
     Yields:
         The reason for stopping, the constructed message, and the usage metrics.
     """
+    # Import here to avoid circular imports
+    from ..hooks.events import ModelStreamChunkEvent as ModelStreamChunkHookEvent
+
     stop_reason: StopReason = "end_turn"
     first_byte_time = None
 
@@ -432,6 +442,10 @@ async def process_stream(
             first_byte_time = time.time()
         yield ModelStreamChunkEvent(chunk=chunk)
 
+        # Invoke hook for streaming chunk if agent is provided
+        if agent is not None:
+            await agent.hooks.invoke_callbacks_async(ModelStreamChunkHookEvent(agent=agent, chunk=chunk))
+
         if "messageStart" in chunk:
             state["message"] = handle_message_start(chunk["messageStart"], state["message"])
         elif "contentBlockStart" in chunk:
@@ -464,6 +478,7 @@ async def stream_messages(
     system_prompt_content: list[SystemContentBlock] | None = None,
     invocation_state: dict[str, Any] | None = None,
     cancel_signal: threading.Event | None = None,
+    agent: "Agent | None" = None,
     **kwargs: Any,
 ) -> AsyncGenerator[TypedEvent, None]:
     """Streams messages to the model and processes the response.
@@ -478,6 +493,7 @@ async def stream_messages(
             system prompt data.
         invocation_state: Caller-provided state/context that was passed to the agent when it was invoked.
         cancel_signal: Optional threading.Event to check for cancellation during streaming.
+        agent: Optional agent instance to invoke ModelStreamChunkEvent hooks.
         **kwargs: Additional keyword arguments for future extensibility.
 
     Yields:
@@ -497,5 +513,5 @@ async def stream_messages(
         invocation_state=invocation_state,
     )
 
-    async for event in process_stream(chunks, start_time, cancel_signal):
+    async for event in process_stream(chunks, start_time, cancel_signal, agent=agent):
         yield event
