@@ -223,18 +223,15 @@ async def event_loop_cycle(
 
             tracer.end_event_loop_cycle_span(cycle_span, message)
             yield EventLoopStopEvent(stop_reason, message, agent.event_loop_metrics, invocation_state["request_state"])
-        except StructuredOutputException as e:
+        except (
+            StructuredOutputException,
+            EventLoopException,
+            ContextWindowOverflowException,
+            MaxTokensReachedException,
+        ) as e:
+            # These exceptions should bubble up directly rather than get wrapped in an EventLoopException
             tracer.end_span_with_error(cycle_span, str(e), e)
             raise
-        except EventLoopException as e:
-            tracer.end_span_with_error(cycle_span, str(e), e)
-            # Don't yield or log the exception - we already did it when we
-            # raised the exception and we don't need that duplication.
-            raise
-        except (ContextWindowOverflowException, MaxTokensReachedException) as e:
-            # Special cased exceptions which we want to bubble up rather than get wrapped in an EventLoopException
-            tracer.end_span_with_error(cycle_span, str(e), e)
-            raise e
         except Exception as e:
             tracer.end_span_with_error(cycle_span, str(e), e)
             # Handle any other exceptions
