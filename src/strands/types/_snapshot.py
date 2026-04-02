@@ -64,9 +64,7 @@ class Snapshot:
                 f"Current version: {SNAPSHOT_SCHEMA_VERSION}"
             )
         if self.scope not in VALID_SCOPES:
-            raise SnapshotException(
-                f"Invalid snapshot scope: {self.scope!r}. Valid scopes: {sorted(VALID_SCOPES)}"
-            )
+            raise SnapshotException(f"Invalid snapshot scope: {self.scope!r}. Valid scopes: {sorted(VALID_SCOPES)}")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain JSON-compatible dict."""
@@ -112,12 +110,12 @@ def resolve_snapshot_fields(
     valid = set(ALL_SNAPSHOT_FIELDS)
 
     # Validate include/exclude field names
-    for field in include or []:
-        if field not in valid:
-            raise SnapshotException(f"Invalid snapshot field: {field!r}. Valid fields: {sorted(valid)}")
-    for field in exclude or []:
-        if field not in valid:
-            raise SnapshotException(f"Invalid snapshot field: {field!r}. Valid fields: {sorted(valid)}")
+    for f in include or []:
+        if f not in valid:
+            raise SnapshotException(f"Invalid snapshot field: {f!r}. Valid fields: {sorted(valid)}")
+    for f in exclude or []:
+        if f not in valid:
+            raise SnapshotException(f"Invalid snapshot field: {f!r}. Valid fields: {sorted(valid)}")
 
     # Step 1: start with preset
     if preset is not None:
