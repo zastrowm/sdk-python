@@ -1153,6 +1153,7 @@ class Agent(AgentBase):
             data["system_prompt"] = self._system_prompt_content
 
         return Snapshot(
+            scope="agent",
             schema_version=SNAPSHOT_SCHEMA_VERSION,
             created_at=_utc_now_iso(),
             data=data,

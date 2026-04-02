@@ -10,6 +10,7 @@ from .exceptions import SnapshotException
 
 SnapshotField = Literal["messages", "state", "conversation_manager_state", "interrupt_state", "system_prompt"]
 SnapshotPreset = Literal["session"]
+Scope = Literal["agent"]
 
 ALL_SNAPSHOT_FIELDS: tuple[SnapshotField, ...] = (
     "messages",
@@ -18,6 +19,8 @@ ALL_SNAPSHOT_FIELDS: tuple[SnapshotField, ...] = (
     "interrupt_state",
     "system_prompt",
 )
+
+VALID_SCOPES: tuple[Scope, ...] = ("agent",)
 
 SNAPSHOT_SCHEMA_VERSION = "1.0"
 
@@ -39,6 +42,7 @@ class TakeSnapshotOptions(TypedDict, total=False):
 class Snapshot:
     """Point-in-time capture of agent state as a versioned JSON-compatible object."""
 
+    scope: Scope
     schema_version: str
     created_at: str  # ISO 8601 UTC
     data: dict[str, Any]
@@ -48,17 +52,22 @@ class Snapshot:
         """Validate that this snapshot can be loaded by the current SDK version.
 
         Raises:
-            SnapshotException: If schema_version is not "1.0".
+            SnapshotException: If schema_version is not "1.0" or scope is invalid.
         """
         if self.schema_version != SNAPSHOT_SCHEMA_VERSION:
             raise SnapshotException(
                 f"Unsupported snapshot schema version: {self.schema_version!r}. "
                 f"Current version: {SNAPSHOT_SCHEMA_VERSION}"
             )
+        if self.scope not in VALID_SCOPES:
+            raise SnapshotException(
+                f"Invalid snapshot scope: {self.scope!r}. Valid scopes: {sorted(VALID_SCOPES)}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain JSON-compatible dict."""
         return {
+            "scope": self.scope,
             "schema_version": self.schema_version,
             "created_at": self.created_at,
             "data": self.data,
@@ -73,6 +82,7 @@ class Snapshot:
             SnapshotException: If schema_version is not "1.0".
         """
         snapshot = cls(
+            scope=d.get("scope", "agent"),
             schema_version=d.get("schema_version", ""),
             created_at=d["created_at"],
             data=d["data"],

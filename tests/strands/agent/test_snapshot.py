@@ -11,6 +11,7 @@ from strands.types._snapshot import (
     ALL_SNAPSHOT_FIELDS,
     SNAPSHOT_PRESETS,
     SNAPSHOT_SCHEMA_VERSION,
+    VALID_SCOPES,
     Snapshot,
     TakeSnapshotOptions,
     resolve_snapshot_fields,
@@ -26,6 +27,7 @@ ISO_8601_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 
 def _make_snapshot(**kwargs: object) -> Snapshot:
     defaults: dict[str, Any] = {
+        "scope": "agent",
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "created_at": "2025-01-15T12:00:00.000000Z",
         "data": {},
@@ -285,3 +287,67 @@ def test_take_snapshot_app_data_is_independent_copy():
 
     app_data["key"] = "mutated"
     assert snapshot.app_data["key"] == "original"
+
+
+# ---------------------------------------------------------------------------
+# Scope validation
+# ---------------------------------------------------------------------------
+
+
+def test_valid_scopes_constant_matches_scope_type():
+    """VALID_SCOPES contains exactly the values from the Scope Literal type."""
+    assert set(VALID_SCOPES) == {"agent"}
+
+
+def test_snapshot_validate_accepts_valid_scopes():
+    """validate() should not raise for each valid scope value."""
+    for scope in VALID_SCOPES:
+        snap = _make_snapshot(scope=scope)
+        snap.validate()  # should not raise
+
+
+def test_snapshot_validate_rejects_invalid_scope():
+    """validate() should raise SnapshotException for an unrecognised scope."""
+    snap = _make_snapshot(scope="invalid_scope")
+    with pytest.raises(SnapshotException, match="Invalid snapshot scope"):
+        snap.validate()
+
+
+def test_snapshot_from_dict_rejects_invalid_scope():
+    """from_dict() calls validate(), so an invalid scope should raise."""
+    d = {
+        "scope": "bad_scope",
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "created_at": "2025-01-15T12:00:00Z",
+        "data": {},
+        "app_data": {},
+    }
+    with pytest.raises(SnapshotException, match="Invalid snapshot scope"):
+        Snapshot.from_dict(d)
+
+
+def test_snapshot_from_dict_defaults_scope_to_agent():
+    """from_dict() defaults scope to 'agent' when the key is missing."""
+    d = {
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "created_at": "2025-01-15T12:00:00Z",
+        "data": {},
+        "app_data": {},
+    }
+    snap = Snapshot.from_dict(d)
+    assert snap.scope == "agent"
+
+
+def test_load_snapshot_rejects_invalid_scope():
+    """Agent.load_snapshot() should reject a snapshot with an invalid scope."""
+    agent = _make_agent()
+    snap = _make_snapshot(scope="unknown")
+    with pytest.raises(SnapshotException, match="Invalid snapshot scope"):
+        agent.load_snapshot(snap)
+
+
+def test_take_snapshot_always_produces_agent_scope():
+    """take_snapshot() should always set scope to 'agent'."""
+    agent = _make_agent()
+    snapshot = agent.take_snapshot(preset="session")
+    assert snapshot.scope == "agent"
