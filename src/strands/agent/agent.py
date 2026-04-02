@@ -35,7 +35,6 @@ from ..types._snapshot import (
     Snapshot,
     SnapshotField,
     SnapshotPreset,
-    _utc_now_iso,
     resolve_snapshot_fields,
 )
 
@@ -1146,7 +1145,6 @@ class Agent(AgentBase):
         return Snapshot(
             scope="agent",
             schema_version=SNAPSHOT_SCHEMA_VERSION,
-            created_at=_utc_now_iso(),
             data=data,
             app_data=copy.deepcopy(app_data) if app_data else {},
         )

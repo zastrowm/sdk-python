@@ -1,5 +1,6 @@
 """Tests for _snapshot.py — Snapshot dataclass and resolve_snapshot_fields."""
 
+import json
 import re
 from typing import Any
 from unittest.mock import MagicMock
@@ -17,9 +18,7 @@ from strands.types._snapshot import (
 )
 from strands.types.exceptions import SnapshotException
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 ISO_8601_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 
@@ -281,9 +280,7 @@ def test_take_snapshot_app_data_is_independent_copy():
     assert snapshot.app_data["key"] == "original"
 
 
-# ---------------------------------------------------------------------------
 # Scope validation
-# ---------------------------------------------------------------------------
 
 
 def test_valid_scopes_constant_matches_scope_type():
@@ -343,3 +340,103 @@ def test_take_snapshot_always_produces_agent_scope():
     agent = _make_agent()
     snapshot = agent.take_snapshot(preset="session")
     assert snapshot.scope == "agent"
+
+
+# Individual field restore from a raw snapshot
+
+
+def test_load_snapshot_restores_messages_only():
+    """A snapshot containing only messages restores them on a fresh agent."""
+    agent = _make_agent(messages=[{"role": "user", "content": [{"text": "existing"}]}])
+    snap = _make_snapshot(data={"messages": [{"role": "user", "content": [{"text": "restored"}]}]})
+
+    agent.load_snapshot(snap)
+
+    assert len(agent.messages) == 1
+    assert agent.messages[0]["content"][0]["text"] == "restored"
+
+
+def test_load_snapshot_restores_state_only():
+    """A snapshot containing only state restores it on a fresh agent."""
+    agent = _make_agent(state={"old": "value"})
+    snap = _make_snapshot(data={"state": {"new_key": "new_value"}})
+
+    agent.load_snapshot(snap)
+
+    assert agent.state.get() == {"new_key": "new_value"}
+
+
+def test_load_snapshot_restores_system_prompt_only():
+    """A snapshot containing only system_prompt restores it on a fresh agent."""
+    agent = _make_agent(system_prompt="old prompt")
+    snap = _make_snapshot(data={"system_prompt": "restored prompt"})
+
+    agent.load_snapshot(snap)
+
+    assert agent.system_prompt == "restored prompt"
+
+
+def test_snapshot_json_string_round_trip():
+    """Snapshot survives json.dumps / json.loads round-trip."""
+    agent = _make_agent(
+        messages=[{"role": "user", "content": [{"text": "hello"}]}],
+        state={"k": "v"},
+        system_prompt="test prompt",
+    )
+    snapshot = agent.take_snapshot(preset="session", include=["system_prompt"])
+
+    json_str = json.dumps(snapshot.to_dict())
+    restored = Snapshot.from_dict(json.loads(json_str))
+
+    assert restored == snapshot
+
+
+def test_snapshot_json_store_and_restore_into_new_agent():
+    """Simulate persisting a snapshot as JSON and restoring into a new agent."""
+    agent = _make_agent(
+        messages=[{"role": "user", "content": [{"text": "test message"}]}],
+        state={"key": "value"},
+    )
+    snapshot = agent.take_snapshot(preset="session")
+
+    stored = json.dumps(snapshot.to_dict())
+    retrieved = Snapshot.from_dict(json.loads(stored))
+
+    new_agent = _make_agent()
+    new_agent.load_snapshot(retrieved)
+
+    assert new_agent.messages == [{"role": "user", "content": [{"text": "test message"}]}]
+    assert new_agent.state.get() == {"key": "value"}
+
+
+def test_snapshot_round_trip_with_tool_use_messages():
+    """Snapshot preserves toolUse and toolResult content blocks through a round-trip."""
+    tool_use_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "tool-123", "name": "calculator", "input": {"op": "add"}}}],
+    }
+    tool_result_msg = {
+        "role": "user",
+        "content": [{"toolResult": {"toolUseId": "tool-123", "status": "success", "content": [{"text": "6"}]}}],
+    }
+    agent = _make_agent(messages=[tool_use_msg, tool_result_msg])
+    snapshot = agent.take_snapshot(include=["messages"])
+
+    fresh_agent = _make_agent()
+    fresh_agent.load_snapshot(snapshot)
+
+    assert fresh_agent.messages == [tool_use_msg, tool_result_msg]
+
+
+def test_take_snapshot_exclude_removes_field_from_data():
+    """Excluding a field from take_snapshot omits it from snapshot.data while keeping others."""
+    agent = _make_agent(
+        messages=[{"role": "user", "content": [{"text": "hi"}]}],
+        state={"k": "v"},
+    )
+    snapshot = agent.take_snapshot(preset="session", exclude=["messages"])
+
+    assert "messages" not in snapshot.data
+    assert "state" in snapshot.data
+    assert "conversation_manager_state" in snapshot.data
+    assert "interrupt_state" in snapshot.data

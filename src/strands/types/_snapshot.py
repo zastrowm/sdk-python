@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, TypedDict
 
@@ -44,9 +44,13 @@ class Snapshot:
 
     scope: Scope
     schema_version: str
-    created_at: str  # ISO 8601 UTC
     data: dict[str, Any]
     app_data: dict[str, Any]
+    created_at: str = field(default="")  # ISO 8601 UTC; auto-filled if empty
+
+    def __post_init__(self) -> None:
+        if not self.created_at:
+            self.created_at = _utc_now_iso()
 
     def validate(self) -> None:
         """Validate that this snapshot can be loaded by the current SDK version.
