@@ -35,7 +35,6 @@ from ..types._snapshot import (
     Snapshot,
     SnapshotField,
     SnapshotPreset,
-    TakeSnapshotOptions,
     _utc_now_iso,
     resolve_snapshot_fields,
 )
@@ -1128,15 +1127,7 @@ class Agent(AgentBase):
         Raises:
             SnapshotException: If no fields are resolved or an invalid field name is provided.
         """
-        options: TakeSnapshotOptions = {}
-        if preset is not None:
-            options["preset"] = preset
-        if include is not None:
-            options["include"] = include
-        if exclude is not None:
-            options["exclude"] = exclude
-
-        fields = resolve_snapshot_fields(options)
+        fields = resolve_snapshot_fields(preset=preset, include=include, exclude=exclude)
 
         data: dict[str, Any] = {}
         if "messages" in fields:

@@ -13,7 +13,6 @@ from strands.types._snapshot import (
     SNAPSHOT_SCHEMA_VERSION,
     VALID_SCOPES,
     Snapshot,
-    TakeSnapshotOptions,
     resolve_snapshot_fields,
 )
 from strands.types.exceptions import SnapshotException
@@ -57,36 +56,36 @@ def test_snapshot_to_dict_round_trip():
 
 def test_resolve_snapshot_fields_invalid_include_raises():
     with pytest.raises(SnapshotException, match="Invalid snapshot field"):
-        resolve_snapshot_fields({"include": ["not_a_field"]})  # type: ignore[typeddict-item]
+        resolve_snapshot_fields(include=["not_a_field"])  # type: ignore[list-item]
 
 
 def test_resolve_snapshot_fields_invalid_exclude_raises():
     with pytest.raises(SnapshotException, match="Invalid snapshot field"):
-        resolve_snapshot_fields({"preset": "session", "exclude": ["not_a_field"]})  # type: ignore[typeddict-item]
+        resolve_snapshot_fields(preset="session", exclude=["not_a_field"])  # type: ignore[list-item]
 
 
 def test_resolve_snapshot_fields_no_preset_no_include_raises():
     with pytest.raises(SnapshotException, match="No snapshot fields resolved"):
-        resolve_snapshot_fields({})
+        resolve_snapshot_fields()
 
 
 def test_resolve_snapshot_fields_session_preset():
-    assert resolve_snapshot_fields({"preset": "session"}) == set(SNAPSHOT_PRESETS["session"])
+    assert resolve_snapshot_fields(preset="session") == set(SNAPSHOT_PRESETS["session"])
 
 
 def test_resolve_snapshot_fields_include_adds_to_preset():
-    fields = resolve_snapshot_fields({"preset": "session", "include": ["system_prompt"]})
+    fields = resolve_snapshot_fields(preset="session", include=["system_prompt"])
     assert fields == set(SNAPSHOT_PRESETS["session"]) | {"system_prompt"}
 
 
 def test_resolve_snapshot_fields_exclude_removes_from_preset():
-    fields = resolve_snapshot_fields({"preset": "session", "exclude": ["messages"]})
+    fields = resolve_snapshot_fields(preset="session", exclude=["messages"])
     assert "messages" not in fields
 
 
 def test_resolve_snapshot_fields_all_excluded_raises():
     with pytest.raises(SnapshotException):
-        resolve_snapshot_fields({"exclude": list(ALL_SNAPSHOT_FIELDS)})  # type: ignore[typeddict-item]
+        resolve_snapshot_fields(exclude=list(ALL_SNAPSHOT_FIELDS))  # type: ignore[list-item]
 
 
 _ORDERING_CASES = [
@@ -105,19 +104,12 @@ _ORDERING_CASES = [
 @pytest.mark.parametrize("preset,include,exclude", _ORDERING_CASES)
 def test_resolve_snapshot_fields_ordering(preset, include, exclude):
     expected = (set(SNAPSHOT_PRESETS[preset] if preset else []) | set(include)) - set(exclude)
-    options: TakeSnapshotOptions = {}
-    if preset is not None:
-        options["preset"] = preset  # type: ignore[assignment]
-    if include:
-        options["include"] = include  # type: ignore[assignment]
-    if exclude:
-        options["exclude"] = exclude  # type: ignore[assignment]
 
     if not expected:
         with pytest.raises(SnapshotException):
-            resolve_snapshot_fields(options)
+            resolve_snapshot_fields(preset=preset, include=include or None, exclude=exclude or None)
     else:
-        assert resolve_snapshot_fields(options) == expected
+        assert resolve_snapshot_fields(preset=preset, include=include or None, exclude=exclude or None) == expected
 
 
 _STRUCTURAL_CASES = [
