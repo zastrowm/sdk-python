@@ -440,3 +440,14 @@ def test_take_snapshot_exclude_removes_field_from_data():
     assert "state" in snapshot.data
     assert "conversation_manager_state" in snapshot.data
     assert "interrupt_state" in snapshot.data
+
+
+def test_take_snapshot_system_prompt_is_independent_copy():
+    """Mutating agent system_prompt after take_snapshot doesn't corrupt the snapshot."""
+    agent = _make_agent(system_prompt="original prompt")
+    snapshot = agent.take_snapshot(include=["system_prompt"])
+
+    original_content = snapshot.data["system_prompt"]
+    agent.system_prompt = "mutated prompt"
+    assert snapshot.data["system_prompt"] == original_content
+    assert snapshot.data["system_prompt"] != agent._system_prompt_content

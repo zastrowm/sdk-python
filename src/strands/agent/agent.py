@@ -1140,7 +1140,7 @@ class Agent(AgentBase):
         if "system_prompt" in fields:
             # Store the content-block representation so round-trips preserve caching hints and
             # other block-level metadata.
-            data["system_prompt"] = self._system_prompt_content
+            data["system_prompt"] = copy.deepcopy(self._system_prompt_content)
 
         return Snapshot(
             scope="agent",
