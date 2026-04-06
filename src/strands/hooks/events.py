@@ -402,3 +402,4 @@ class AfterMultiAgentInvocationEvent(BaseHookEvent):
     def should_reverse_callbacks(self) -> bool:
         """True to invoke callbacks in reverse order."""
         return True
+

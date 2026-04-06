@@ -5,6 +5,7 @@ It includes:
 - Agent: The main interface for interacting with AI models and tools
 - ConversationManager: Classes for managing conversation history and context windows
 - Retry Strategies: Configurable retry behavior for model calls
+- Snapshot: Point-in-time capture and restore of agent state
 """
 
 from typing import Any
@@ -19,14 +20,18 @@ from .conversation_manager import (
     SlidingWindowConversationManager,
     SummarizingConversationManager,
 )
+from .snapshot import FileSystemPersister, Snapshot, Snapshottable
 
 __all__ = [
     "Agent",
     "AgentBase",
     "AgentResult",
     "ConversationManager",
+    "FileSystemPersister",
     "NullConversationManager",
     "SlidingWindowConversationManager",
+    "Snapshot",
+    "Snapshottable",
     "SummarizingConversationManager",
     "ModelRetryStrategy",
 ]
