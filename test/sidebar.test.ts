@@ -74,7 +74,7 @@ describe('Sidebar Generation from navigation.yml', () => {
     expect(topLevelLabels).toContain('Community')
   })
 
-  it('should have collapsed groups at depth >= 1', () => {
+  it('should not set collapsed on groups unless explicitly specified in YAML', () => {
     const sidebar = loadSidebarFromConfig(pathToNavigationYml)
 
     // Find the Docs section
@@ -85,16 +85,16 @@ describe('Sidebar Generation from navigation.yml', () => {
 
     expect(docs).toBeDefined()
     if (docs) {
-      // Top level should not be collapsed
+      // Top level should not have collapsed set (middleware handles depth-based defaults)
       expect(docs).not.toHaveProperty('collapsed')
 
-      // Find a nested group (like "Get Started")
+      // Find a nested group (like "Get Started") — no explicit collapsed in YAML
       const getStarted = docs.items.find(
         (item): item is StarlightSidebarItem & { label: string } => 'label' in item && item.label === 'Get Started'
       )
 
-      // Nested groups should be collapsed
-      expect(getStarted).toHaveProperty('collapsed', true)
+      // Nested groups without explicit YAML collapsed flag should also lack the property
+      expect(getStarted).not.toHaveProperty('collapsed')
     }
   })
 

@@ -3,7 +3,7 @@ import path from 'node:path'
 import {
   findCurrentNavSection,
   filterSidebarByBasePath,
-  expandFirstLevelGroups,
+  applyCollapse,
 } from '../src/route-middleware'
 import { type NavLink } from '../src/config/navbar'
 import { loadSidebarFromConfig, type StarlightSidebarItem } from '../src/sidebar'
@@ -199,7 +199,7 @@ describe('Integration: Full filtering flow', () => {
 
     const basePath = currentNav?.basePath || currentNav?.href || ''
     const filtered = filterSidebarByBasePath(runtimeSidebar as any, basePath)
-    const result = expandFirstLevelGroups(filtered)
+    const result = applyCollapse(filtered)
 
     const allLinks = getAllLinks(result)
     console.log(`\n/docs/examples/ page should show ${allLinks.length} sidebar links`)
@@ -219,7 +219,7 @@ describe('Integration: Full filtering flow', () => {
 
     const basePath = currentNav?.basePath || currentNav?.href || ''
     const filtered = filterSidebarByBasePath(runtimeSidebar as any, basePath)
-    const result = expandFirstLevelGroups(filtered)
+    const result = applyCollapse(filtered)
 
     const allLinks = getAllLinks(result)
     expect(allLinks.length).toBeGreaterThan(0)
@@ -237,7 +237,7 @@ describe('Integration: Full filtering flow', () => {
 
     const basePath = currentNav?.basePath || currentNav?.href || ''
     const filtered = filterSidebarByBasePath(runtimeSidebar as any, basePath)
-    const result = expandFirstLevelGroups(filtered)
+    const result = applyCollapse(filtered)
 
     const allLinks = getAllLinks(result)
     expect(allLinks.length).toBeGreaterThan(0)
@@ -247,23 +247,63 @@ describe('Integration: Full filtering flow', () => {
   })
 })
 
-describe('expandFirstLevelGroups', () => {
-  it('should set collapsed to false for first-level groups', () => {
+describe('applyCollapse', () => {
+  it('should keep top-level groups expanded by default', () => {
     const input: SidebarEntry[] = [
-      { type: 'group', label: 'Group 1', collapsed: true, entries: [] },
-      { type: 'group', label: 'Group 2', collapsed: true, entries: [] },
+      { type: 'group', label: 'Group 1', collapsed: false, entries: [] },
+      { type: 'group', label: 'Group 2', collapsed: false, entries: [] },
     ]
 
-    const result = expandFirstLevelGroups(input as any)
+    const result = applyCollapse(input as any)
 
     expect((result[0] as SidebarGroup).collapsed).toBe(false)
     expect((result[1] as SidebarGroup).collapsed).toBe(false)
   })
 
+  it('should respect explicit collapsed: true at top level', () => {
+    const input: SidebarEntry[] = [
+      { type: 'group', label: 'Group 1', collapsed: true, entries: [] },
+      { type: 'group', label: 'Group 2', collapsed: false, entries: [] },
+    ]
+
+    const result = applyCollapse(input as any)
+
+    expect((result[0] as SidebarGroup).collapsed).toBe(true)
+    expect((result[1] as SidebarGroup).collapsed).toBe(false)
+  })
+
+  it('should collapse nested groups by default when no explicit value', () => {
+    // Note: in production Starlight pre-normalizes all unset collapsed to false,
+    // so this path (no collapsed property) is only exercised outside Starlight.
+    const nested = { type: 'group' as const, label: 'Nested', entries: [] }
+    const input = [{ type: 'group' as const, label: 'Top', entries: [nested] }]
+
+    const result = applyCollapse(input as any)
+
+    const top = result[0] as SidebarGroup
+    expect(top.collapsed).toBe(false)
+    expect((top.entries[0] as SidebarGroup).collapsed).toBe(true)
+  })
+
+  it('should collapse nested groups when Starlight has normalized collapsed to false', () => {
+    // Starlight normalizes unset collapsed to false before the middleware runs,
+    // making collapsed: false indistinguishable from "not set". Depth-based
+    // default still applies — only explicit collapsed: true in navigation.yml
+    // can override it.
+    const nested: SidebarGroup = { type: 'group', label: 'Nested', collapsed: false, entries: [] }
+    const input: SidebarEntry[] = [{ type: 'group', label: 'Top', collapsed: false, entries: [nested] }]
+
+    const result = applyCollapse(input as any)
+
+    const top = result[0] as SidebarGroup
+    expect(top.collapsed).toBe(false)
+    expect((top.entries[0] as SidebarGroup).collapsed).toBe(true)
+  })
+
   it('should not modify links', () => {
     const input: SidebarEntry[] = [{ type: 'link', label: 'Link', href: '/link/', isCurrent: false }]
 
-    const result = expandFirstLevelGroups(input as any)
+    const result = applyCollapse(input as any)
 
     expect(result[0]!.type).toBe('link')
     expect((result[0] as SidebarLink).href).toBe('/link/')

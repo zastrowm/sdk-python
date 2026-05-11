@@ -10,15 +10,17 @@ We're using [Astro](https://astro.build/) with the [Starlight](https://starlight
 
 ### 1. Sidebar Generation (`src/sidebar.ts`)
 
-**What it does:** Reads the navigation structure from `src/config/navigation.yml` and converts it to Starlight's sidebar format.
+**What it does:** Reads the navigation structure from `src/config/navigation.yml` and converts it to Starlight's sidebar format. It does not apply any collapse behavior — that is handled entirely by the route middleware.
 
 **Why:** Starlight can auto-generate sidebars from the file structure, but we have a specific navigation layout defined in `navigation.yml` that we want to preserve. The config file also contains navbar and GitHub dropdown configuration.
+
+**Collapse opt-in:** Add `collapsed: true` to any group in `navigation.yml` to make it collapsed by default. This value is passed through to the middleware, which is the sole owner of collapse decisions.
 
 **Badges:** Badges (like "new", "community", "experimental") come from page frontmatter, not the navigation config. This allows page authors to control badges directly.
 
 ### 2. Route Middleware (`src/route-middleware.ts`)
 
-**What it does:** Filters the sidebar at buildtime so each page only shows items from its top-level group. For API pages (Python and TypeScript), it dynamically generates sidebars from the docs collection and computes pagination links.
+**What it does:** Filters the sidebar at buildtime so each page only shows items from its top-level group, and applies collapse behavior via `applyCollapse()`. For API pages (Python and TypeScript), it dynamically generates sidebars from the docs collection and computes pagination links.
 
 **Why:** Our sidebar is organized into top-level groups (User Guide, Community, Examples, etc.). Without this middleware, every page would show the entire sidebar. This middleware scopes the sidebar to the current section, providing a cleaner navigation experience.
 
@@ -284,7 +286,7 @@ These override default Starlight components:
 The custom sidebar components provide a flatter navigation style.
 
 **How it works:**
-1. Top-level groups render as non-collapsible section headers (uppercase labels)
+1. Top-level groups render as non-collapsible section headers (uppercase labels), unless `collapsed: true` is set in `navigation.yml`, in which case they render as a collapsible with a caret icon
 2. Nested groups are collapsible with a caret icon
 3. Group labels link to their first child page (clickable navigation)
 4. Groups auto-expand when they contain the current page
