@@ -69,6 +69,7 @@ sidebar:
           - docs/user-guide/concepts/agents/agent-loop
           - docs/user-guide/concepts/agents/state
           - docs/user-guide/concepts/agents/session-management
+          - docs/user-guide/concepts/agents/snapshots
           - docs/user-guide/concepts/agents/prompts
           - docs/user-guide/concepts/agents/hooks
           - docs/user-guide/concepts/agents/conversation-management
