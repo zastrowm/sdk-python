@@ -10,6 +10,8 @@ from strands.hooks import (
     BaseHookEvent,
     BeforeMultiAgentInvocationEvent,
     BeforeNodeCallEvent,
+    HookEvent,
+    ModelStreamChunkEvent,
     MultiAgentInitializedEvent,
 )
 
@@ -18,6 +20,75 @@ from strands.hooks import (
 def orchestrator():
     """Mock orchestrator for testing."""
     return Mock()
+
+
+@pytest.fixture
+def mock_agent():
+    """Mock agent for testing."""
+    return Mock()
+
+
+def test_model_stream_chunk_event_creation(mock_agent):
+    """Test ModelStreamChunkEvent creation with agent and chunk."""
+    chunk = {"contentBlockDelta": {"delta": {"text": "Hello"}}}
+    event = ModelStreamChunkEvent(agent=mock_agent, chunk=chunk)
+
+    assert event.agent is mock_agent
+    assert event.chunk == chunk
+    assert isinstance(event, HookEvent)
+
+
+def test_model_stream_chunk_event_with_message_start(mock_agent):
+    """Test ModelStreamChunkEvent with messageStart chunk."""
+    chunk = {"messageStart": {"role": "assistant"}}
+    event = ModelStreamChunkEvent(agent=mock_agent, chunk=chunk)
+
+    assert event.agent is mock_agent
+    assert event.chunk == chunk
+
+
+def test_model_stream_chunk_event_with_metadata(mock_agent):
+    """Test ModelStreamChunkEvent with metadata chunk."""
+    chunk = {
+        "metadata": {
+            "usage": {"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
+            "metrics": {"latencyMs": 100},
+        }
+    }
+    event = ModelStreamChunkEvent(agent=mock_agent, chunk=chunk)
+
+    assert event.agent is mock_agent
+    assert event.chunk == chunk
+
+
+def test_model_stream_chunk_event_with_tool_use(mock_agent):
+    """Test ModelStreamChunkEvent with tool use chunk."""
+    chunk = {
+        "contentBlockStart": {
+            "start": {"toolUse": {"toolUseId": "123", "name": "test_tool"}}
+        }
+    }
+    event = ModelStreamChunkEvent(agent=mock_agent, chunk=chunk)
+
+    assert event.agent is mock_agent
+    assert event.chunk == chunk
+
+
+def test_model_stream_chunk_event_should_not_reverse_callbacks(mock_agent):
+    """Test that ModelStreamChunkEvent does not reverse callbacks."""
+    chunk = {"contentBlockDelta": {"delta": {"text": "test"}}}
+    event = ModelStreamChunkEvent(agent=mock_agent, chunk=chunk)
+
+    assert event.should_reverse_callbacks is False
+
+
+def test_model_stream_chunk_event_chunk_not_writable(mock_agent):
+    """Test that chunk property is not writable."""
+    chunk = {"contentBlockDelta": {"delta": {"text": "test"}}}
+    event = ModelStreamChunkEvent(agent=mock_agent, chunk=chunk)
+
+    with pytest.raises(AttributeError):
+        event.chunk = {"different": "chunk"}
 
 
 def test_multi_agent_initialization_event_with_orchestrator_only(orchestrator):
