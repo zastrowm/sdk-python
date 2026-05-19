@@ -5,6 +5,8 @@ import {
   FileStorage,
   S3Storage,
 } from '@strands-agents/sdk/vended-plugins/context-offloader'
+import { bash } from '@strands-agents/sdk/vended-tools/bash'
+import { fileEditor } from '@strands-agents/sdk/vended-tools/file-editor'
 
 // =====================
 // Disable Retrieval Tool
@@ -13,6 +15,7 @@ import {
 {
   // --8<-- [start:disable_retrieval_tool]
   const agent = new Agent({
+    tools: [bash, fileEditor],
     plugins: [
       new ContextOffloader({
         storage: new FileStorage('./artifacts'),
