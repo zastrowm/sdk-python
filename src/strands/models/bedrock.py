@@ -34,7 +34,7 @@ from ..types.tools import ToolChoice, ToolSpec
 from ._defaults import resolve_config_metadata
 from ._strict_schema import ensure_strict_json_schema
 from ._validation import validate_config_keys
-from .model import BaseModelConfig, CacheConfig, Model
+from .model import BaseModelConfig, CacheConfig, CacheToolsConfig, Model
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,8 @@ class BedrockModel(Model):
             additional_response_field_paths: Additional response field paths to extract
             cache_prompt: Cache point type for the system prompt (deprecated, use cache_config)
             cache_config: Configuration for prompt caching. Use CacheConfig(strategy="auto") for automatic caching.
-            cache_tools: Cache point type for tools
+            cache_tools: Cache point type for tools. Pass a string (e.g. "default") for the default 5m TTL,
+                or a CacheToolsConfig instance to set both type and TTL (e.g. "1h").
             guardrail_id: ID of the guardrail to apply
             guardrail_trace: Guardrail trace mode. Defaults to enabled.
             guardrail_version: Version of the guardrail to apply
@@ -127,7 +128,7 @@ class BedrockModel(Model):
         additional_response_field_paths: list[str] | None
         cache_prompt: str | None
         cache_config: CacheConfig | None
-        cache_tools: str | None
+        cache_tools: str | CacheToolsConfig | None
         guardrail_id: str | None
         guardrail_trace: Literal["enabled", "disabled", "enabled_full"] | None
         guardrail_stream_processing_mode: Literal["sync", "async"] | None
@@ -292,11 +293,7 @@ class BedrockModel(Model):
                                 }
                                 for tool_spec in tool_specs
                             ],
-                            *(
-                                [{"cachePoint": {"type": self.config["cache_tools"]}}]
-                                if self.config.get("cache_tools")
-                                else []
-                            ),
+                            *self._build_tools_cache_point(),
                         ],
                         **({"toolChoice": tool_choice if tool_choice else {"auto": {}}}),
                     }
@@ -371,6 +368,25 @@ class BedrockModel(Model):
 
         return {"additionalModelRequestFields": additional_fields}
 
+    def _build_tools_cache_point(self) -> list[dict[str, Any]]:
+        """Build the cache point block appended to ``toolConfig.tools`` if ``cache_tools`` is configured.
+
+        Returns:
+            A single-element list containing the cache point block, or an empty list if no cache_tools is set.
+        """
+        cache_tools = self.config.get("cache_tools")
+        if not cache_tools:
+            return []
+
+        if isinstance(cache_tools, CacheToolsConfig):
+            cache_point: dict[str, Any] = {"type": cache_tools.type}
+            if cache_tools.ttl:
+                cache_point["ttl"] = cache_tools.ttl
+        else:
+            cache_point = {"type": cache_tools}
+
+        return [{"cachePoint": cache_point}]
+
     def _inject_cache_point(self, messages: list[dict[str, Any]]) -> None:
         """Inject a cache point at the end of the last user message.
 
@@ -395,7 +411,11 @@ class BedrockModel(Model):
                 last_user_idx = msg_idx
 
         if last_user_idx is not None and messages[last_user_idx].get("content"):
-            messages[last_user_idx]["content"].append({"cachePoint": {"type": "default"}})
+            cache_point: dict[str, Any] = {"type": "default"}
+            cache_config = self.config.get("cache_config")
+            if cache_config and cache_config.ttl:
+                cache_point["ttl"] = cache_config.ttl
+            messages[last_user_idx]["content"].append({"cachePoint": cache_point})
             logger.debug("msg_idx=<%s> | added cache point to last user message", last_user_idx)
 
     def _find_last_user_text_message_index(self, messages: Messages) -> int | None:
