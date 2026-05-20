@@ -59,6 +59,15 @@ const { siteTitleHref } = Astro.locals.starlightRoute;
             <Icon name="down-caret" class="mobile-nav-caret" size="1rem" />
           </summary>
           <div class="mobile-nav-menu">
+            {/* Language toggle at the top of the dropdown.
+                 Most-used control for the docs (Python vs TypeScript) so it
+                 takes the prime spot. The header bar stays uncluttered on
+                 narrow viewports because the toggle no longer lives there. */}
+            <div class="mobile-nav-section-label mobile-nav-section-label--first">Language</div>
+            <div class="mobile-nav-language">
+              <LanguageToggle />
+            </div>
+            <div class="mobile-nav-divider"></div>
             {navLinks.map((link: NavLink) => {
               const isActive = activeNav?.label === link.label;
               return (
@@ -91,10 +100,17 @@ const { siteTitleHref } = Astro.locals.starlightRoute;
         </details>
       </nav>
     )}
+    {/* Right-side controls (desktop only).
+         The language toggle lives here so the header bar stays a single,
+         aligned row. On mobile the toggle is rendered inside the
+         .mobile-nav-menu dropdown instead (see above), keeping the narrow
+         header uncluttered. The inline language tablist inside <Tabs> is
+         hidden by AutoSyncTabs, so this toggle is the sole language
+         selector site-wide. */}
     <div class="sl-hidden md:sl-flex print:hidden right-group">
+      <LanguageToggle />
       <GitHubDropdown />
       <DiscordLink />
-      <LanguageToggle />
       <ThemeSelect />
       <LanguageSelect />
     </div>
@@ -466,21 +482,44 @@ const { siteTitleHref } = Astro.locals.starlightRoute;
     }
 
     /*
+     * The first label in the dropdown (currently "Language") shouldn't have
+     * extra top padding above it — the .mobile-nav-menu panel already has
+     * 0.5rem padding, so this keeps the toggle visually flush with the top.
+     */
+    .mobile-nav-section-label--first {
+      padding-top: 0;
+    }
+
+    /*
+     * Wrapper for the LanguageToggle inside the mobile dropdown.
+     * Provides padding consistent with other dropdown rows so the
+     * Python/TypeScript radio pair lines up with mobile-nav-link items.
+     */
+    .mobile-nav-language {
+      padding: 0.25rem 0.75rem 0.5rem;
+    }
+
+    /*
      * ==========================================================================
      * DESKTOP GRID LAYOUT
      * ==========================================================================
-     * On desktop, switch header-top from flexbox to CSS Grid for precise control:
-     * 
-     * Column 1 (180px): Logo - fixed width prevents layout shift
-     * Column 2 (1fr): Spacer - flexible, pushes remaining items to the right
-     * Column 3 (300px): Search - fixed width for consistent positioning
-     * Column 4 (auto): Mobile nav - hidden on desktop but needs grid slot
-     * Column 5 (auto): Right group - social icons, theme, language
+     * On desktop, switch header-top from flexbox to CSS Grid for precise control.
+     * mobile-nav is display:none on desktop and removed from grid flow, so the
+     * visible tracks are:
+     *
+     *   Column 1 (180px): Logo - fixed width prevents layout shift
+     *   Column 2 (1fr):   Spacer - flexible, pushes remaining items to the right
+     *   Column 3 (300px): Search - fixed width for consistent positioning
+     *   Column 4 (auto):  Right group - social icons, theme, language toggle
      */
     @media (min-width: 50rem) {
       .header-top {
         display: grid;
-        grid-template-columns: 180px 1fr 300px auto auto;
+        /* On desktop, mobile-nav is display:none and removed from grid layout.
+           Visible items: logo (180px) | spacer (1fr) | search (300px) |
+           right-group (auto). The right-group contains the language toggle
+           plus social/theme controls in one aligned cluster. */
+        grid-template-columns: 180px 1fr 300px auto;
         align-content: center;
       }
       
