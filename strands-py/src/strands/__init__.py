@@ -1,4 +1,4 @@
-"""A framework for building, deploying, and managing AI agents."""
+"""Strands Agents: A framework for building, deploying, and managing AI agents."""
 
 from . import agent, models, telemetry, types
 from .agent.agent import Agent
