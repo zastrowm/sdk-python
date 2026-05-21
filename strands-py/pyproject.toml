@@ -112,7 +112,10 @@ packages = ["src/strands"]
 
 
 [tool.hatch.version]
-source = "vcs"  # Use git tags for versioning
+source = "vcs"
+raw-options.root = ".."
+raw-options.tag_regex = "^python/v(?P<version>.+)$"
+raw-options.git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "python/v*"]
 
 
 [tool.hatch.envs.hatch-static-analysis]
