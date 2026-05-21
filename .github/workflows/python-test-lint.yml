@@ -1,4 +1,4 @@
-name: Test and Lint
+name: "Python: Test and Lint"
 
 on:
   workflow_call:
@@ -58,33 +58,37 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       LOG_LEVEL: DEBUG
+    defaults:
+      run:
+        working-directory: strands-py
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}  # Explicitly define which commit to check out
-          persist-credentials: false  # Don't persist credentials for subsequent actions
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install system audio dependencies (Linux)
         if: matrix.os-name == 'linux'
+        working-directory: .
         run: |
           sudo apt-get update
           sudo apt-get install -y portaudio19-dev libasound2-dev
       - name: Install system audio dependencies (macOS)
         if: matrix.os-name == 'macOS'
+        working-directory: .
         run: |
           brew install portaudio
       - name: Install system audio dependencies (Windows)
         if: matrix.os-name == 'windows'
+        working-directory: .
         run: |
           # Windows typically has audio libraries available by default
           echo "Windows audio dependencies handled by PyAudio wheels"
       - name: Install dependencies
-        # Pin virtualenv until hatch is fixed.
-        # See https://github.com/pypa/hatch/issues/2193
         run: |
           pip install --no-cache-dir hatch 'virtualenv<21'
       - name: Run Unit tests
@@ -101,6 +105,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    defaults:
+      run:
+        working-directory: strands-py
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -115,13 +122,12 @@ jobs:
           cache: 'pip'
 
       - name: Install system audio dependencies (Linux)
+        working-directory: .
         run: |
           sudo apt-get update
           sudo apt-get install -y portaudio19-dev libasound2-dev
 
       - name: Install dependencies
-        # Pin virtualenv until hatch is fixed.
-        # See https://github.com/pypa/hatch/issues/2193
         run: |
           pip install --no-cache-dir hatch 'virtualenv<21'
 
@@ -129,4 +135,3 @@ jobs:
         id: lint
         run: hatch fmt --linter --check
         continue-on-error: false
-

@@ -1,4 +1,4 @@
-name: Auto Close Issues
+name: "Python: Auto Close Issues"
 
 on:
   schedule:

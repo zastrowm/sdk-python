@@ -1,9 +1,12 @@
-name: PR Title Conventional Commits
+name: "Python: PR Title Conventional Commits"
 
 on:
   pull_request:
     branches: [main]
     types: [opened, edited, synchronize, reopened]
+    paths:
+      - 'strands-py/**'
+      - '.github/workflows/python-*'
 
 jobs:
   validate-pr-title:

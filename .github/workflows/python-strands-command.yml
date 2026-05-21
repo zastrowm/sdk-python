@@ -1,4 +1,4 @@
-name: Strands Command Handler
+name: "Python: Strands Command Handler"
 
 on:
   issue_comment:

@@ -1,4 +1,4 @@
-name: Check Markdown Links
+name: "Python: Check Markdown Links"
 
 on:
   schedule:
@@ -16,7 +16,8 @@ jobs:
         with:
           use-quiet-mode: 'yes'
           use-verbose-mode: 'yes'
-          config-file: '.markdown-link-check.json'
+          config-file: 'strands-py/.markdown-link-check.json'
+          folder-path: 'strands-py'
         continue-on-error: true
 
       - name: Create issue if links are broken

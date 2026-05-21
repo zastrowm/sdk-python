@@ -1,4 +1,4 @@
-name: Issue Responder
+name: "Python: Issue Responder"
 
 on:
   issues:

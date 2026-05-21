@@ -1,22 +1,29 @@
-name: Pull Request and Push Action
+name: "Python: Pull Request and Push"
 
 on:
-  pull_request:  # Safer than pull_request_target for untrusted code
+  pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'strands-py/**'
+      - '.github/workflows/python-*'
   push:
-    branches: [ main ]  # Also run on direct pushes to main
+    branches: [ main ]
+    paths:
+      - 'strands-py/**'
+      - '.github/workflows/python-*'
+  workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   call-test-lint:
-    uses: ./.github/workflows/test-lint.yml
+    uses: ./.github/workflows/python-test-lint.yml
     permissions:
       contents: read
     with:
-      ref: ${{ github.event.pull_request.head.sha }}
+      ref: ${{ github.event.pull_request.head.sha || github.sha }}
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -28,13 +35,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v6
       with:
-        fetch-depth: 0  # We the need the full Git history.
+        fetch-depth: 0
     - name: Setup uv
       uses: astral-sh/setup-uv@v7
     - name: Check API breaking changes
       run: |
-        if ! uvx griffe check --search src --format github strands --against "main"; then
+        if ! uvx griffe check --search strands-py/src --format github strands --against "main"; then
           echo "Potential API changes detected (review if actually breaking)"
           exit 1
         fi
-
