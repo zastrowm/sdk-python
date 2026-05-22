@@ -1,4 +1,4 @@
-name: Publish PyPI Package to Lambda Layer
+name: "Python: Publish Lambda Layer"
 
 on:
   workflow_dispatch:

@@ -1,9 +1,12 @@
-name: Secure Integration test
+name: "Python: Integration Test"
 
 on:
   pull_request_target:
     branches: [main]
-  merge_group: # Run tests in merge queue
+    paths:
+      - 'strands-py/**'
+      - '.github/workflows/python-*'
+  merge_group:
     types: [checks_requested]
 
 jobs:
@@ -21,7 +24,7 @@ jobs:
           skip-check: ${{ github.event_name == 'merge_group' }}
           username: ${{ github.event.pull_request.user.login || 'invalid' }}
           allowed-roles: 'maintain,triage,write,admin'
-  
+
   check-access-and-checkout:
     runs-on: ubuntu-latest
     needs: authorization-check
@@ -30,6 +33,9 @@ jobs:
       id-token: write
       pull-requests: read
       contents: read
+    defaults:
+      run:
+        working-directory: strands-py
     steps:
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -41,21 +47,19 @@ jobs:
       - name: Checkout head commit
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }} # Pull the commit from the forked repo
-          persist-credentials: false  # Don't persist credentials for subsequent actions
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - name: Install dependencies
-        # Pin virtualenv until hatch is fixed.
-        # See https://github.com/pypa/hatch/issues/2193
         run: |
           pip install --no-cache-dir hatch 'virtualenv<21'
       - name: Run integration tests
         env:
           AWS_REGION: us-east-1
-          AWS_REGION_NAME: us-east-1 # Needed for LiteLLM
+          AWS_REGION_NAME: us-east-1
           STRANDS_TEST_API_KEYS_SECRET_NAME: ${{ secrets.STRANDS_TEST_API_KEYS_SECRET_NAME }}
         id: tests
         run: |
@@ -66,7 +70,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results
-          path: ./build/test-results.xml
+          path: strands-py/build/test-results.xml
 
   upload-metrics:
     runs-on: ubuntu-latest
