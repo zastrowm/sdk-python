@@ -308,6 +308,19 @@ For detailed guidance & examples, explore our documentation:
 - [API Reference](https://strandsagents.com/docs/api/python/strands.agent.agent/)
 - [Production & Deployment Guide](https://strandsagents.com/docs/user-guide/deploy/operating-agents-in-production/)
 
+## Development
+
+Source code lives in the `strands-py/` subdirectory. To develop locally:
+
+```bash
+cd strands-py
+pip install hatch
+hatch test        # run unit tests
+hatch fmt         # format & lint
+```
+
+Git operations (commits, branches, PRs) are still done from the repo root as normal.
+
 ## Contributing ❤️
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details on:
