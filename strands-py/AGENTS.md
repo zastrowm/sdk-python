@@ -568,3 +568,4 @@ hatch build                    # Build package
   - [HOOKS.md](./docs/HOOKS.md) - Hooks system guide
   - [PR.md](./docs/PR.md) - PR description guidelines
   - [MCP_CLIENT_ARCHITECTURE.md](./docs/MCP_CLIENT_ARCHITECTURE.md) - MCP threading design
+# test
