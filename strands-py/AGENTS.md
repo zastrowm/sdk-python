@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This document provides context, patterns, and guidelines for AI coding assistants working in this repository. For human contributors, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+This document provides context, patterns, and guidelines for AI coding assistants working in this repository. For human contributors, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Product Overview
 
@@ -562,7 +562,7 @@ hatch build                    # Build package
 ## Additional Resources
 
 - [Strands Agents Documentation](https://strandsagents.com/)
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Human contributor guidelines
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Human contributor guidelines
 - [docs/](./docs/) - Developer documentation
   - [STYLE_GUIDE.md](./docs/STYLE_GUIDE.md) - Code style conventions
   - [HOOKS.md](./docs/HOOKS.md) - Hooks system guide

@@ -12,5 +12,5 @@ This folder contains documentation for contributors and developers working on th
 ## Related Documentation
 
 - [AGENTS.md](../AGENTS.md) - Guidance for AI agents and LLMs working with this codebase
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines for human contributors
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Contribution guidelines for human contributors
 - [strandsagents.com](https://strandsagents.com/) - User-facing documentation
