@@ -21,7 +21,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -29,9 +29,11 @@ jobs:
             python:
               - 'strands-py/**'
               - '.github/workflows/python-*'
+              - '.github/workflows/ci.yml'
             docs:
               - 'site/**'
               - '.github/workflows/docs-*'
+              - '.github/workflows/ci.yml'
 
   python:
     name: Python
