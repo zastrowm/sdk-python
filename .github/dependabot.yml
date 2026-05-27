@@ -11,6 +11,13 @@ updates:
       dev-dependencies:
         patterns:
           - "pytest"
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 100
+    commit-message:
+      prefix: "ci(docs)"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -4,6 +4,8 @@ __pycache__*
 .venv
 *.bak
 .vscode
-.kiro
+.kiro/*
+!.kiro/skills
+!.kiro/references
 CLAUDE.md
 .claude/settings.local.json
