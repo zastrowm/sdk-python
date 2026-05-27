@@ -23,7 +23,7 @@ Skip the design process for bug fixes, small improvements, documentation updates
 ## How to submit a feature proposal
 
 1. **Check the [roadmap](https://github.com/orgs/strands-agents/projects/8/views/1)** — See if your idea aligns with our direction
-2. **Fork the [docs repository](https://github.com/strands-agents/docs)**
+2. **Fork the [sdk-python repository](https://github.com/strands-agents/sdk-python)**
 3. **Create your design** — Add a new file: `designs/NNNN-feature-name.md` using the template below
 4. **Submit a pull request** — We'll review and discuss
 5. **Iterate based on feedback** — Address comments and questions
