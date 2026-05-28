@@ -160,9 +160,10 @@ The documentation site uses Astro with the Starlight theme.
 ```bash
 cd site
 npm install
-npm run dev         # local dev server at http://localhost:4321/
-npm run build       # production build
-npm run typecheck   # type checking
+npm run dev                # local dev server at http://localhost:4321/
+npm run build              # production build
+npm run typecheck          # type checking
+npm run typecheck:snippets # type check code examples
 ```
 
 For docs contribution guidelines, see [site/CONTRIBUTING.md](./site/CONTRIBUTING.md).

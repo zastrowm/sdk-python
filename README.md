@@ -38,13 +38,13 @@ This monorepo contains the Python SDK, TypeScript SDK, documentation site, and s
 
 | Directory | Description |
 |-----------|-------------|
-| `strands-py/` | Python SDK ([PyPI](https://pypi.org/project/strands-agents/)) |
-| `strands-ts/` | TypeScript SDK ([npm](https://www.npmjs.com/package/@strands/agent)) |
-| `strands-wasm/` | WASM bindings |
-| `strands-py-wasm/` | Python ↔ WASM bridge |
-| `strandly/` | CLI tooling |
-| `site/` | Documentation site ([strandsagents.com](https://strandsagents.com)) |
-| `designs/` | Design proposals |
+| `strands-py/` | Python SDK — agent loop, model providers, tools ([PyPI](https://pypi.org/project/strands-agents/)) |
+| `strands-ts/` | TypeScript SDK — agent loop, model providers, tools ([npm](https://www.npmjs.com/package/@strands/agent)) |
+| `strands-wasm/` | WebAssembly bindings for running Python tools from TypeScript agents |
+| `strands-py-wasm/` | Python host for WASM components (bridges WIT interfaces to Python) |
+| `strandly/` | Developer CLI for local builds, codegen, and workspace tooling |
+| `site/` | Documentation site built with Astro/Starlight ([strandsagents.com](https://strandsagents.com)) |
+| `designs/` | Design proposals for significant features (RFC-style) |
 
 ## Feature Overview
 

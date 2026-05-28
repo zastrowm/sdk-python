@@ -23,7 +23,7 @@ See [CONTRIBUTING.md - TypeScript SDK](../CONTRIBUTING.md#typescript-sdk) for:
 
 ### 3. Pull Request Guidelines
 
-When creating pull requests, you **MUST** follow the guidelines in [PR.md](../dev-docs/PR.md). Key principles:
+When creating pull requests, you **MUST** follow the guidelines in [PR.md](../dev-docs/PR.md) and use the [PR template](../.github/PULL_REQUEST_TEMPLATE.md). Key principles:
 
 - **Focus on WHY**: Explain motivation and user impact, not implementation details
 - **Document public API changes**: Show before/after code examples
