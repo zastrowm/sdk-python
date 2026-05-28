@@ -17,10 +17,10 @@ This directory contains the documentation site for Strands Agents, providing gui
 
 When working on SDK features or documentation, familiarize yourself with these team processes:
 
-* **[Feature Lifecycle Process](team/FEATURE_LIFECYCLE.md)**: How features are added, versioned, deprecated, and graduated from experimental status
-* **[API Bar Raising](team/API_BAR_RAISING.md)**: Standards for API design quality
-* **[Decisions](team/DECISIONS.md)**: Key architectural and design decisions
-* **[Tenets](team/TENETS.md)**: Core principles guiding SDK development
+* **[Feature Lifecycle Process](../team/FEATURE_LIFECYCLE.md)**: How features are added, versioned, deprecated, and graduated from experimental status
+* **[API Bar Raising](../team/API_BAR_RAISING.md)**: Standards for API design quality
+* **[Decisions](../team/DECISIONS.md)**: Key architectural and design decisions
+* **[Tenets](../team/TENETS.md)**: Core principles guiding SDK development
 
 These documents define the standards and processes that ensure consistency and quality across the Strands SDK.
 

@@ -34,7 +34,7 @@ Initialize the review environment by checking out the main branch for guidance.
 - You MUST checkout the main branch first to read repository review guidance
 - You MUST create a progress notebook to track your review process using markdown checklists
 - You MUST read repository guidelines from `README.md`, `CONTRIBUTING.md`, and `AGENTS.md` (if present)
-- You MUST read API bar raising guidelines from `site/team/API_BAR_RAISING.md`
+- You MUST read API bar raising guidelines from `team/API_BAR_RAISING.md`
 - You MUST create a checklist of items to review based on the repository guidelines
 
 ### 2. Analyze Pull Request Context
@@ -83,7 +83,7 @@ If the PR introduces or modifies public APIs, evaluate the API design from a cus
   - Example code snippets demonstrating usage
   - Complete API signatures with default parameter values
   - Module exports (what's exported from each module)
-- You MUST evaluate the API against SDK tenets (`site/team/TENETS.md`) and decision records (`site/team/DECISIONS.md`)
+- You MUST evaluate the API against SDK tenets (`team/TENETS.md`) and decision records (`team/DECISIONS.md`)
 - You MUST verify the API addresses documented use cases
 - You MUST check if default parameters/behavior represent the most common usage
 - You MUST assess the level of abstraction and extensibility:

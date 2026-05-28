@@ -14,6 +14,7 @@ strands-agents/
 ├── site/               # Documentation site (Astro) — see site/AGENTS.md
 ├── designs/            # Design proposals
 ├── dev-docs/           # TypeScript development docs
+├── team/               # Team governance (tenets, decisions, API bar-raising)
 ├── .agents/            # Agent skills and references
 ├── package.json        # npm workspace root
 └── .github/workflows/  # CI (ci.yml is the merge gate)
