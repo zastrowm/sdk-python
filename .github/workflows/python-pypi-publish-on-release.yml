@@ -55,6 +55,12 @@ jobs:
             exit 1
         fi
 
+    - name: Copy root README and LICENSE
+      run: |
+        cp ../README.md .
+        cp ../LICENSE.APACHE LICENSE
+        cp ../NOTICE .
+
     - name: Build
       run: |
         hatch build

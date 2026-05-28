@@ -88,6 +88,11 @@ jobs:
         run: |
           # Windows typically has audio libraries available by default
           echo "Windows audio dependencies handled by PyAudio wheels"
+      - name: Copy root README and LICENSE
+        run: |
+          cp ../README.md .
+          cp ../LICENSE.APACHE LICENSE
+          cp ../NOTICE .
       - name: Install dependencies
         run: |
           pip install --no-cache-dir hatch 'virtualenv<21'
@@ -126,6 +131,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y portaudio19-dev libasound2-dev
+
+      - name: Copy root README and LICENSE
+        run: |
+          cp ../README.md .
+          cp ../LICENSE.APACHE LICENSE
+          cp ../NOTICE .
 
       - name: Install dependencies
         run: |
