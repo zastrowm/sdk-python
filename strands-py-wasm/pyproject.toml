@@ -39,8 +39,8 @@ pydantic = ["pydantic>=2.4.0,<3.0.0"]
 
 
 [project.urls]
-Homepage = "https://github.com/strands-agents/sdk-typescript"
-"Bug Tracker" = "https://github.com/strands-agents/sdk-typescript/issues"
+Homepage = "https://github.com/strands-agents/sdk-python"
+"Bug Tracker" = "https://github.com/strands-agents/sdk-python/issues"
 Documentation = "https://strandsagents.com"
 
 

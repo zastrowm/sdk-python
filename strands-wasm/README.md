@@ -24,8 +24,8 @@ In WIT terminology, the WASM component is the "guest" and Python is the "host". 
 ### First-time setup
 
 ```bash
-git clone https://github.com/strands-agents/sdk-typescript.git
-cd sdk-typescript
+git clone https://github.com/strands-agents/sdk-python.git
+cd sdk-python
 npm install
 npm run dev -- bootstrap
 ```
