@@ -8,11 +8,8 @@ A filesystem editor tool for viewing, creating, and editing files programmatical
 
 - Only use with trusted input
 - File operations execute with the full permissions of the Node.js process
-- The tool does not restrict access to a project directory, workspace, or configured allowlist
-- For production deployments, consider running in a sandboxed environment (containers, VMs, etc.) or implementing filesystem access controls
-- Consider restricting writable paths to a specific workspace directory
+- For production deployments, consider running in a sandboxed environment (containers, VMs, etc.)
 - Never expose this tool to untrusted users or untrusted prompt input without additional security measures
-- If agent tool calls may be influenced by external content (documents, web pages, user messages), implement path validation to prevent unintended file modifications
 
 ## Features
 

@@ -37,7 +37,7 @@ Gives your agent the ability to read and modify files on disk — useful for cod
 _Supported in: Node.js only._
 
 :::caution[Security Warning]
-This tool reads and writes files at arbitrary absolute paths with the full permissions of the Node.js process. Only use with trusted input and consider running in a sandboxed environment (containers, VMs) or implementing filesystem allowlists for production.
+This tool reads and writes files at arbitrary absolute paths with the full permissions of the Node.js process. Only use with trusted input and consider running in a sandboxed environment (containers, VMs) for production.
 :::
 
 **Example:**
@@ -58,7 +58,7 @@ Lets your agent call external APIs and fetch web content. Supports all HTTP meth
 _Supported in: Node.js 20+, modern browsers._
 
 :::caution[Security Warning]
-This tool makes HTTP requests to arbitrary URLs without restrictions on destination. Only use with trusted input and consider implementing URL allowlists, blocking private network ranges, and running in sandboxed environments for production.
+This tool makes HTTP requests to arbitrary URLs without restrictions on destination. Only use with trusted input and consider running in a sandboxed environment (containers, VMs) for production.
 :::
 
 **Example:**
