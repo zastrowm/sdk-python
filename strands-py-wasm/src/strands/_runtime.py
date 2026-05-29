@@ -346,14 +346,10 @@ class _AgentRuntime:
         self._funcs.constructor.post_return(self._store)
 
     async def generate(self, args: _t.InvokeArgs) -> EventStream:
-        response_handle: ResourceAny = await self._funcs.generate.call_async(
-            self._store, self._handle, args
-        )
+        response_handle: ResourceAny = await self._funcs.generate.call_async(self._store, self._handle, args)
         self._funcs.generate.post_return(self._store)
         self._current_response = response_handle
-        stream_handle: ResourceAny = await self._funcs.events.call_async(
-            self._store, response_handle
-        )
+        stream_handle: ResourceAny = await self._funcs.events.call_async(self._store, response_handle)
         self._funcs.events.post_return(self._store)
         return EventStream(self, stream_handle)
 

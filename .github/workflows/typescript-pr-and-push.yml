@@ -36,7 +36,7 @@ jobs:
     permissions:
       contents: read
     with:
-      ref: ${{ github.event.pull_request.head.sha }}
+      ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
   call-ts-test:
     uses: ./.github/workflows/typescript-ts-test.yml
