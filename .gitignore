@@ -79,6 +79,5 @@ CLAUDE.md
 # dev
 .vitest*
 
-# Files copied into strands-ts/ during prepack (originals live at repo root)
-strands-ts/README.md
+# LICENSE copied into strands-ts/ during prepack (original lives at repo root)
 strands-ts/LICENSE
