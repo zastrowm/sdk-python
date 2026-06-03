@@ -227,7 +227,6 @@ sidebar:
   - label: Examples
     items:
       - docs/examples
-      - docs/examples/python/cli-reference-agent
       - docs/examples/python/weather_forecaster
       - docs/examples/python/memory_agent
       - docs/examples/python/file_operations
