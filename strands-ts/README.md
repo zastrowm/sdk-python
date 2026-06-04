@@ -25,7 +25,7 @@
   <p>
     <a href="https://strandsagents.com/">Documentation</a>
     ◆ <a href="https://github.com/strands-agents/samples">Samples</a>
-    ◆ <a href="https://github.com/strands-agents/harness-sdk">Python SDK</a>
+    ◆ <a href="https://github.com/strands-agents/harness-sdk/tree/main/strands-py">Python SDK</a>
     ◆ <a href="https://github.com/strands-agents/tools">Tools</a>
     ◆ <a href="https://github.com/strands-agents/agent-builder">Agent Builder</a>
     ◆ <a href="https://github.com/strands-agents/mcp-server">MCP Server</a>
