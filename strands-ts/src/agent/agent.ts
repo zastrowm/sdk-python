@@ -802,6 +802,7 @@ export class Agent implements LocalAgent, InvokableAgent {
         interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
       }
 
+      // Arrow functions can't be generators, so we capture `this` for the async function* callback.
       // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this
       try {
@@ -819,17 +820,25 @@ export class Agent implements LocalAgent, InvokableAgent {
           // Handles interrupts raised by AgentStreamStage middleware (before the agent loop starts).
           // Tool/hook interrupts are caught separately in _stream() since they propagate through
           // the agent loop and produce an AgentResult internally.
+          //
+          // We intentionally don't call _createInterruptResult() here because middleware
+          // is stateless during execution — agent state (e.g. _isInvoking) is only modified
+          // at the edges, so we construct the result directly.
+          const invocationState = options?.invocationState ?? {}
           for (const interrupt of error.interrupts) {
             this._interruptState.getOrCreateInterrupt(interrupt.id, interrupt.name, interrupt.reason)
           }
           this._interruptState.activate()
+          for (const interrupt of error.interrupts) {
+            yield new InterruptEvent({ agent: this, interrupt, invocationState })
+          }
           return new AgentResult({
             stopReason: 'interrupt',
             lastMessage: new Message({ role: 'assistant', content: [] }),
             traces: this._tracer.localTraces,
             metrics: this._meter.metrics,
             interrupts: this._interruptState.getUnansweredInterrupts(),
-            invocationState: options?.invocationState ?? {},
+            invocationState,
           })
         }
         throw error
@@ -926,6 +935,12 @@ export class Agent implements LocalAgent, InvokableAgent {
       // Resume only on a clean invocation — errors propagate above.
       if (lastAfterInvocation?.resume !== undefined) {
         currentArgs = lastAfterInvocation.resume
+        // Apply any interrupt responses carried in the resume args so middleware
+        // sees them as answered on the next iteration.
+        const resumeInterruptResponses = this._extractInterruptResponses(currentArgs)
+        if (resumeInterruptResponses.length > 0) {
+          this._interruptState.resume(resumeInterruptResponses)
+        }
         continue
       }
 
@@ -1689,6 +1704,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       invocationState,
     }
 
+    // Arrow functions can't be generators, so we capture `this` for the async function* callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
     const middlewareResult = yield* this._middlewareRegistry.invoke(
@@ -2204,6 +2220,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       interrupt: createMiddlewareInterrupt(this._interruptState, `middleware:executeTool:${toolUse.toolUseId}`),
     }
 
+    // Arrow functions can't be generators, so we capture `this` for the async function* callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
     return yield* this._middlewareRegistry.invoke(
