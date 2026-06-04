@@ -23,7 +23,7 @@ In WIT terminology, the WASM component is the "guest" and Python is the "host". 
 ### First-time setup
 
 ```bash
-git clone https://github.com/strands-agents/sdk-python.git
+git clone https://github.com/strands-agents/harness-sdk.git
 cd sdk-python
 npm install
 npm run dev -- bootstrap

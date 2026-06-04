@@ -1333,7 +1333,7 @@ describe('Agent', () => {
     })
 
     it('does not send assistant-ended conversation when forcing structured output retry', async () => {
-      // Regression for https://github.com/strands-agents/sdk-typescript/issues/1039
+      // Regression for https://github.com/strands-agents/harness-sdk/issues/1039
       // When the model responds with plain text instead of calling the structured output tool,
       // the forced-retry model call must not see a conversation ending with an assistant message.
       // Bedrock/Anthropic-family models reject assistant message prefill.
