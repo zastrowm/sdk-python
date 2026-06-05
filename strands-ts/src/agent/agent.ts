@@ -26,7 +26,7 @@ import {
 import type { JSONValue } from '../types/json.js'
 import { McpClient } from '../mcp.js'
 import { isValidToolName, type Tool, type ToolContext } from '../tools/tool.js'
-import type { ToolChoice } from '../tools/types.js'
+import type { ToolChoice, ToolSpec } from '../tools/types.js'
 import { systemPromptFromData } from '../types/messages.js'
 import { normalizeError, ConcurrentInvocationError, StructuredOutputError } from '../errors.js'
 import { Model } from '../models/model.js'
@@ -1723,12 +1723,12 @@ export class Agent implements LocalAgent, InvokableAgent {
       context,
       async function* (ctx: InvokeModelContext): AsyncGenerator<AgentStreamEvent, InvokeModelResult, undefined> {
         const streamOptions: StreamOptions = {
-          toolSpecs: ctx.toolSpecs,
+          toolSpecs: ctx.toolSpecs as ToolSpec[],
           modelState: ctx.modelState,
           ...(ctx.systemPrompt !== undefined && { systemPrompt: ctx.systemPrompt }),
           ...(ctx.toolChoice && { toolChoice: ctx.toolChoice }),
         }
-        const gen = self._streamFromModel(ctx.messages, streamOptions, ctx.invocationState)
+        const gen = self._streamFromModel(ctx.messages as Message[], streamOptions, ctx.invocationState)
         let iterResult = await gen.next()
         while (!iterResult.done) {
           yield iterResult.value

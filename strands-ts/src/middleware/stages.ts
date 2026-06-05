@@ -22,7 +22,12 @@ import type { JSONValue } from '../types/json.js'
  * without a breaking change to callers.
  */
 export interface MiddlewareInterruptResult<T = JSONValue> {
-  /** The resolved response value from the interrupt. */
+  /**
+   * The resolved response value from the interrupt.
+   * The generic `T` is a caller assertion — the actual value is whatever the user
+   * passed in `InterruptResponseContent.response` (a `JSONValue`). No runtime
+   * validation is performed; callers are responsible for ensuring the shape matches.
+   */
   response: T
 }
 
@@ -66,11 +71,11 @@ export interface InvokeModelContext {
   /** The agent instance (escape hatch for advanced use cases). */
   readonly agent: LocalAgent
   /** The messages to send to the model. */
-  readonly messages: Message[]
+  readonly messages: readonly Message[]
   /** System prompt to guide the model's behavior. */
   readonly systemPrompt?: SystemPrompt
   /** Tool specifications available to the model. */
-  readonly toolSpecs: ToolSpec[]
+  readonly toolSpecs: readonly ToolSpec[]
   /** Controls how the model selects tools. */
   readonly toolChoice?: ToolChoice
   /** Runtime state for stateful model providers. */
