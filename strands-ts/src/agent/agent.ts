@@ -54,6 +54,7 @@ import type {
   ExecuteToolResult,
   AgentStreamContext,
   AgentStreamResult,
+  MiddlewareInterruptResult,
 } from '../middleware/index.js'
 import type { HookableEventConstructor, HookCallback, HookCallbackOptions, HookCleanup } from '../hooks/types.js'
 import {
@@ -263,15 +264,15 @@ type ToolsExecutionResult = { message: Message; afterToolsEvent: AfterToolsEvent
 function createMiddlewareInterrupt(
   interruptState: InterruptState,
   idPrefix: string
-): <T = JSONValue>(params: InterruptParams) => T {
-  return <T = JSONValue>(params: InterruptParams): T => {
+): <T = JSONValue>(params: InterruptParams) => MiddlewareInterruptResult<T> {
+  return <T = JSONValue>(params: InterruptParams): MiddlewareInterruptResult<T> => {
     const interruptId = `${idPrefix}:${params.name}`
     const existing = interruptState.interrupts[interruptId]
     if (existing?.response !== undefined) {
-      return existing.response as T
+      return { response: existing.response as T }
     }
     if (params.response !== undefined) {
-      return params.response as T
+      return { response: params.response as T }
     }
     const interrupt = new Interrupt({
       id: interruptId,

@@ -321,6 +321,8 @@ export type {
   ExecuteToolResult,
   AgentStreamContext,
   AgentStreamResult,
+  MiddlewareInterruptResult,
+  MiddlewareInterruptible,
 } from './middleware/index.js'
 
 // Multi-agent orchestration

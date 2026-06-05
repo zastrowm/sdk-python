@@ -45,7 +45,7 @@ describe('Middleware interrupts', () => {
       const agent = new Agent({ model, tools: [tool], printer: false })
 
       agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
-        const approval = context.interrupt<string>({ name: 'approve_tool', reason: 'Confirm?' })
+        const { response: approval } = context.interrupt<string>({ name: 'approve_tool', reason: 'Confirm?' })
         if (approval !== 'yes') {
           return {
             result: new ToolResultBlock({
@@ -109,7 +109,7 @@ describe('Middleware interrupts', () => {
 
       agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
         // Preemptive response: returns immediately without halting
-        const approval = context.interrupt<string>({ name: 'check', response: 'pre-approved' })
+        const { response: approval } = context.interrupt<string>({ name: 'check', response: 'pre-approved' })
         expect(approval).toBe('pre-approved')
         return yield* next(context)
       })
@@ -191,7 +191,7 @@ describe('Middleware interrupts', () => {
       const agent = new Agent({ model, printer: false })
 
       agent.addMiddleware(AgentStreamStage, async function* (context, next) {
-        const approval = context.interrupt<string>({ name: 'gate', reason: 'Proceed?' })
+        const { response: approval } = context.interrupt<string>({ name: 'gate', reason: 'Proceed?' })
         if (approval !== 'go') {
           return { result: { stopReason: 'endTurn' } } as never
         }
@@ -281,7 +281,7 @@ describe('Middleware interrupts', () => {
 
       // Middleware that gates on approval
       agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
-        const approval = context.interrupt<string>({ name: 'gate' })
+        const { response: approval } = context.interrupt<string>({ name: 'gate' })
         if (approval !== 'approved') {
           return {
             result: new ToolResultBlock({

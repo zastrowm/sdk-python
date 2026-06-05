@@ -13,7 +13,27 @@ import type { StateStore } from '../state-store.js'
 import type { StreamAggregatedResult } from '../models/model.js'
 import type { ToolUseData } from '../hooks/events.js'
 import type { Tool } from '../tools/tool.js'
-import type { Interruptible } from '../interrupt.js'
+import type { InterruptParams } from '../types/interrupt.js'
+import type { JSONValue } from '../types/json.js'
+
+/**
+ * Result returned by `interrupt()` in middleware contexts.
+ * Returns an object to allow future extension (e.g., cached data, metadata)
+ * without a breaking change to callers.
+ */
+export interface MiddlewareInterruptResult<T = JSONValue> {
+  /** The resolved response value from the interrupt. */
+  response: T
+}
+
+/**
+ * Interface for middleware contexts that support interrupts.
+ * Unlike the hook/tool `Interruptible`, middleware interrupts return a wrapper
+ * object to allow non-breaking additions in the future.
+ */
+export interface MiddlewareInterruptible {
+  interrupt<T = JSONValue>(params: InterruptParams): MiddlewareInterruptResult<T>
+}
 
 /**
  * Creates a new middleware stage token.
@@ -61,7 +81,7 @@ export interface InvokeModelResult {
  * Context passed to tool-stage middleware.
  * Contains everything needed to understand and potentially modify the tool call.
  */
-export interface ExecuteToolContext extends Interruptible {
+export interface ExecuteToolContext extends MiddlewareInterruptible {
   /** The agent instance (escape hatch for advanced use cases). */
   readonly agent: LocalAgent
   /** The resolved tool implementation, or undefined if not found. */
@@ -85,7 +105,7 @@ export interface ExecuteToolResult {
  * Context passed to agent-stream-stage middleware.
  * Wraps the entire agent output stream at the outermost interception point.
  */
-export interface AgentStreamContext extends Interruptible {
+export interface AgentStreamContext extends MiddlewareInterruptible {
   /** The agent instance (escape hatch for advanced use cases). */
   readonly agent: LocalAgent
   /** The invocation arguments passed to agent.stream(). */

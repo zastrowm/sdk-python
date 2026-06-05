@@ -7,5 +7,7 @@ export type {
   ExecuteToolResult,
   AgentStreamContext,
   AgentStreamResult,
+  MiddlewareInterruptResult,
+  MiddlewareInterruptible,
 } from './stages.js'
 export { MiddlewareRegistry } from './registry.js'
