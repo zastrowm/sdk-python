@@ -306,12 +306,15 @@ github:
   sections:
     - title: SDKs
       links:
-        - label: sdk-python
-          href: https://github.com/strands-agents/sdk-python
+        - label: Python SDK
+          href: https://github.com/strands-agents/harness-sdk/tree/main/strands-py
           icon: PY
-        - label: sdk-typescript
-          href: https://github.com/strands-agents/sdk-typescript
+        - label: TypeScript SDK
+          href: https://github.com/strands-agents/harness-sdk/tree/main/strands-ts
           icon: TS
+        - label: Evals SDK
+          href: https://github.com/strands-agents/evals
+          icon: EV
     - title: Organizations
       links:
         - label: strands-agents
