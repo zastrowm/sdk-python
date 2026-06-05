@@ -247,7 +247,7 @@ class HookRegistry:
 
         # Register callback for each event type
         for resolved_event_type in unique_event_types:
-            # Related issue: https://github.com/strands-agents/sdk-python/issues/330
+            # Related issue: https://github.com/strands-agents/harness-sdk/issues/330
             if resolved_event_type.__name__ == "AgentInitializedEvent" and inspect.iscoroutinefunction(callback):
                 raise ValueError("AgentInitializedEvent can only be registered with a synchronous callback")
 
