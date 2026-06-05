@@ -4,15 +4,9 @@ import { MockMessageModel } from '../../__fixtures__/mock-message-model.js'
 import { collectGenerator } from '../../__fixtures__/model-test-helpers.js'
 import { createMockTool } from '../../__fixtures__/tool-helpers.js'
 import { AgentStreamStage, ExecuteToolStage, InvokeModelStage } from '../stages.js'
-import type {
-  AgentStreamContext,
-  AgentStreamResult,
-  ExecuteToolContext,
-  ExecuteToolResult,
-  InvokeModelContext,
-} from '../stages.js'
+import type { AgentStreamContext, ExecuteToolContext, InvokeModelContext } from '../stages.js'
 import type { MiddlewareHandler, MiddlewareHandlerOf } from '../types.js'
-import type { AgentStreamEvent, LocalAgent } from '../../types/agent.js'
+import type { AgentStreamEvent, AgentResult, LocalAgent } from '../../types/agent.js'
 import type { Plugin } from '../../plugins/plugin.js'
 import { TextBlock, ToolResultBlock, Message } from '../../types/messages.js'
 import {
@@ -24,8 +18,8 @@ import {
 } from '../../hooks/events.js'
 import type { ToolContext } from '../../tools/tool.js'
 
-type ExecuteToolMiddleware = MiddlewareHandler<ExecuteToolContext, AgentStreamEvent, ExecuteToolResult>
-type AgentStreamMiddleware = MiddlewareHandler<AgentStreamContext, AgentStreamEvent, AgentStreamResult>
+type ExecuteToolMiddleware = MiddlewareHandler<ExecuteToolContext, AgentStreamEvent, ToolResultBlock>
+type AgentStreamMiddleware = MiddlewareHandler<AgentStreamContext, AgentStreamEvent, AgentResult>
 
 describe('Agent middleware integration — InvokeModelStage', () => {
   describe('addMiddleware registers handler and it executes on model call', () => {
@@ -103,10 +97,8 @@ describe('Agent middleware integration — InvokeModelStage', () => {
         // eslint-disable-next-line require-yield
         async function* () {
           return {
-            result: {
-              message: new Message({ role: 'assistant', content: [new TextBlock('Cached response')] }),
-              stopReason: 'endTurn' as const,
-            },
+            message: new Message({ role: 'assistant', content: [new TextBlock('Cached response')] }),
+            stopReason: 'endTurn' as const,
           }
         }
       )
@@ -128,10 +120,8 @@ describe('Agent middleware integration — InvokeModelStage', () => {
         // eslint-disable-next-line require-yield
         async function* () {
           return {
-            result: {
-              message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
-              stopReason: 'endTurn' as const,
-            },
+            message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
+            stopReason: 'endTurn' as const,
           }
         }
       )
@@ -244,10 +234,8 @@ describe('Agent middleware integration — InvokeModelStage', () => {
         // eslint-disable-next-line require-yield
         async function* () {
           return {
-            result: {
-              message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
-              stopReason: 'endTurn' as const,
-            },
+            message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
+            stopReason: 'endTurn' as const,
           }
         }
       )
@@ -419,13 +407,11 @@ describe('AgentStreamStage integration', () => {
       // eslint-disable-next-line require-yield
       const middleware: AgentStreamMiddleware = async function* () {
         return {
-          result: {
-            stopReason: 'endTurn',
-            lastMessage: { type: 'message', role: 'assistant', content: [] },
-            metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
-            invocationState: {},
-          },
-        } as unknown as AgentStreamResult
+          stopReason: 'endTurn',
+          lastMessage: { type: 'message', role: 'assistant', content: [] },
+          metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
+          invocationState: {},
+        } as unknown as AgentResult
       }
 
       agent.addMiddleware(AgentStreamStage, middleware)
@@ -623,13 +609,11 @@ describe('AgentStreamStage integration', () => {
         yield syntheticEvent1
         yield syntheticEvent2
         return {
-          result: {
-            stopReason: 'endTurn',
-            lastMessage: { type: 'message', role: 'assistant', content: [] },
-            metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
-            invocationState: {},
-          },
-        } as unknown as AgentStreamResult
+          stopReason: 'endTurn',
+          lastMessage: { type: 'message', role: 'assistant', content: [] },
+          metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
+          invocationState: {},
+        } as unknown as AgentResult
       }
 
       agent.addMiddleware(AgentStreamStage, middleware)
@@ -818,13 +802,11 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return {
-          result: new ToolResultBlock({
-            toolUseId: context.toolUse.toolUseId,
-            status: 'success',
-            content: [new TextBlock('mocked result')],
-          }),
-        }
+        return new ToolResultBlock({
+          toolUseId: context.toolUse.toolUseId,
+          status: 'success',
+          content: [new TextBlock('mocked result')],
+        })
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -856,13 +838,11 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return {
-          result: new ToolResultBlock({
-            toolUseId: context.toolUse.toolUseId,
-            status: 'success',
-            content: [new TextBlock('mocked data')],
-          }),
-        }
+        return new ToolResultBlock({
+          toolUseId: context.toolUse.toolUseId,
+          status: 'success',
+          content: [new TextBlock('mocked data')],
+        })
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -1035,13 +1015,11 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return {
-          result: new ToolResultBlock({
-            toolUseId: context.toolUse.toolUseId,
-            status: 'success',
-            content: [new TextBlock('mocked')],
-          }),
-        }
+        return new ToolResultBlock({
+          toolUseId: context.toolUse.toolUseId,
+          status: 'success',
+          content: [new TextBlock('mocked')],
+        })
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -1077,13 +1055,11 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return {
-          result: new ToolResultBlock({
-            toolUseId: context.toolUse.toolUseId,
-            status: 'success',
-            content: [new TextBlock('from middleware')],
-          }),
-        }
+        return new ToolResultBlock({
+          toolUseId: context.toolUse.toolUseId,
+          status: 'success',
+          content: [new TextBlock('from middleware')],
+        })
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -1110,16 +1086,14 @@ describe('Middleware use cases', () => {
           const key = `${context.toolUse.name}:${JSON.stringify(context.toolUse.input)}`
           const cached = cache.get(key)
           if (cached) {
-            return {
-              result: new ToolResultBlock({
-                toolUseId: context.toolUse.toolUseId,
-                status: cached.status,
-                content: cached.content,
-              }),
-            }
+            return new ToolResultBlock({
+              toolUseId: context.toolUse.toolUseId,
+              status: cached.status,
+              content: cached.content,
+            })
           }
           const result = yield* next(context)
-          cache.set(key, result.result)
+          cache.set(key, result)
           return result
         })
       }

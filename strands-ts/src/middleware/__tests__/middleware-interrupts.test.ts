@@ -47,13 +47,11 @@ describe('Middleware interrupts', () => {
       agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
         const { response: approval } = context.interrupt<string>({ name: 'approve_tool', reason: 'Confirm?' })
         if (approval !== 'yes') {
-          return {
-            result: new ToolResultBlock({
-              toolUseId: context.toolUse.toolUseId,
-              status: 'error',
-              content: [new TextBlock('Denied by user')],
-            }),
-          }
+          return new ToolResultBlock({
+            toolUseId: context.toolUse.toolUseId,
+            status: 'error',
+            content: [new TextBlock('Denied by user')],
+          })
         }
         return yield* next(context)
       })
@@ -193,7 +191,7 @@ describe('Middleware interrupts', () => {
       agent.addMiddleware(AgentStreamStage, async function* (context, next) {
         const { response: approval } = context.interrupt<string>({ name: 'gate', reason: 'Proceed?' })
         if (approval !== 'go') {
-          return { result: { stopReason: 'endTurn' } } as never
+          return { stopReason: 'endTurn' } as never
         }
         return yield* next(context)
       })
@@ -283,13 +281,11 @@ describe('Middleware interrupts', () => {
       agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
         const { response: approval } = context.interrupt<string>({ name: 'gate' })
         if (approval !== 'approved') {
-          return {
-            result: new ToolResultBlock({
-              toolUseId: context.toolUse.toolUseId,
-              status: 'error',
-              content: [new TextBlock('Denied')],
-            }),
-          }
+          return new ToolResultBlock({
+            toolUseId: context.toolUse.toolUseId,
+            status: 'error',
+            content: [new TextBlock('Denied')],
+          })
         }
         return yield* next(context)
       })

@@ -49,11 +49,8 @@ import { MiddlewareRegistry, InvokeModelStage, ExecuteToolStage, AgentStreamStag
 import type { MiddlewareStage, MiddlewareHandler } from '../middleware/index.js'
 import type {
   InvokeModelContext,
-  InvokeModelResult,
   ExecuteToolContext,
-  ExecuteToolResult,
   AgentStreamContext,
-  AgentStreamResult,
   MiddlewareInterruptResult,
 } from '../middleware/index.js'
 import type { HookableEventConstructor, HookCallback, HookCallbackOptions, HookCleanup } from '../hooks/types.js'
@@ -822,15 +819,13 @@ export class Agent implements LocalAgent, InvokableAgent {
       // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this
       try {
-        const { result } = yield* this._middlewareRegistry.invoke(
+        return yield* this._middlewareRegistry.invoke(
           AgentStreamStage,
           context,
-          async function* (ctx: AgentStreamContext): AsyncGenerator<AgentStreamEvent, AgentStreamResult, undefined> {
-            const result = yield* self._streamWithResumeLoop(ctx.args, ctx.options)
-            return { result }
+          async function* (ctx: AgentStreamContext): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
+            return yield* self._streamWithResumeLoop(ctx.args, ctx.options)
           }
         )
-        return result
       } catch (error) {
         if (error instanceof InterruptError) {
           // Handles interrupts raised by AgentStreamStage middleware (before the agent loop starts).
@@ -1723,10 +1718,10 @@ export class Agent implements LocalAgent, InvokableAgent {
     // async function* doesn't bind lexical `this`; capture for the terminal callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
-    const middlewareResult = yield* this._middlewareRegistry.invoke(
+    return yield* this._middlewareRegistry.invoke(
       InvokeModelStage,
       context,
-      async function* (ctx: InvokeModelContext): AsyncGenerator<AgentStreamEvent, InvokeModelResult, undefined> {
+      async function* (ctx: InvokeModelContext): AsyncGenerator<AgentStreamEvent, StreamAggregatedResult, undefined> {
         const streamOptions: StreamOptions = {
           toolSpecs: ctx.toolSpecs as ToolSpec[],
           modelState: ctx.modelState,
@@ -1739,10 +1734,9 @@ export class Agent implements LocalAgent, InvokableAgent {
           yield iterResult.value
           iterResult = await gen.next()
         }
-        return { result: iterResult.value }
+        return iterResult.value
       }
     )
-    return middlewareResult.result
   }
 
   /**
@@ -2194,8 +2188,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       }
 
       // Execute tool core logic through middleware chain
-      const middlewareResult = yield* this._executeToolWithMiddleware(effectiveTool, toolUse, invocationState)
-      const toolResult = middlewareResult.result
+      const toolResult = yield* this._executeToolWithMiddleware(effectiveTool, toolUse, invocationState)
       const error = toolResult.error
 
       // Single point for AfterToolCallEvent
@@ -2223,7 +2216,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     tool: Tool | undefined,
     toolUse: ToolUseData,
     invocationState: InvocationState
-  ): AsyncGenerator<AgentStreamEvent, ExecuteToolResult, undefined> {
+  ): AsyncGenerator<AgentStreamEvent, ToolResultBlock, undefined> {
     const context: ExecuteToolContext = {
       agent: this,
       tool,
@@ -2242,7 +2235,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     return yield* this._middlewareRegistry.invoke(
       ExecuteToolStage,
       context,
-      async function* (ctx: ExecuteToolContext): AsyncGenerator<AgentStreamEvent, ExecuteToolResult, undefined> {
+      async function* (ctx: ExecuteToolContext): AsyncGenerator<AgentStreamEvent, ToolResultBlock, undefined> {
         return yield* self._executeToolCore(ctx.tool, ctx.toolUse, ctx.invocationState)
       }
     )
@@ -2252,7 +2245,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     effectiveTool: Tool | undefined,
     toolUse: ToolUseData,
     invocationState: InvocationState
-  ): AsyncGenerator<AgentStreamEvent, ExecuteToolResult, undefined> {
+  ): AsyncGenerator<AgentStreamEvent, ToolResultBlock, undefined> {
     // Start tool span within loop span context
     const toolSpan = this._tracer.startToolCallSpan({
       tool: toolUse,
@@ -2338,7 +2331,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       success: toolResult.status === 'success',
     })
 
-    return { result: toolResult }
+    return toolResult
   }
 
   /**

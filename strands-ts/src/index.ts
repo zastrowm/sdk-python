@@ -316,11 +316,8 @@ export type {
   MiddlewareHandlerOf,
   MiddlewareNextOf,
   InvokeModelContext,
-  InvokeModelResult,
   ExecuteToolContext,
-  ExecuteToolResult,
   AgentStreamContext,
-  AgentStreamResult,
   MiddlewareInterruptResult,
   MiddlewareInterruptible,
 } from './middleware/index.js'
