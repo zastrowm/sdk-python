@@ -1,4 +1,4 @@
-const REPOS = ['strands-agents/sdk-python', 'strands-agents/sdk-typescript']
+const REPOS = ['strands-agents/harness-sdk']
 const FALLBACK = '5,800+'
 const TIMEOUT_MS = 5000
 
