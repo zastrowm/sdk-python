@@ -612,4 +612,73 @@ describe('MiddlewareRegistry', () => {
       expect(order).toStrictEqual(['inner-finally', 'outer-finally'])
     })
   })
+
+  describe('remove', () => {
+    it('removes a handler so it no longer runs', async () => {
+      const registry = new MiddlewareRegistry()
+      const callOrder: number[] = []
+
+      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+        callOrder.push(1)
+        return yield* next(context)
+      }
+
+      registry.add(TestStage, handler)
+      registry.remove(TestStage, handler)
+
+      // eslint-disable-next-line require-yield
+      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+        callOrder.push(2)
+        return { output: 'done' }
+      }
+
+      await collect(registry.invoke(TestStage, { value: 'test' }, terminal))
+      expect(callOrder).toStrictEqual([2])
+    })
+
+    it('only removes the first occurrence of a duplicate handler', async () => {
+      const registry = new MiddlewareRegistry()
+      let callCount = 0
+
+      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+        callCount++
+        return yield* next(context)
+      }
+
+      registry.add(TestStage, handler)
+      registry.add(TestStage, handler)
+      registry.remove(TestStage, handler)
+
+      // eslint-disable-next-line require-yield
+      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+        return { output: 'done' }
+      }
+
+      await collect(registry.invoke(TestStage, { value: 'test' }, terminal))
+      expect(callCount).toBe(1)
+    })
+
+    it('is a no-op when handler was never registered', async () => {
+      const registry = new MiddlewareRegistry()
+
+      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+        return yield* next(context)
+      }
+
+      // Should not throw
+      registry.remove(TestStage, handler)
+    })
+
+    it('is a no-op when stage has no handlers', () => {
+      const registry = new MiddlewareRegistry()
+      const OtherStage = createStage<TestContext, TestEvent, TestResult>('other')
+
+      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+        return yield* next(context)
+      }
+
+      // Should not throw
+      registry.remove(OtherStage, handler)
+    })
+  })
 })

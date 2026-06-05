@@ -5,7 +5,7 @@
  *
  * Third parties can create custom stages — the SDK does not maintain a closed set.
  */
-export interface Stage<TContext, TEvent, TResult> {
+export interface MiddlewareStage<TContext, TEvent, TResult> {
   /** Human-readable name for debugging and logging. */
   readonly name: string
   /** @internal Phantom field for type inference. Never accessed at runtime. */
@@ -39,11 +39,12 @@ export type MiddlewareHandler<TContext, TEvent, TResult> = (
  * @example
  * ```typescript
  * class MyPlugin implements Plugin {
- *   private _handler: HandlerOf<typeof InvokeModelStage> = async function* (context, next) { ... }
+ *   private _handler: MiddlewareHandlerOf<typeof InvokeModelStage> = async function* (context, next) { ... }
  * }
  * ```
  */
-export type HandlerOf<S> = S extends Stage<infer C, infer E, infer R> ? MiddlewareHandler<C, E, R> : never
+export type MiddlewareHandlerOf<S> =
+  S extends MiddlewareStage<infer C, infer E, infer R> ? MiddlewareHandler<C, E, R> : never
 
 /**
  * Extracts the `MiddlewareNext` type from a stage token.
@@ -51,7 +52,7 @@ export type HandlerOf<S> = S extends Stage<infer C, infer E, infer R> ? Middlewa
  *
  * @example
  * ```typescript
- * private async *_handler(context: ..., next: NextOf<typeof AgentStreamStage>) { ... }
+ * private async *_handler(context: ..., next: MiddlewareNextOf<typeof AgentStreamStage>) { ... }
  * ```
  */
-export type NextOf<S> = S extends Stage<infer C, infer E, infer R> ? MiddlewareNext<C, E, R> : never
+export type MiddlewareNextOf<S> = S extends MiddlewareStage<infer C, infer E, infer R> ? MiddlewareNext<C, E, R> : never

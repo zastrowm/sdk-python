@@ -1,4 +1,4 @@
-import type { Stage } from './types.js'
+import type { MiddlewareStage } from './types.js'
 import type {
   LocalAgent,
   AgentStreamEvent,
@@ -56,10 +56,10 @@ export interface MiddlewareInterruptible {
  * The returned object is frozen and used as a Map key by the registry.
  *
  * @param name - Human-readable name for debugging/logging
- * @returns A frozen Stage object carrying the Context/Event/Result type parameters
+ * @returns A frozen MiddlewareStage object carrying the Context/Event/Result type parameters
  */
-export function createStage<TContext, TEvent, TResult>(name: string): Stage<TContext, TEvent, TResult> {
-  return Object.freeze({ name }) as Stage<TContext, TEvent, TResult>
+export function createStage<TContext, TEvent, TResult>(name: string): MiddlewareStage<TContext, TEvent, TResult> {
+  return Object.freeze({ name }) as MiddlewareStage<TContext, TEvent, TResult>
 }
 
 /**

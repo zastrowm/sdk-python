@@ -1,4 +1,4 @@
-import type { Stage, MiddlewareHandler, MiddlewareNext } from './types.js'
+import type { MiddlewareStage, MiddlewareHandler, MiddlewareNext } from './types.js'
 
 /**
  * Registry that stores middleware handlers keyed by stage tokens
@@ -6,7 +6,7 @@ import type { Stage, MiddlewareHandler, MiddlewareNext } from './types.js'
  */
 export class MiddlewareRegistry {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private readonly _handlers: Map<Stage<any, any, any>, MiddlewareHandler<any, any, any>[]>
+  private readonly _handlers: Map<MiddlewareStage<any, any, any>, MiddlewareHandler<any, any, any>[]>
 
   constructor() {
     this._handlers = new Map()
@@ -20,12 +20,29 @@ export class MiddlewareRegistry {
    * @param handler - The middleware handler function
    */
   add<TContext, TEvent, TResult>(
-    stage: Stage<TContext, TEvent, TResult>,
+    stage: MiddlewareStage<TContext, TEvent, TResult>,
     handler: MiddlewareHandler<TContext, TEvent, TResult>
   ): void {
     const handlers = this._handlers.get(stage) ?? []
     handlers.push(handler)
     this._handlers.set(stage, handlers)
+  }
+
+  /**
+   * Remove a previously registered middleware handler for a given stage.
+   * Removes the first occurrence of the handler (by reference equality).
+   *
+   * @param stage - The stage token to remove the handler from
+   * @param handler - The middleware handler function to remove
+   */
+  remove<TContext, TEvent, TResult>(
+    stage: MiddlewareStage<TContext, TEvent, TResult>,
+    handler: MiddlewareHandler<TContext, TEvent, TResult>
+  ): void {
+    const handlers = this._handlers.get(stage)
+    if (!handlers) return
+    const idx = handlers.indexOf(handler)
+    if (idx !== -1) handlers.splice(idx, 1)
   }
 
   /**
@@ -38,7 +55,7 @@ export class MiddlewareRegistry {
    * @returns A single function representing the full middleware chain
    */
   compose<TContext, TEvent, TResult>(
-    stage: Stage<TContext, TEvent, TResult>,
+    stage: MiddlewareStage<TContext, TEvent, TResult>,
     terminal: MiddlewareNext<TContext, TEvent, TResult>
   ): MiddlewareNext<TContext, TEvent, TResult> {
     const handlers = (this._handlers.get(stage) ?? []) as MiddlewareHandler<TContext, TEvent, TResult>[]
@@ -63,7 +80,7 @@ export class MiddlewareRegistry {
    * @returns An async generator yielding events and returning the stage result
    */
   invoke<TContext, TEvent, TResult>(
-    stage: Stage<TContext, TEvent, TResult>,
+    stage: MiddlewareStage<TContext, TEvent, TResult>,
     context: TContext,
     terminal: MiddlewareNext<TContext, TEvent, TResult>
   ): AsyncGenerator<TEvent, TResult, undefined> {

@@ -26,7 +26,7 @@ import type {
   StreamEvent,
 } from '../hooks/events.js'
 import type { HookCallback, HookableEventConstructor, HookCallbackOptions, HookCleanup } from '../hooks/types.js'
-import type { Stage, MiddlewareHandler } from '../middleware/types.js'
+import type { MiddlewareStage, MiddlewareHandler } from '../middleware/types.js'
 import type { ToolRegistry } from '../registry/tool-registry.js'
 import type { Model } from '../models/model.js'
 import type { z } from 'zod'
@@ -351,9 +351,9 @@ export interface LocalAgent {
    * @param handler - The middleware handler function (async generator)
    */
   addMiddleware<TContext, TEvent, TResult>(
-    stage: Stage<TContext, TEvent, TResult>,
+    stage: MiddlewareStage<TContext, TEvent, TResult>,
     handler: MiddlewareHandler<TContext, TEvent, TResult>
-  ): void
+  ): () => void
 }
 
 /**

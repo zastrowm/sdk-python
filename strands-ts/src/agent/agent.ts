@@ -46,7 +46,7 @@ import { NullConversationManager } from '../conversation-manager/null-conversati
 import { ConversationManager } from '../conversation-manager/conversation-manager.js'
 import { HookRegistryImplementation } from '../hooks/registry.js'
 import { MiddlewareRegistry, InvokeModelStage, ExecuteToolStage, AgentStreamStage } from '../middleware/index.js'
-import type { Stage, MiddlewareHandler } from '../middleware/index.js'
+import type { MiddlewareStage, MiddlewareHandler } from '../middleware/index.js'
 import type {
   InvokeModelContext,
   InvokeModelResult,
@@ -511,22 +511,27 @@ export class Agent implements LocalAgent, InvokableAgent {
    *
    * @param stage - The stage token identifying the interception point
    * @param handler - The middleware handler function (async generator)
+   * @returns A cleanup function that removes the middleware when called
    *
    * @example
    * ```typescript
-   * agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+   * const cleanup = agent.addMiddleware(InvokeModelStage, async function* (context, next) {
    *   const start = Date.now()
    *   const result = yield* next(context)
    *   console.log(`Model call took ${Date.now() - start}ms`)
    *   return result
    * })
+   *
+   * // Later, remove the middleware:
+   * cleanup()
    * ```
    */
   addMiddleware<TContext, TEvent, TResult>(
-    stage: Stage<TContext, TEvent, TResult>,
+    stage: MiddlewareStage<TContext, TEvent, TResult>,
     handler: MiddlewareHandler<TContext, TEvent, TResult>
-  ): void {
+  ): () => void {
     this._middlewareRegistry.add(stage, handler)
+    return () => this._middlewareRegistry.remove(stage, handler)
   }
 
   public async initialize(): Promise<void> {
@@ -813,7 +818,7 @@ export class Agent implements LocalAgent, InvokableAgent {
         interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
       }
 
-      // Arrow functions can't be generators, so we capture `this` for the async function* callback.
+      // async function* doesn't bind lexical `this`; capture for the terminal callback.
       // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this
       try {
@@ -1715,7 +1720,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       invocationState,
     }
 
-    // Arrow functions can't be generators, so we capture `this` for the async function* callback.
+    // async function* doesn't bind lexical `this`; capture for the terminal callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
     const middlewareResult = yield* this._middlewareRegistry.invoke(
@@ -2231,7 +2236,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       interrupt: createMiddlewareInterrupt(this._interruptState, `middleware:executeTool:${toolUse.toolUseId}`),
     }
 
-    // Arrow functions can't be generators, so we capture `this` for the async function* callback.
+    // async function* doesn't bind lexical `this`; capture for the terminal callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
     return yield* this._middlewareRegistry.invoke(

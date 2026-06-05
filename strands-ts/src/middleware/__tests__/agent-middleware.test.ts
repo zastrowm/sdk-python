@@ -11,7 +11,7 @@ import type {
   ExecuteToolResult,
   InvokeModelContext,
 } from '../stages.js'
-import type { MiddlewareHandler, HandlerOf } from '../types.js'
+import type { MiddlewareHandler, MiddlewareHandlerOf } from '../types.js'
 import type { AgentStreamEvent, LocalAgent } from '../../types/agent.js'
 import type { Plugin } from '../../plugins/plugin.js'
 import { TextBlock, ToolResultBlock, Message } from '../../types/messages.js'
@@ -256,6 +256,51 @@ describe('Agent middleware integration — InvokeModelStage', () => {
 
       expect(beforeCalled).toHaveBeenCalled()
       expect(afterCalled).toHaveBeenCalled()
+    })
+  })
+
+  describe('addMiddleware returns cleanup function', () => {
+    it('returns a function that removes the middleware', async () => {
+      const model = new MockMessageModel()
+        .addTurn({ type: 'textBlock', text: 'First' })
+        .addTurn({ type: 'textBlock', text: 'Second' })
+
+      const agent = new Agent({ model, printer: false })
+
+      let middlewareCalled = false
+      const cleanup = agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        middlewareCalled = true
+        return yield* next(context)
+      })
+
+      await agent.invoke('First call')
+      expect(middlewareCalled).toBe(true)
+
+      middlewareCalled = false
+      cleanup()
+
+      await agent.invoke('Second call')
+      expect(middlewareCalled).toBe(false)
+    })
+
+    it('only removes the specific handler, not others on the same stage', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Result' })
+
+      const agent = new Agent({ model, printer: false })
+
+      const calls: string[] = []
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        calls.push('keeper')
+        return yield* next(context)
+      })
+      const cleanup = agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        calls.push('removed')
+        return yield* next(context)
+      })
+
+      cleanup()
+      await agent.invoke('Test')
+      expect(calls).toStrictEqual(['keeper'])
     })
   })
 
@@ -1165,8 +1210,8 @@ describe('Middleware use cases', () => {
       }
 
       private async *_handler(
-        ...[context, next]: Parameters<HandlerOf<typeof AgentStreamStage>>
-      ): ReturnType<HandlerOf<typeof AgentStreamStage>> {
+        ...[context, next]: Parameters<MiddlewareHandlerOf<typeof AgentStreamStage>>
+      ): ReturnType<MiddlewareHandlerOf<typeof AgentStreamStage>> {
         let buffer: AgentStreamEvent[] = []
         const gen = next(context)
         let iterResult = await gen.next()

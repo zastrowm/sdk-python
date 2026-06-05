@@ -310,11 +310,11 @@ export type { StreamType, StreamChunk, FileInfo, OutputFile, ExecutionResult } f
 // Middleware system
 export { createStage, InvokeModelStage, ExecuteToolStage, AgentStreamStage } from './middleware/index.js'
 export type {
-  Stage,
+  MiddlewareStage,
   MiddlewareHandler,
   MiddlewareNext,
-  HandlerOf,
-  NextOf,
+  MiddlewareHandlerOf,
+  MiddlewareNextOf,
   InvokeModelContext,
   InvokeModelResult,
   ExecuteToolContext,
