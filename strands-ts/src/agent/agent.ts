@@ -511,6 +511,16 @@ export class Agent implements LocalAgent, InvokableAgent {
    *
    * @param stage - The stage token identifying the interception point
    * @param handler - The middleware handler function (async generator)
+   *
+   * @example
+   * ```typescript
+   * agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+   *   const start = Date.now()
+   *   const result = yield* next(context)
+   *   console.log(`Model call took ${Date.now() - start}ms`)
+   *   return result
+   * })
+   * ```
    */
   addMiddleware<TContext, TEvent, TResult>(
     stage: Stage<TContext, TEvent, TResult>,

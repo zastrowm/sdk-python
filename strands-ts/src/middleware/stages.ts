@@ -32,6 +32,17 @@ export interface MiddlewareInterruptResult<T = JSONValue> {
  * object to allow non-breaking additions in the future.
  */
 export interface MiddlewareInterruptible {
+  /**
+   * Request a human-in-the-loop interrupt.
+   *
+   * On first execution (no prior response), throws `InterruptError` to halt the agent.
+   * On resume (after the user provides a response), returns the response wrapped in
+   * `MiddlewareInterruptResult`.
+   *
+   * @param params - Interrupt parameters (name, optional reason, optional preemptive response)
+   * @returns The user's response wrapped in `{ response: T }`
+   * @throws InterruptError when no response has been provided yet
+   */
   interrupt<T = JSONValue>(params: InterruptParams): MiddlewareInterruptResult<T>
 }
 
