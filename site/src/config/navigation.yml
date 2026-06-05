@@ -308,6 +308,8 @@ github:
       links:
         - label: harness-sdk
           href: https://github.com/strands-agents/harness-sdk
+        - label: evals
+          href: https://github.com/strands-agents/evals
     - title: Organizations
       links:
         - label: strands-agents
