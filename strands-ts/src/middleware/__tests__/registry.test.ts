@@ -17,7 +17,7 @@ interface TestResult {
   readonly output: string
 }
 
-const TestStage = createStage<TestContext, TestEvent, TestResult>('test')
+const TestStage = createStage<TestContext, TestResult, TestEvent>('test')
 
 /**
  * Helper to collect all yielded events and the return value from an async generator.
@@ -40,12 +40,12 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const callOrder: number[] = []
 
-      const handler1: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const handler1: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         callOrder.push(1)
         return yield* next(context)
       }
 
-      const handler2: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const handler2: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         callOrder.push(2)
         return yield* next(context)
       }
@@ -54,7 +54,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, handler2)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         callOrder.push(3)
         return { output: 'done' }
       }
@@ -72,7 +72,7 @@ describe('MiddlewareRegistry', () => {
     it('with no handlers returns terminal-equivalent function', async () => {
       const registry = new MiddlewareRegistry()
 
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* (ctx) {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* (ctx) {
         yield { data: `event-${ctx.value}` }
         return { output: `result-${ctx.value}` }
       }
@@ -88,14 +88,14 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const callOrder: string[] = []
 
-      const outer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const outer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         callOrder.push('outer-before')
         const result = yield* next(context)
         callOrder.push('outer-after')
         return result
       }
 
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         callOrder.push('inner-before')
         const result = yield* next(context)
         callOrder.push('inner-after')
@@ -106,7 +106,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, inner)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         callOrder.push('terminal')
         return { output: 'done' }
       }
@@ -124,12 +124,12 @@ describe('MiddlewareRegistry', () => {
       let terminalCalled = false
       let innerCalled = false
 
-      const shortCircuit: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* () {
+      const shortCircuit: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* () {
         yield { data: 'synthetic' }
         return { output: 'short-circuited' }
       }
 
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         innerCalled = true
         return yield* next(context)
       }
@@ -138,7 +138,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, inner)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         terminalCalled = true
         return { output: 'terminal' }
       }
@@ -157,13 +157,13 @@ describe('MiddlewareRegistry', () => {
     it('forwards all events from terminal and returns terminal result', async () => {
       const registry = new MiddlewareRegistry()
 
-      const passThrough: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const passThrough: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
       registry.add(TestStage, passThrough)
 
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         yield { data: 'event-1' }
         yield { data: 'event-2' }
         yield { data: 'event-3' }
@@ -182,7 +182,7 @@ describe('MiddlewareRegistry', () => {
     it('only yields events matching a predicate', async () => {
       const registry = new MiddlewareRegistry()
 
-      const filter: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const filter: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         const gen = next(context)
         let iterResult = await gen.next()
         while (!iterResult.done) {
@@ -198,7 +198,7 @@ describe('MiddlewareRegistry', () => {
 
       registry.add(TestStage, filter)
 
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         yield { data: 'keep-1' }
         yield { data: 'drop-1' }
         yield { data: 'keep-2' }
@@ -219,7 +219,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       let receivedContext: TestContext | undefined
 
-      const modifier: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const modifier: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         const modified = { ...context, value: 'modified' }
         return yield* next(modified)
       }
@@ -227,7 +227,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, modifier)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* (ctx) {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* (ctx) {
         receivedContext = ctx
         return { output: ctx.value }
       }
@@ -243,11 +243,11 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       let receivedContext: TestContext | undefined
 
-      const first: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const first: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next({ ...context, value: context.value + '-first' })
       }
 
-      const second: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const second: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next({ ...context, value: context.value + '-second' })
       }
 
@@ -255,7 +255,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, second)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* (ctx) {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* (ctx) {
         receivedContext = ctx
         return { output: ctx.value }
       }
@@ -273,7 +273,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       let caughtError: Error | undefined
 
-      const catcher: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const catcher: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } catch (error) {
@@ -285,7 +285,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, catcher)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new Error('terminal error')
       }
 
@@ -301,14 +301,14 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
 
       // eslint-disable-next-line require-yield
-      const thrower: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* () {
+      const thrower: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* () {
         throw new Error('middleware error')
       }
 
       registry.add(TestStage, thrower)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         return { output: 'done' }
       }
 
@@ -320,7 +320,7 @@ describe('MiddlewareRegistry', () => {
     it('middleware can transform errors from next', async () => {
       const registry = new MiddlewareRegistry()
 
-      const transformer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const transformer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } catch {
@@ -331,7 +331,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, transformer)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new Error('original error')
       }
 
@@ -345,14 +345,14 @@ describe('MiddlewareRegistry', () => {
     it('CancelledError propagates without being swallowed', async () => {
       const registry = new MiddlewareRegistry()
 
-      const passThrough: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const passThrough: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
       registry.add(TestStage, passThrough)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new CancelledError()
       }
 
@@ -364,14 +364,14 @@ describe('MiddlewareRegistry', () => {
     it('InterruptError propagates without being swallowed', async () => {
       const registry = new MiddlewareRegistry()
 
-      const passThrough: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const passThrough: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
       registry.add(TestStage, passThrough)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new InterruptError(new Interrupt({ id: 'int-1', name: 'test_interrupt' }))
       }
 
@@ -383,11 +383,11 @@ describe('MiddlewareRegistry', () => {
     it('CancelledError propagates through multiple middleware layers', async () => {
       const registry = new MiddlewareRegistry()
 
-      const outer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const outer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
@@ -395,7 +395,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, inner)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new CancelledError()
       }
 
@@ -407,11 +407,11 @@ describe('MiddlewareRegistry', () => {
     it('InterruptError propagates through multiple middleware layers', async () => {
       const registry = new MiddlewareRegistry()
 
-      const outer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const outer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
@@ -419,7 +419,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, inner)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new InterruptError(new Interrupt({ id: 'int-1', name: 'test_interrupt' }))
       }
 
@@ -434,7 +434,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const order: string[] = []
 
-      const outer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const outer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } finally {
@@ -443,7 +443,7 @@ describe('MiddlewareRegistry', () => {
       }
 
       // eslint-disable-next-line require-yield
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* () {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* () {
         order.push('inner-throw')
         throw new Error('inner exploded')
       }
@@ -452,7 +452,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, inner)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         return { output: 'unreachable' }
       }
 
@@ -466,7 +466,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const order: string[] = []
 
-      const outer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const outer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } finally {
@@ -474,7 +474,7 @@ describe('MiddlewareRegistry', () => {
         }
       }
 
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } finally {
@@ -486,7 +486,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, inner)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         order.push('terminal-throw')
         throw new Error('terminal exploded')
       }
@@ -501,7 +501,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const order: string[] = []
 
-      const a: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const a: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           order.push('a-enter')
           return yield* next(context)
@@ -510,7 +510,7 @@ describe('MiddlewareRegistry', () => {
         }
       }
 
-      const b: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const b: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           order.push('b-enter')
           return yield* next(context)
@@ -519,7 +519,7 @@ describe('MiddlewareRegistry', () => {
         }
       }
 
-      const c: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const c: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           order.push('c-enter')
           return yield* next(context)
@@ -533,7 +533,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, c)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         throw new Error('boom')
       }
 
@@ -547,7 +547,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const order: string[] = []
 
-      const middleware: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const middleware: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } finally {
@@ -557,7 +557,7 @@ describe('MiddlewareRegistry', () => {
 
       registry.add(TestStage, middleware)
 
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         yield { data: 'event-1' }
         yield { data: 'event-2' }
         yield { data: 'event-3' }
@@ -578,7 +578,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const order: string[] = []
 
-      const outer: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const outer: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } finally {
@@ -586,7 +586,7 @@ describe('MiddlewareRegistry', () => {
         }
       }
 
-      const inner: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const inner: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         try {
           return yield* next(context)
         } finally {
@@ -597,7 +597,7 @@ describe('MiddlewareRegistry', () => {
       registry.add(TestStage, outer)
       registry.add(TestStage, inner)
 
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         yield { data: 'event-1' }
         yield { data: 'event-2' }
         return { output: 'done' }
@@ -618,7 +618,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       const callOrder: number[] = []
 
-      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const handler: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         callOrder.push(1)
         return yield* next(context)
       }
@@ -627,7 +627,7 @@ describe('MiddlewareRegistry', () => {
       registry.remove(TestStage, handler)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         callOrder.push(2)
         return { output: 'done' }
       }
@@ -640,7 +640,7 @@ describe('MiddlewareRegistry', () => {
       const registry = new MiddlewareRegistry()
       let callCount = 0
 
-      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const handler: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         callCount++
         return yield* next(context)
       }
@@ -650,7 +650,7 @@ describe('MiddlewareRegistry', () => {
       registry.remove(TestStage, handler)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<TestContext, TestEvent, TestResult> = async function* () {
+      const terminal: MiddlewareNext<TestContext, TestResult, TestEvent> = async function* () {
         return { output: 'done' }
       }
 
@@ -661,7 +661,7 @@ describe('MiddlewareRegistry', () => {
     it('is a no-op when handler was never registered', async () => {
       const registry = new MiddlewareRegistry()
 
-      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const handler: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 
@@ -671,9 +671,9 @@ describe('MiddlewareRegistry', () => {
 
     it('is a no-op when stage has no handlers', () => {
       const registry = new MiddlewareRegistry()
-      const OtherStage = createStage<TestContext, TestEvent, TestResult>('other')
+      const OtherStage = createStage<TestContext, TestResult, TestEvent>('other')
 
-      const handler: MiddlewareHandler<TestContext, TestEvent, TestResult> = async function* (context, next) {
+      const handler: MiddlewareHandler<TestContext, TestResult, TestEvent> = async function* (context, next) {
         return yield* next(context)
       }
 

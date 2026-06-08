@@ -524,8 +524,8 @@ export class Agent implements LocalAgent, InvokableAgent {
    * }))
    * ```
    */
-  addMiddleware<TContext, TEvent, TResult>(
-    phase: MiddlewareInputPhase<TContext, TEvent, TResult>,
+  addMiddleware<TContext, TResult, TEvent>(
+    phase: MiddlewareInputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareInputHandler<TContext>
   ): () => void
   /**
@@ -541,8 +541,8 @@ export class Agent implements LocalAgent, InvokableAgent {
    * })
    * ```
    */
-  addMiddleware<TContext, TEvent, TResult>(
-    phase: MiddlewareOutputPhase<TContext, TEvent, TResult>,
+  addMiddleware<TContext, TResult, TEvent>(
+    phase: MiddlewareOutputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareOutputHandler<TResult>
   ): () => void
   /**
@@ -566,17 +566,17 @@ export class Agent implements LocalAgent, InvokableAgent {
    * cleanup()
    * ```
    */
-  addMiddleware<TContext, TEvent, TResult>(
-    stage: MiddlewareStage<TContext, TEvent, TResult>,
-    handler: MiddlewareHandler<TContext, TEvent, TResult>
+  addMiddleware<TContext, TResult, TEvent>(
+    stage: MiddlewareStage<TContext, TResult, TEvent>,
+    handler: MiddlewareHandler<TContext, TResult, TEvent>
   ): () => void
-  addMiddleware<TContext, TEvent, TResult>(
+  addMiddleware<TContext, TResult, TEvent>(
     stageOrPhase:
-      | MiddlewareStage<TContext, TEvent, TResult>
-      | MiddlewareInputPhase<TContext, TEvent, TResult>
-      | MiddlewareOutputPhase<TContext, TEvent, TResult>,
+      | MiddlewareStage<TContext, TResult, TEvent>
+      | MiddlewareInputPhase<TContext, TResult, TEvent>
+      | MiddlewareOutputPhase<TContext, TResult, TEvent>,
     handler:
-      | MiddlewareHandler<TContext, TEvent, TResult>
+      | MiddlewareHandler<TContext, TResult, TEvent>
       | MiddlewareInputHandler<TContext>
       | MiddlewareOutputHandler<TResult>
   ): () => void {
@@ -588,14 +588,14 @@ export class Agent implements LocalAgent, InvokableAgent {
       }
       if (stageOrPhase._phase === 'output') {
         const adapted = this._middlewareRegistry.addOutput(
-          stageOrPhase as MiddlewareOutputPhase<TContext, TEvent, TResult>,
+          stageOrPhase as MiddlewareOutputPhase<TContext, TResult, TEvent>,
           handler as MiddlewareOutputHandler<TResult>
         )
         return () => this._middlewareRegistry.remove(stage, adapted)
       }
     }
-    const stage = stageOrPhase as MiddlewareStage<TContext, TEvent, TResult>
-    const aroundHandler = handler as MiddlewareHandler<TContext, TEvent, TResult>
+    const stage = stageOrPhase as MiddlewareStage<TContext, TResult, TEvent>
+    const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
     this._middlewareRegistry.add(stage, aroundHandler)
     return () => this._middlewareRegistry.remove(stage, aroundHandler)
   }

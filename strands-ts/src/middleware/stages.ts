@@ -58,8 +58,8 @@ export interface MiddlewareInterruptible {
  * @param name - Human-readable name for debugging/logging
  * @returns A frozen MiddlewareStage object carrying the Context/Event/Result type parameters
  */
-export function createStage<TContext, TEvent, TResult>(name: string): MiddlewareStage<TContext, TEvent, TResult> {
-  const stage = { name } as MiddlewareStage<TContext, TEvent, TResult>
+export function createStage<TContext, TResult, TEvent>(name: string): MiddlewareStage<TContext, TResult, TEvent> {
+  const stage = { name } as MiddlewareStage<TContext, TResult, TEvent>
   const input = Object.freeze({ _phase: 'input' as const, _stage: stage })
   const around = Object.freeze({ _phase: 'around' as const, _stage: stage })
   const output = Object.freeze({ _phase: 'output' as const, _stage: stage })
@@ -147,16 +147,16 @@ export interface AgentStreamResult {
  * Built-in stage wrapping core model invocation.
  * Middleware registered for this stage can rate-limit, cache, or transform model inputs.
  */
-export const InvokeModelStage = createStage<InvokeModelContext, AgentStreamEvent, InvokeModelResult>('invokeModel')
+export const InvokeModelStage = createStage<InvokeModelContext, InvokeModelResult, AgentStreamEvent>('invokeModel')
 
 /**
  * Built-in stage wrapping individual tool execution.
  * Middleware registered for this stage can add telemetry, validate inputs, or mock responses.
  */
-export const ExecuteToolStage = createStage<ExecuteToolContext, AgentStreamEvent, ExecuteToolResult>('executeTool')
+export const ExecuteToolStage = createStage<ExecuteToolContext, ExecuteToolResult, AgentStreamEvent>('executeTool')
 
 /**
  * Built-in stage wrapping the entire agent output stream.
  * Middleware registered for this stage can filter, transform, or inject events.
  */
-export const AgentStreamStage = createStage<AgentStreamContext, AgentStreamEvent, AgentStreamResult>('agentStream')
+export const AgentStreamStage = createStage<AgentStreamContext, AgentStreamResult, AgentStreamEvent>('agentStream')

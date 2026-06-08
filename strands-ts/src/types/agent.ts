@@ -357,17 +357,17 @@ export interface LocalAgent {
    * @param stage - The stage token identifying the interception point
    * @param handler - The middleware handler function (async generator)
    */
-  addMiddleware<TContext, TEvent, TResult>(
-    phase: MiddlewareInputPhase<TContext, TEvent, TResult>,
+  addMiddleware<TContext, TResult, TEvent>(
+    phase: MiddlewareInputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareInputHandler<TContext>
   ): () => void
-  addMiddleware<TContext, TEvent, TResult>(
-    phase: MiddlewareOutputPhase<TContext, TEvent, TResult>,
+  addMiddleware<TContext, TResult, TEvent>(
+    phase: MiddlewareOutputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareOutputHandler<TResult>
   ): () => void
-  addMiddleware<TContext, TEvent, TResult>(
-    stage: MiddlewareStage<TContext, TEvent, TResult>,
-    handler: MiddlewareHandler<TContext, TEvent, TResult>
+  addMiddleware<TContext, TResult, TEvent>(
+    stage: MiddlewareStage<TContext, TResult, TEvent>,
+    handler: MiddlewareHandler<TContext, TResult, TEvent>
   ): () => void
 }
 

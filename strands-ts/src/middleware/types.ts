@@ -5,58 +5,58 @@
  *
  * Third parties can create custom stages — the SDK does not maintain a closed set.
  */
-export interface MiddlewareStage<TContext, TEvent, TResult> {
+export interface MiddlewareStage<TContext, TResult, TEvent> {
   /** Human-readable name for debugging and logging. */
   readonly name: string
   /** @internal Phantom field for type inference. Never accessed at runtime. */
   readonly _types?: { context: TContext; event: TEvent; result: TResult }
   /** Phase sub-token: transform context before execution. */
-  readonly Input: MiddlewareInputPhase<TContext, TEvent, TResult>
+  readonly Input: MiddlewareInputPhase<TContext, TResult, TEvent>
   /** Phase sub-token: full async generator wrap (before + call next + after). */
-  readonly Around: MiddlewareAroundPhase<TContext, TEvent, TResult>
+  readonly Around: MiddlewareAroundPhase<TContext, TResult, TEvent>
   /** Phase sub-token: transform result after execution. */
-  readonly Output: MiddlewareOutputPhase<TContext, TEvent, TResult>
+  readonly Output: MiddlewareOutputPhase<TContext, TResult, TEvent>
 }
 
 /** Phase ordering constant. Input runs outermost, then Output, then Around (closest to terminal). */
 export type MiddlewarePhaseKind = 'input' | 'around' | 'output'
 
 /** Phase sub-token for Input handlers. */
-export interface MiddlewareInputPhase<TContext, TEvent, TResult> {
+export interface MiddlewareInputPhase<TContext, TResult, TEvent> {
   /** @internal */
   readonly _phase: 'input'
   /** @internal Back-reference to parent stage. */
-  readonly _stage: MiddlewareStage<TContext, TEvent, TResult>
+  readonly _stage: MiddlewareStage<TContext, TResult, TEvent>
 }
 
 /** Phase sub-token for Around handlers. */
-export interface MiddlewareAroundPhase<TContext, TEvent, TResult> {
+export interface MiddlewareAroundPhase<TContext, TResult, TEvent> {
   /** @internal */
   readonly _phase: 'around'
   /** @internal Back-reference to parent stage. */
-  readonly _stage: MiddlewareStage<TContext, TEvent, TResult>
+  readonly _stage: MiddlewareStage<TContext, TResult, TEvent>
 }
 
 /** Phase sub-token for Output handlers. */
-export interface MiddlewareOutputPhase<TContext, TEvent, TResult> {
+export interface MiddlewareOutputPhase<TContext, TResult, TEvent> {
   /** @internal */
   readonly _phase: 'output'
   /** @internal Back-reference to parent stage. */
-  readonly _stage: MiddlewareStage<TContext, TEvent, TResult>
+  readonly _stage: MiddlewareStage<TContext, TResult, TEvent>
 }
 
 /** Union of all phase sub-tokens. */
-export type MiddlewarePhase<TContext, TEvent, TResult> =
-  | MiddlewareInputPhase<TContext, TEvent, TResult>
-  | MiddlewareAroundPhase<TContext, TEvent, TResult>
-  | MiddlewareOutputPhase<TContext, TEvent, TResult>
+export type MiddlewarePhase<TContext, TResult, TEvent> =
+  | MiddlewareInputPhase<TContext, TResult, TEvent>
+  | MiddlewareAroundPhase<TContext, TResult, TEvent>
+  | MiddlewareOutputPhase<TContext, TResult, TEvent>
 
 /**
  * The `next` function passed to middleware.
  * Returns an async generator that yields events of type TEvent and returns the stage result.
  * Middleware can choose not to call `next` to short-circuit execution.
  */
-export type MiddlewareNext<TContext, TEvent, TResult> = (
+export type MiddlewareNext<TContext, TResult, TEvent> = (
   context: TContext
 ) => AsyncGenerator<TEvent, TResult, undefined>
 
@@ -66,9 +66,9 @@ export type MiddlewareNext<TContext, TEvent, TResult> = (
  * Must be an async generator that yields TEvent and returns TResult.
  * Middleware can yield its own events, forward events from next, or suppress them.
  */
-export type MiddlewareHandler<TContext, TEvent, TResult> = (
+export type MiddlewareHandler<TContext, TResult, TEvent> = (
   context: TContext,
-  next: MiddlewareNext<TContext, TEvent, TResult>
+  next: MiddlewareNext<TContext, TResult, TEvent>
 ) => AsyncGenerator<TEvent, TResult, undefined>
 
 /** Handler for Input phase — transforms context before execution. */
@@ -89,7 +89,7 @@ export type MiddlewareOutputHandler<TResult> = (result: TResult) => TResult | Pr
  * ```
  */
 export type MiddlewareHandlerOf<S> =
-  S extends MiddlewareStage<infer C, infer E, infer R> ? MiddlewareHandler<C, E, R> : never
+  S extends MiddlewareStage<infer C, infer R, infer E> ? MiddlewareHandler<C, R, E> : never
 
 /**
  * Extracts the `MiddlewareNext` type from a stage token.
@@ -100,4 +100,4 @@ export type MiddlewareHandlerOf<S> =
  * private async *_handler(context: ..., next: MiddlewareNextOf<typeof AgentStreamStage>) { ... }
  * ```
  */
-export type MiddlewareNextOf<S> = S extends MiddlewareStage<infer C, infer E, infer R> ? MiddlewareNext<C, E, R> : never
+export type MiddlewareNextOf<S> = S extends MiddlewareStage<infer C, infer R, infer E> ? MiddlewareNext<C, R, E> : never

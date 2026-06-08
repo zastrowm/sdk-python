@@ -24,8 +24,8 @@ import {
 } from '../../hooks/events.js'
 import type { ToolContext } from '../../tools/tool.js'
 
-type ExecuteToolMiddleware = MiddlewareHandler<ExecuteToolContext, AgentStreamEvent, ExecuteToolResult>
-type AgentStreamMiddleware = MiddlewareHandler<AgentStreamContext, AgentStreamEvent, AgentStreamResult>
+type ExecuteToolMiddleware = MiddlewareHandler<ExecuteToolContext, ExecuteToolResult, AgentStreamEvent>
+type AgentStreamMiddleware = MiddlewareHandler<AgentStreamContext, AgentStreamResult, AgentStreamEvent>
 
 describe('Agent middleware integration — InvokeModelStage', () => {
   describe('addMiddleware registers handler and it executes on model call', () => {

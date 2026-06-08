@@ -10,9 +10,9 @@ import type {
 } from './types.js'
 
 /** Internal tagged handler with phase metadata for compose ordering. */
-interface TaggedHandler<TContext, TEvent, TResult> {
+interface TaggedHandler<TContext, TResult, TEvent> {
   phase: MiddlewarePhaseKind
-  handler: MiddlewareHandler<TContext, TEvent, TResult>
+  handler: MiddlewareHandler<TContext, TResult, TEvent>
 }
 
 /** Phase compose order: input (outermost) → output → around (innermost, closest to terminal). */
@@ -37,9 +37,9 @@ export class MiddlewareRegistry {
    * @param stage - The stage token to register the handler for
    * @param handler - The middleware handler function
    */
-  add<TContext, TEvent, TResult>(
-    stage: MiddlewareStage<TContext, TEvent, TResult>,
-    handler: MiddlewareHandler<TContext, TEvent, TResult>
+  add<TContext, TResult, TEvent>(
+    stage: MiddlewareStage<TContext, TResult, TEvent>,
+    handler: MiddlewareHandler<TContext, TResult, TEvent>
   ): void {
     const handlers = this._handlers.get(stage) ?? []
     handlers.push({ phase: 'around', handler })
@@ -51,13 +51,13 @@ export class MiddlewareRegistry {
    * Multiple Input handlers compose in registration order (each sees the previous handler's output).
    * Returns the adapted handler for cleanup purposes.
    */
-  addInput<TContext, TEvent, TResult>(
-    phase: MiddlewareInputPhase<TContext, TEvent, TResult>,
+  addInput<TContext, TResult, TEvent>(
+    phase: MiddlewareInputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareInputHandler<TContext>
-  ): MiddlewareHandler<TContext, TEvent, TResult> {
+  ): MiddlewareHandler<TContext, TResult, TEvent> {
     const stage = phase._stage
     const handlers = this._handlers.get(stage) ?? []
-    const adapted: MiddlewareHandler<TContext, TEvent, TResult> = async function* (context, next) {
+    const adapted: MiddlewareHandler<TContext, TResult, TEvent> = async function* (context, next) {
       const transformed = await handler(context)
       return yield* next(transformed)
     }
@@ -71,13 +71,13 @@ export class MiddlewareRegistry {
    * Multiple Output handlers compose in registration order (each sees the previous handler's output).
    * Returns the adapted handler for cleanup purposes.
    */
-  addOutput<TContext, TEvent, TResult>(
-    phase: MiddlewareOutputPhase<TContext, TEvent, TResult>,
+  addOutput<TContext, TResult, TEvent>(
+    phase: MiddlewareOutputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareOutputHandler<TResult>
-  ): MiddlewareHandler<TContext, TEvent, TResult> {
+  ): MiddlewareHandler<TContext, TResult, TEvent> {
     const stage = phase._stage
     const handlers = this._handlers.get(stage) ?? []
-    const adapted: MiddlewareHandler<TContext, TEvent, TResult> = async function* (context, next) {
+    const adapted: MiddlewareHandler<TContext, TResult, TEvent> = async function* (context, next) {
       const result = yield* next(context)
       return await handler(result)
     }
@@ -93,9 +93,9 @@ export class MiddlewareRegistry {
    * @param stage - The stage token to remove the handler from
    * @param handler - The middleware handler function to remove
    */
-  remove<TContext, TEvent, TResult>(
-    stage: MiddlewareStage<TContext, TEvent, TResult>,
-    handler: MiddlewareHandler<TContext, TEvent, TResult>
+  remove<TContext, TResult, TEvent>(
+    stage: MiddlewareStage<TContext, TResult, TEvent>,
+    handler: MiddlewareHandler<TContext, TResult, TEvent>
   ): void {
     const handlers = this._handlers.get(stage)
     if (!handlers) return
@@ -112,16 +112,16 @@ export class MiddlewareRegistry {
    * @param terminal - The innermost function that performs actual stage execution
    * @returns A single function representing the full middleware chain
    */
-  compose<TContext, TEvent, TResult>(
-    stage: MiddlewareStage<TContext, TEvent, TResult>,
-    terminal: MiddlewareNext<TContext, TEvent, TResult>
-  ): MiddlewareNext<TContext, TEvent, TResult> {
-    const tagged = (this._handlers.get(stage) ?? []) as TaggedHandler<TContext, TEvent, TResult>[]
+  compose<TContext, TResult, TEvent>(
+    stage: MiddlewareStage<TContext, TResult, TEvent>,
+    terminal: MiddlewareNext<TContext, TResult, TEvent>
+  ): MiddlewareNext<TContext, TResult, TEvent> {
+    const tagged = (this._handlers.get(stage) ?? []) as TaggedHandler<TContext, TResult, TEvent>[]
 
     // Stable sort by phase: input first, output second, around last (closest to terminal)
     const sorted = [...tagged].sort((a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase])
 
-    let current: MiddlewareNext<TContext, TEvent, TResult> = terminal
+    let current: MiddlewareNext<TContext, TResult, TEvent> = terminal
     for (let i = sorted.length - 1; i >= 0; i--) {
       const handler = sorted[i]!.handler
       const next = current
@@ -140,10 +140,10 @@ export class MiddlewareRegistry {
    * @param terminal - The innermost function that performs actual stage execution
    * @returns An async generator yielding events and returning the stage result
    */
-  invoke<TContext, TEvent, TResult>(
-    stage: MiddlewareStage<TContext, TEvent, TResult>,
+  invoke<TContext, TResult, TEvent>(
+    stage: MiddlewareStage<TContext, TResult, TEvent>,
     context: TContext,
-    terminal: MiddlewareNext<TContext, TEvent, TResult>
+    terminal: MiddlewareNext<TContext, TResult, TEvent>
   ): AsyncGenerator<TEvent, TResult, undefined> {
     const chain = this.compose(stage, terminal)
     return chain(context)

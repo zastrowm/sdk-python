@@ -34,23 +34,23 @@ async function collect<TEvent, TResult>(
 describe('Third-party custom stages', () => {
   describe('createStage', () => {
     it('returns a frozen object', () => {
-      const stage = createStage<CustomContext, CustomEvent, CustomResult>('myCustomStage')
+      const stage = createStage<CustomContext, CustomResult, CustomEvent>('myCustomStage')
       expect(Object.isFrozen(stage)).toBe(true)
     })
 
     it('returns object with correct name property', () => {
-      const stage = createStage<CustomContext, CustomEvent, CustomResult>('myCustomStage')
+      const stage = createStage<CustomContext, CustomResult, CustomEvent>('myCustomStage')
       expect(stage.name).toBe('myCustomStage')
     })
   })
 
   describe('custom stage with registry', () => {
     it('works with registry.add and compose (handlers execute correctly)', async () => {
-      const CustomStage = createStage<CustomContext, CustomEvent, CustomResult>('custom')
+      const CustomStage = createStage<CustomContext, CustomResult, CustomEvent>('custom')
       const registry = new MiddlewareRegistry()
       const callOrder: string[] = []
 
-      const handler: MiddlewareHandler<CustomContext, CustomEvent, CustomResult> = async function* (context, next) {
+      const handler: MiddlewareHandler<CustomContext, CustomResult, CustomEvent> = async function* (context, next) {
         callOrder.push('middleware')
         yield { kind: `pre-${context.label}` }
         const result = yield* next(context)
@@ -60,7 +60,7 @@ describe('Third-party custom stages', () => {
 
       registry.add(CustomStage, handler)
 
-      const terminal: MiddlewareNext<CustomContext, CustomEvent, CustomResult> = async function* (ctx) {
+      const terminal: MiddlewareNext<CustomContext, CustomResult, CustomEvent> = async function* (ctx) {
         callOrder.push('terminal')
         yield { kind: `terminal-${ctx.label}` }
         return { summary: `done-${ctx.count}` }
@@ -75,17 +75,17 @@ describe('Third-party custom stages', () => {
     })
 
     it('two stages with the same name are distinct (reference identity)', async () => {
-      const StageA = createStage<CustomContext, CustomEvent, CustomResult>('shared-name')
-      const StageB = createStage<CustomContext, CustomEvent, CustomResult>('shared-name')
+      const StageA = createStage<CustomContext, CustomResult, CustomEvent>('shared-name')
+      const StageB = createStage<CustomContext, CustomResult, CustomEvent>('shared-name')
 
       const registry = new MiddlewareRegistry()
 
-      const handlerA: MiddlewareHandler<CustomContext, CustomEvent, CustomResult> = async function* (context, next) {
+      const handlerA: MiddlewareHandler<CustomContext, CustomResult, CustomEvent> = async function* (context, next) {
         yield { kind: 'from-A' }
         return yield* next(context)
       }
 
-      const handlerB: MiddlewareHandler<CustomContext, CustomEvent, CustomResult> = async function* (context, next) {
+      const handlerB: MiddlewareHandler<CustomContext, CustomResult, CustomEvent> = async function* (context, next) {
         yield { kind: 'from-B' }
         return yield* next(context)
       }
@@ -94,7 +94,7 @@ describe('Third-party custom stages', () => {
       registry.add(StageB, handlerB)
 
       // eslint-disable-next-line require-yield
-      const terminal: MiddlewareNext<CustomContext, CustomEvent, CustomResult> = async function* () {
+      const terminal: MiddlewareNext<CustomContext, CustomResult, CustomEvent> = async function* () {
         return { summary: 'terminal' }
       }
 
@@ -110,18 +110,18 @@ describe('Third-party custom stages', () => {
     })
 
     it('custom stage middleware can be composed with a terminal and executes correctly', async () => {
-      const CustomStage = createStage<CustomContext, CustomEvent, CustomResult>('pipeline')
+      const CustomStage = createStage<CustomContext, CustomResult, CustomEvent>('pipeline')
       const registry = new MiddlewareRegistry()
 
       // Register multiple middleware for the custom stage
-      const logger: MiddlewareHandler<CustomContext, CustomEvent, CustomResult> = async function* (context, next) {
+      const logger: MiddlewareHandler<CustomContext, CustomResult, CustomEvent> = async function* (context, next) {
         yield { kind: 'log-start' }
         const result = yield* next(context)
         yield { kind: 'log-end' }
         return result
       }
 
-      const transformer: MiddlewareHandler<CustomContext, CustomEvent, CustomResult> = async function* (context, next) {
+      const transformer: MiddlewareHandler<CustomContext, CustomResult, CustomEvent> = async function* (context, next) {
         const modified = { ...context, count: context.count * 2 }
         return yield* next(modified)
       }
@@ -129,7 +129,7 @@ describe('Third-party custom stages', () => {
       registry.add(CustomStage, logger)
       registry.add(CustomStage, transformer)
 
-      const terminal: MiddlewareNext<CustomContext, CustomEvent, CustomResult> = async function* (ctx) {
+      const terminal: MiddlewareNext<CustomContext, CustomResult, CustomEvent> = async function* (ctx) {
         yield { kind: `processed-${ctx.count}` }
         return { summary: `result-${ctx.label}-${ctx.count}` }
       }
