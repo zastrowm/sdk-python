@@ -8,7 +8,7 @@ from typing import Any, Literal, TypedDict
 
 from .exceptions import SnapshotException
 
-SnapshotField = Literal["messages", "state", "conversation_manager_state", "interrupt_state", "system_prompt"]
+SnapshotField = Literal["messages", "state", "conversation_manager_state", "interrupt_state", "system_prompt", "model_state"]
 SnapshotPreset = Literal["session"]
 Scope = Literal["agent"]
 
@@ -18,6 +18,7 @@ ALL_SNAPSHOT_FIELDS: tuple[SnapshotField, ...] = (
     "conversation_manager_state",
     "interrupt_state",
     "system_prompt",
+    "model_state",
 )
 
 VALID_SCOPES: tuple[Scope, ...] = ("agent",)
