@@ -26,7 +26,14 @@ import type {
   StreamEvent,
 } from '../hooks/events.js'
 import type { HookCallback, HookableEventConstructor, HookCallbackOptions, HookCleanup } from '../hooks/types.js'
-import type { MiddlewareStage, MiddlewareHandler } from '../middleware/types.js'
+import type {
+  MiddlewareStage,
+  MiddlewareHandler,
+  MiddlewareInputPhase,
+  MiddlewareOutputPhase,
+  MiddlewareInputHandler,
+  MiddlewareOutputHandler,
+} from '../middleware/types.js'
 import type { ToolRegistry } from '../registry/tool-registry.js'
 import type { Model } from '../models/model.js'
 import type { z } from 'zod'
@@ -350,6 +357,14 @@ export interface LocalAgent {
    * @param stage - The stage token identifying the interception point
    * @param handler - The middleware handler function (async generator)
    */
+  addMiddleware<TContext, TEvent, TResult>(
+    phase: MiddlewareInputPhase<TContext, TEvent, TResult>,
+    handler: MiddlewareInputHandler<TContext>
+  ): () => void
+  addMiddleware<TContext, TEvent, TResult>(
+    phase: MiddlewareOutputPhase<TContext, TEvent, TResult>,
+    handler: MiddlewareOutputHandler<TResult>
+  ): () => void
   addMiddleware<TContext, TEvent, TResult>(
     stage: MiddlewareStage<TContext, TEvent, TResult>,
     handler: MiddlewareHandler<TContext, TEvent, TResult>

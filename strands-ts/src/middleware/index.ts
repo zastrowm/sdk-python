@@ -4,12 +4,22 @@ export type {
   MiddlewareHandler,
   MiddlewareHandlerOf,
   MiddlewareNextOf,
+  MiddlewareInputHandler,
+  MiddlewareOutputHandler,
+  MiddlewareInputPhase,
+  MiddlewareAroundPhase,
+  MiddlewareOutputPhase,
+  MiddlewarePhase,
+  MiddlewarePhaseKind,
 } from './types.js'
 export { createStage, InvokeModelStage, ExecuteToolStage, AgentStreamStage } from './stages.js'
 export type {
   InvokeModelContext,
+  InvokeModelResult,
   ExecuteToolContext,
+  ExecuteToolResult,
   AgentStreamContext,
+  AgentStreamResult,
   MiddlewareInterruptResult,
   MiddlewareInterruptible,
 } from './stages.js'

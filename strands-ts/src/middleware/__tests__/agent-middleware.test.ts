@@ -4,7 +4,13 @@ import { MockMessageModel } from '../../__fixtures__/mock-message-model.js'
 import { collectGenerator } from '../../__fixtures__/model-test-helpers.js'
 import { createMockTool } from '../../__fixtures__/tool-helpers.js'
 import { AgentStreamStage, ExecuteToolStage, InvokeModelStage } from '../stages.js'
-import type { AgentStreamContext, ExecuteToolContext, InvokeModelContext } from '../stages.js'
+import type {
+  AgentStreamContext,
+  ExecuteToolContext,
+  InvokeModelContext,
+  ExecuteToolResult,
+  AgentStreamResult,
+} from '../stages.js'
 import type { MiddlewareHandler, MiddlewareHandlerOf } from '../types.js'
 import type { AgentStreamEvent, AgentResult, LocalAgent } from '../../types/agent.js'
 import type { Plugin } from '../../plugins/plugin.js'
@@ -18,8 +24,8 @@ import {
 } from '../../hooks/events.js'
 import type { ToolContext } from '../../tools/tool.js'
 
-type ExecuteToolMiddleware = MiddlewareHandler<ExecuteToolContext, AgentStreamEvent, ToolResultBlock>
-type AgentStreamMiddleware = MiddlewareHandler<AgentStreamContext, AgentStreamEvent, AgentResult>
+type ExecuteToolMiddleware = MiddlewareHandler<ExecuteToolContext, AgentStreamEvent, ExecuteToolResult>
+type AgentStreamMiddleware = MiddlewareHandler<AgentStreamContext, AgentStreamEvent, AgentStreamResult>
 
 describe('Agent middleware integration — InvokeModelStage', () => {
   describe('addMiddleware registers handler and it executes on model call', () => {
@@ -97,8 +103,10 @@ describe('Agent middleware integration — InvokeModelStage', () => {
         // eslint-disable-next-line require-yield
         async function* () {
           return {
-            message: new Message({ role: 'assistant', content: [new TextBlock('Cached response')] }),
-            stopReason: 'endTurn' as const,
+            result: {
+              message: new Message({ role: 'assistant', content: [new TextBlock('Cached response')] }),
+              stopReason: 'endTurn' as const,
+            },
           }
         }
       )
@@ -120,8 +128,10 @@ describe('Agent middleware integration — InvokeModelStage', () => {
         // eslint-disable-next-line require-yield
         async function* () {
           return {
-            message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
-            stopReason: 'endTurn' as const,
+            result: {
+              message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
+              stopReason: 'endTurn' as const,
+            },
           }
         }
       )
@@ -234,8 +244,10 @@ describe('Agent middleware integration — InvokeModelStage', () => {
         // eslint-disable-next-line require-yield
         async function* () {
           return {
-            message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
-            stopReason: 'endTurn' as const,
+            result: {
+              message: new Message({ role: 'assistant', content: [new TextBlock('Cached')] }),
+              stopReason: 'endTurn' as const,
+            },
           }
         }
       )
@@ -407,11 +419,13 @@ describe('AgentStreamStage integration', () => {
       // eslint-disable-next-line require-yield
       const middleware: AgentStreamMiddleware = async function* () {
         return {
-          stopReason: 'endTurn',
-          lastMessage: { type: 'message', role: 'assistant', content: [] },
-          metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
-          invocationState: {},
-        } as unknown as AgentResult
+          result: {
+            stopReason: 'endTurn',
+            lastMessage: { type: 'message', role: 'assistant', content: [] },
+            metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
+            invocationState: {},
+          } as unknown as AgentResult,
+        }
       }
 
       agent.addMiddleware(AgentStreamStage, middleware)
@@ -609,11 +623,13 @@ describe('AgentStreamStage integration', () => {
         yield syntheticEvent1
         yield syntheticEvent2
         return {
-          stopReason: 'endTurn',
-          lastMessage: { type: 'message', role: 'assistant', content: [] },
-          metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
-          invocationState: {},
-        } as unknown as AgentResult
+          result: {
+            stopReason: 'endTurn',
+            lastMessage: { type: 'message', role: 'assistant', content: [] },
+            metrics: { cycleCount: 0, accumulatedUsage: {}, accumulatedMetrics: {}, toolMetrics: {} },
+            invocationState: {},
+          } as unknown as AgentResult,
+        }
       }
 
       agent.addMiddleware(AgentStreamStage, middleware)
@@ -802,11 +818,13 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return new ToolResultBlock({
-          toolUseId: context.toolUse.toolUseId,
-          status: 'success',
-          content: [new TextBlock('mocked result')],
-        })
+        return {
+          result: new ToolResultBlock({
+            toolUseId: context.toolUse.toolUseId,
+            status: 'success',
+            content: [new TextBlock('mocked result')],
+          }),
+        }
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -838,11 +856,13 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return new ToolResultBlock({
-          toolUseId: context.toolUse.toolUseId,
-          status: 'success',
-          content: [new TextBlock('mocked data')],
-        })
+        return {
+          result: new ToolResultBlock({
+            toolUseId: context.toolUse.toolUseId,
+            status: 'success',
+            content: [new TextBlock('mocked data')],
+          }),
+        }
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -1015,11 +1035,13 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return new ToolResultBlock({
-          toolUseId: context.toolUse.toolUseId,
-          status: 'success',
-          content: [new TextBlock('mocked')],
-        })
+        return {
+          result: new ToolResultBlock({
+            toolUseId: context.toolUse.toolUseId,
+            status: 'success',
+            content: [new TextBlock('mocked')],
+          }),
+        }
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -1055,11 +1077,13 @@ describe('ExecuteToolStage integration', () => {
 
       // eslint-disable-next-line require-yield
       const middleware: ExecuteToolMiddleware = async function* (context) {
-        return new ToolResultBlock({
-          toolUseId: context.toolUse.toolUseId,
-          status: 'success',
-          content: [new TextBlock('from middleware')],
-        })
+        return {
+          result: new ToolResultBlock({
+            toolUseId: context.toolUse.toolUseId,
+            status: 'success',
+            content: [new TextBlock('from middleware')],
+          }),
+        }
       }
 
       agent.addMiddleware(ExecuteToolStage, middleware)
@@ -1086,14 +1110,16 @@ describe('Middleware use cases', () => {
           const key = `${context.toolUse.name}:${JSON.stringify(context.toolUse.input)}`
           const cached = cache.get(key)
           if (cached) {
-            return new ToolResultBlock({
-              toolUseId: context.toolUse.toolUseId,
-              status: cached.status,
-              content: cached.content,
-            })
+            return {
+              result: new ToolResultBlock({
+                toolUseId: context.toolUse.toolUseId,
+                status: cached.status,
+                content: cached.content,
+              }),
+            }
           }
           const result = yield* next(context)
-          cache.set(key, result)
+          cache.set(key, result.result)
           return result
         })
       }
@@ -1252,6 +1278,225 @@ describe('Middleware use cases', () => {
       expect(contentEvents).toHaveLength(1)
       expect((contentEvents[0] as ContentBlockEvent).contentBlock).toStrictEqual(new TextBlock('Simple answer'))
       expect(result.stopReason).toBe('endTurn')
+    })
+  })
+})
+
+describe('Middleware phases (Input / Around / Output)', () => {
+  describe('InvokeModelStage.Input', () => {
+    it('transforms context before the model call', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      let receivedMessages: unknown
+
+      agent.addMiddleware(InvokeModelStage.Input, async (context) => ({
+        ...context,
+        messages: [...context.messages, new Message({ role: 'user', content: [new TextBlock('injected')] })],
+      }))
+
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        receivedMessages = context.messages
+        return yield* next(context)
+      })
+
+      await agent.invoke('Original')
+
+      expect((receivedMessages as Message[]).length).toBe(2)
+      expect((receivedMessages as Message[])[1]!.content[0]).toEqual(new TextBlock('injected'))
+    })
+
+    it('runs before Around handlers regardless of registration order', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const order: string[] = []
+
+      // Register Around first, then Input
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        order.push('around')
+        return yield* next(context)
+      })
+
+      agent.addMiddleware(InvokeModelStage.Input, async (context) => {
+        order.push('input')
+        return context
+      })
+
+      await agent.invoke('Test')
+
+      expect(order).toStrictEqual(['input', 'around'])
+    })
+
+    it('multiple Input handlers compose in registration order', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const order: string[] = []
+
+      agent.addMiddleware(InvokeModelStage.Input, async (context) => {
+        order.push('input-1')
+        return context
+      })
+
+      agent.addMiddleware(InvokeModelStage.Input, async (context) => {
+        order.push('input-2')
+        return context
+      })
+
+      await agent.invoke('Test')
+
+      expect(order).toStrictEqual(['input-1', 'input-2'])
+    })
+  })
+
+  describe('InvokeModelStage.Output', () => {
+    it('transforms result after the model call', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      let outputSeen = false
+
+      agent.addMiddleware(InvokeModelStage.Output, async (result) => {
+        outputSeen = true
+        expect(result.result.stopReason).toBe('endTurn')
+        return result
+      })
+
+      await agent.invoke('Test')
+
+      expect(outputSeen).toBe(true)
+    })
+
+    it('runs after Around handlers (wraps them)', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const order: string[] = []
+
+      agent.addMiddleware(InvokeModelStage.Output, async (result) => {
+        order.push('output')
+        return result
+      })
+
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        order.push('around-before')
+        const result = yield* next(context)
+        order.push('around-after')
+        return result
+      })
+
+      await agent.invoke('Test')
+
+      // Output wraps Around: output sees the result after around-after
+      expect(order).toStrictEqual(['around-before', 'around-after', 'output'])
+    })
+  })
+
+  describe('InvokeModelStage (Around phase)', () => {
+    it('bare InvokeModelStage registers as Around phase and executes between Input and Output', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const order: string[] = []
+
+      agent.addMiddleware(InvokeModelStage.Input, async (context) => {
+        order.push('input')
+        return context
+      })
+
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        order.push('around')
+        return yield* next(context)
+      })
+
+      agent.addMiddleware(InvokeModelStage.Output, async (result) => {
+        order.push('output')
+        return result
+      })
+
+      await agent.invoke('Test prompt')
+
+      expect(order).toStrictEqual(['input', 'around', 'output'])
+    })
+  })
+
+  describe('phase ordering', () => {
+    it('Input → Around → Output execution order', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const order: string[] = []
+
+      // Register in reverse order to prove phase ordering overrides registration order
+      agent.addMiddleware(InvokeModelStage.Output, async (result) => {
+        order.push('output')
+        return result
+      })
+
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        order.push('around')
+        return yield* next(context)
+      })
+
+      agent.addMiddleware(InvokeModelStage.Input, async (context) => {
+        order.push('input')
+        return context
+      })
+
+      await agent.invoke('Test')
+
+      expect(order).toStrictEqual(['input', 'around', 'output'])
+    })
+  })
+
+  describe('ExecuteToolStage phases', () => {
+    it('Input transforms tool context before execution', async () => {
+      const model = new MockMessageModel()
+        .addTurn({ type: 'toolUseBlock', name: 'myTool', toolUseId: 'tool-1', input: { x: 1 } })
+        .addTurn({ type: 'textBlock', text: 'Done' })
+
+      let receivedInput: unknown
+      const tool = createMockTool('myTool', (ctx: ToolContext) => {
+        receivedInput = ctx.toolUse.input
+        return 'ok'
+      })
+
+      const agent = new Agent({ model, tools: [tool], printer: false })
+
+      agent.addMiddleware(ExecuteToolStage.Input, async (context) => ({
+        ...context,
+        toolUse: { ...context.toolUse, input: { x: 2 } },
+      }))
+
+      await agent.invoke('Test')
+
+      expect(receivedInput).toEqual({ x: 2 })
+    })
+  })
+
+  describe('cleanup', () => {
+    it('cleanup removes Input handler', async () => {
+      const model = new MockMessageModel()
+        .addTurn({ type: 'textBlock', text: 'First' })
+        .addTurn({ type: 'textBlock', text: 'Second' })
+
+      const agent = new Agent({ model, printer: false })
+
+      let inputCalled = false
+      const cleanup = agent.addMiddleware(InvokeModelStage.Input, async (context) => {
+        inputCalled = true
+        return context
+      })
+
+      await agent.invoke('First')
+      expect(inputCalled).toBe(true)
+
+      inputCalled = false
+      cleanup()
+
+      await agent.invoke('Second')
+      expect(inputCalled).toBe(false)
     })
   })
 })

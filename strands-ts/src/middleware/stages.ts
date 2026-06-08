@@ -52,14 +52,18 @@ export interface MiddlewareInterruptible {
 }
 
 /**
- * Creates a new middleware stage token.
+ * Creates a new middleware stage token with Input/Around/Output phase sub-tokens.
  * The returned object is frozen and used as a Map key by the registry.
  *
  * @param name - Human-readable name for debugging/logging
  * @returns A frozen MiddlewareStage object carrying the Context/Event/Result type parameters
  */
 export function createStage<TContext, TEvent, TResult>(name: string): MiddlewareStage<TContext, TEvent, TResult> {
-  return Object.freeze({ name }) as MiddlewareStage<TContext, TEvent, TResult>
+  const stage = { name } as MiddlewareStage<TContext, TEvent, TResult>
+  const input = Object.freeze({ _phase: 'input' as const, _stage: stage })
+  const around = Object.freeze({ _phase: 'around' as const, _stage: stage })
+  const output = Object.freeze({ _phase: 'output' as const, _stage: stage })
+  return Object.freeze(Object.assign(stage, { Input: input, Around: around, Output: output }))
 }
 
 /**
@@ -85,6 +89,15 @@ export interface InvokeModelContext {
 }
 
 /**
+ * Result from model-stage middleware.
+ * The return value of the async generator.
+ */
+export interface InvokeModelResult {
+  /** The aggregated result from the model stream. */
+  readonly result: StreamAggregatedResult
+}
+
+/**
  * Context passed to tool-stage middleware.
  * Contains everything needed to understand and potentially modify the tool call.
  */
@@ -97,6 +110,15 @@ export interface ExecuteToolContext extends MiddlewareInterruptible {
   readonly toolUse: ToolUseData
   /** Per-invocation state shared across hooks and tools. */
   readonly invocationState: InvocationState
+}
+
+/**
+ * Result from tool-stage middleware.
+ * The return value of the async generator.
+ */
+export interface ExecuteToolResult {
+  /** The tool result block from execution. */
+  readonly result: ToolResultBlock
 }
 
 /**
@@ -113,19 +135,28 @@ export interface AgentStreamContext extends MiddlewareInterruptible {
 }
 
 /**
+ * Result from agent-stream-stage middleware.
+ * The return value of the async generator.
+ */
+export interface AgentStreamResult {
+  /** The final agent result from the stream. */
+  readonly result: AgentResult
+}
+
+/**
  * Built-in stage wrapping core model invocation.
  * Middleware registered for this stage can rate-limit, cache, or transform model inputs.
  */
-export const InvokeModelStage = createStage<InvokeModelContext, AgentStreamEvent, StreamAggregatedResult>('invokeModel')
+export const InvokeModelStage = createStage<InvokeModelContext, AgentStreamEvent, InvokeModelResult>('invokeModel')
 
 /**
  * Built-in stage wrapping individual tool execution.
  * Middleware registered for this stage can add telemetry, validate inputs, or mock responses.
  */
-export const ExecuteToolStage = createStage<ExecuteToolContext, AgentStreamEvent, ToolResultBlock>('executeTool')
+export const ExecuteToolStage = createStage<ExecuteToolContext, AgentStreamEvent, ExecuteToolResult>('executeTool')
 
 /**
  * Built-in stage wrapping the entire agent output stream.
  * Middleware registered for this stage can filter, transform, or inject events.
  */
-export const AgentStreamStage = createStage<AgentStreamContext, AgentStreamEvent, AgentResult>('agentStream')
+export const AgentStreamStage = createStage<AgentStreamContext, AgentStreamEvent, AgentStreamResult>('agentStream')

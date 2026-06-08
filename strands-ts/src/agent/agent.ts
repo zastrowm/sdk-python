@@ -46,11 +46,21 @@ import { NullConversationManager } from '../conversation-manager/null-conversati
 import { ConversationManager } from '../conversation-manager/conversation-manager.js'
 import { HookRegistryImplementation } from '../hooks/registry.js'
 import { MiddlewareRegistry, InvokeModelStage, ExecuteToolStage, AgentStreamStage } from '../middleware/index.js'
-import type { MiddlewareStage, MiddlewareHandler } from '../middleware/index.js'
+import type {
+  MiddlewareStage,
+  MiddlewareHandler,
+  MiddlewareInputHandler,
+  MiddlewareOutputHandler,
+  MiddlewareInputPhase,
+  MiddlewareOutputPhase,
+} from '../middleware/index.js'
 import type {
   InvokeModelContext,
+  InvokeModelResult,
   ExecuteToolContext,
+  ExecuteToolResult,
   AgentStreamContext,
+  AgentStreamResult,
   MiddlewareInterruptResult,
 } from '../middleware/index.js'
 import type { HookableEventConstructor, HookCallback, HookCallbackOptions, HookCleanup } from '../hooks/types.js'
@@ -503,7 +513,40 @@ export class Agent implements LocalAgent, InvokableAgent {
   }
 
   /**
-   * Register a middleware handler for a given stage.
+   * Register an Input phase handler that transforms context before execution.
+   * Input handlers run before Around and Output handlers.
+   *
+   * @example
+   * ```typescript
+   * agent.addMiddleware(InvokeModelStage.Input, async (context) => ({
+   *   ...context,
+   *   systemPrompt: injectToSystemPrompt(context),
+   * }))
+   * ```
+   */
+  addMiddleware<TContext, TEvent, TResult>(
+    phase: MiddlewareInputPhase<TContext, TEvent, TResult>,
+    handler: MiddlewareInputHandler<TContext>
+  ): () => void
+  /**
+   * Register an Output phase handler that transforms the result after execution.
+   * Output handlers run after Input but before Around handlers in the compose chain
+   * (meaning they wrap Around — they call next, which enters the Around chain, then transform the result).
+   *
+   * @example
+   * ```typescript
+   * agent.addMiddleware(InvokeModelStage.Output, async (result) => {
+   *   log(`Model returned stopReason=${result.stopReason}`)
+   *   return result
+   * })
+   * ```
+   */
+  addMiddleware<TContext, TEvent, TResult>(
+    phase: MiddlewareOutputPhase<TContext, TEvent, TResult>,
+    handler: MiddlewareOutputHandler<TResult>
+  ): () => void
+  /**
+   * Register a middleware handler for a given stage (Around phase).
    * Middleware wraps stage execution and can intercept, transform, or short-circuit operations.
    *
    * @param stage - The stage token identifying the interception point
@@ -526,9 +569,35 @@ export class Agent implements LocalAgent, InvokableAgent {
   addMiddleware<TContext, TEvent, TResult>(
     stage: MiddlewareStage<TContext, TEvent, TResult>,
     handler: MiddlewareHandler<TContext, TEvent, TResult>
+  ): () => void
+  addMiddleware<TContext, TEvent, TResult>(
+    stageOrPhase:
+      | MiddlewareStage<TContext, TEvent, TResult>
+      | MiddlewareInputPhase<TContext, TEvent, TResult>
+      | MiddlewareOutputPhase<TContext, TEvent, TResult>,
+    handler:
+      | MiddlewareHandler<TContext, TEvent, TResult>
+      | MiddlewareInputHandler<TContext>
+      | MiddlewareOutputHandler<TResult>
   ): () => void {
-    this._middlewareRegistry.add(stage, handler)
-    return () => this._middlewareRegistry.remove(stage, handler)
+    if ('_phase' in stageOrPhase) {
+      const stage = stageOrPhase._stage
+      if (stageOrPhase._phase === 'input') {
+        const adapted = this._middlewareRegistry.addInput(stageOrPhase, handler as MiddlewareInputHandler<TContext>)
+        return () => this._middlewareRegistry.remove(stage, adapted)
+      }
+      if (stageOrPhase._phase === 'output') {
+        const adapted = this._middlewareRegistry.addOutput(
+          stageOrPhase as MiddlewareOutputPhase<TContext, TEvent, TResult>,
+          handler as MiddlewareOutputHandler<TResult>
+        )
+        return () => this._middlewareRegistry.remove(stage, adapted)
+      }
+    }
+    const stage = stageOrPhase as MiddlewareStage<TContext, TEvent, TResult>
+    const aroundHandler = handler as MiddlewareHandler<TContext, TEvent, TResult>
+    this._middlewareRegistry.add(stage, aroundHandler)
+    return () => this._middlewareRegistry.remove(stage, aroundHandler)
   }
 
   public async initialize(): Promise<void> {
@@ -819,13 +888,15 @@ export class Agent implements LocalAgent, InvokableAgent {
       // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this
       try {
-        return yield* this._middlewareRegistry.invoke(
+        const { result } = yield* this._middlewareRegistry.invoke(
           AgentStreamStage,
           context,
-          async function* (ctx: AgentStreamContext): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
-            return yield* self._streamWithResumeLoop(ctx.args, ctx.options)
+          async function* (ctx: AgentStreamContext): AsyncGenerator<AgentStreamEvent, AgentStreamResult, undefined> {
+            const result = yield* self._streamWithResumeLoop(ctx.args, ctx.options)
+            return { result }
           }
         )
+        return result
       } catch (error) {
         if (error instanceof InterruptError) {
           // Handles interrupts raised by AgentStreamStage middleware (before the agent loop starts).
@@ -1718,10 +1789,10 @@ export class Agent implements LocalAgent, InvokableAgent {
     // async function* doesn't bind lexical `this`; capture for the terminal callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
-    return yield* this._middlewareRegistry.invoke(
+    const middlewareResult = yield* this._middlewareRegistry.invoke(
       InvokeModelStage,
       context,
-      async function* (ctx: InvokeModelContext): AsyncGenerator<AgentStreamEvent, StreamAggregatedResult, undefined> {
+      async function* (ctx: InvokeModelContext): AsyncGenerator<AgentStreamEvent, InvokeModelResult, undefined> {
         const streamOptions: StreamOptions = {
           toolSpecs: ctx.toolSpecs as ToolSpec[],
           modelState: ctx.modelState,
@@ -1734,9 +1805,10 @@ export class Agent implements LocalAgent, InvokableAgent {
           yield iterResult.value
           iterResult = await gen.next()
         }
-        return iterResult.value
+        return { result: iterResult.value }
       }
     )
+    return middlewareResult.result
   }
 
   /**
@@ -2232,13 +2304,15 @@ export class Agent implements LocalAgent, InvokableAgent {
     // async function* doesn't bind lexical `this`; capture for the terminal callback.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
-    return yield* this._middlewareRegistry.invoke(
+    const middlewareResult = yield* this._middlewareRegistry.invoke(
       ExecuteToolStage,
       context,
-      async function* (ctx: ExecuteToolContext): AsyncGenerator<AgentStreamEvent, ToolResultBlock, undefined> {
-        return yield* self._executeToolCore(ctx.tool, ctx.toolUse, ctx.invocationState)
+      async function* (ctx: ExecuteToolContext): AsyncGenerator<AgentStreamEvent, ExecuteToolResult, undefined> {
+        const result = yield* self._executeToolCore(ctx.tool, ctx.toolUse, ctx.invocationState)
+        return { result }
       }
     )
+    return middlewareResult.result
   }
 
   private async *_executeToolCore(
