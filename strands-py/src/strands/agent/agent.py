@@ -17,9 +17,11 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
+    Literal,
     TypeVar,
     Union,
     cast,
+    get_args,
 )
 
 from opentelemetry import trace as trace_api
@@ -107,6 +109,21 @@ _DEFAULT_RETRY_STRATEGY = _DefaultRetryStrategySentinel()
 _DEFAULT_AGENT_NAME = "Strands Agents"
 _DEFAULT_AGENT_ID = "default"
 
+ContextManagerStrategy = Literal["auto"]
+"""Supported values for the ``context_manager`` parameter."""
+
+_CONTEXT_MANAGER_MAX_RESULT_TOKENS = 1_500
+"""Benchmark-validated token threshold for offloading tool results."""
+
+_CONTEXT_MANAGER_PREVIEW_TOKENS = 750
+"""Benchmark-validated preview token count for offloaded results."""
+
+_CONTEXT_MANAGER_SUMMARY_RATIO = 0.3
+"""Benchmark-validated ratio of messages to summarize on overflow."""
+
+_CONTEXT_MANAGER_COMPRESSION_THRESHOLD = 0.85
+"""Benchmark-validated context window ratio that triggers proactive compression."""
+
 
 class Agent(AgentBase):
     """Core Agent implementation.
@@ -141,6 +158,7 @@ class Agent(AgentBase):
         name: str | None = None,
         description: str | None = None,
         state: AgentState | dict | None = None,
+        context_manager: ContextManagerStrategy | None = None,
         plugins: list[Plugin] | None = None,
         hooks: list[HookProvider | HookCallback] | None = None,
         session_manager: SessionManager | None = None,
@@ -194,6 +212,15 @@ class Agent(AgentBase):
                 Defaults to None.
             state: stateful information for the agent. Can be either an AgentState object, or a json serializable dict.
                 Defaults to an empty AgentState object.
+            context_manager: Context management strategy. When set to ``"auto"``, composes
+                a ContextOffloader plugin (max_result_tokens=1500, preview_tokens=750) with a
+                SummarizingConversationManager (summary_ratio=0.3, compression_threshold=0.85)
+                using benchmark-validated defaults. If ``conversation_manager`` is also provided,
+                the user's conversation manager is used instead. Defaults to None (no context management).
+
+                Note: The offloader uses in-memory storage that does not persist across process
+                restarts. For agents using ``session_manager``, provide an explicit
+                ``ContextOffloader`` with durable storage via the ``plugins`` parameter.
             plugins: List of Plugin instances to extend agent functionality.
                 Plugins are initialized with the agent instance after construction and can register hooks,
                 modify agent attributes, or perform other setup tasks.
@@ -249,15 +276,21 @@ class Agent(AgentBase):
         else:
             self.callback_handler = callback_handler
 
-        if self.model.stateful and conversation_manager is not None:
+        if self.model.stateful and (conversation_manager is not None or context_manager is not None):
             raise ValueError(
-                "conversation_manager cannot be used with a stateful model. "
+                "context_manager and conversation_manager cannot be used with a stateful model. "
                 "The model manages conversation state server-side."
             )
+
+        resolved_conversation_manager, resolved_plugins = self._resolve_context_manager(
+            context_manager, conversation_manager, plugins
+        )
 
         self.conversation_manager: ConversationManager
         if self.model.stateful:
             self.conversation_manager = NullConversationManager()
+        elif resolved_conversation_manager:
+            self.conversation_manager = resolved_conversation_manager
         elif conversation_manager:
             self.conversation_manager = conversation_manager
         else:
@@ -378,11 +411,71 @@ class Agent(AgentBase):
         # Register built-in plugins
         self._plugin_registry.add_and_init(_ModelPlugin())
 
-        if plugins:
-            for plugin in plugins:
+        plugins_to_register = resolved_plugins if resolved_plugins is not None else plugins
+        if plugins_to_register:
+            for plugin in plugins_to_register:
                 self._plugin_registry.add_and_init(plugin)
 
         self.hooks.invoke_callbacks(AgentInitializedEvent(agent=self))
+
+    @staticmethod
+    def _resolve_context_manager(
+        context_manager: "ContextManagerStrategy | None",
+        conversation_manager: ConversationManager | None,
+        plugins: list[Plugin] | None,
+    ) -> tuple[ConversationManager | None, list[Plugin] | None]:
+        """Resolve context_manager facade into concrete conversation_manager and plugins.
+
+        When context_manager is None, returns (None, None) and no resolution occurs.
+        When "auto", constructs a SummarizingConversationManager and ContextOffloader
+        with benchmark-validated defaults, unless the user already provided those.
+
+        Args:
+            context_manager: The facade value ("auto" or None).
+            conversation_manager: User-provided conversation manager, takes precedence if set.
+            plugins: User-provided plugin list; offloader is appended if not already present.
+
+        Returns:
+            Tuple of (resolved conversation manager, resolved plugins list).
+            Both are None when context_manager is None.
+
+        Raises:
+            ValueError: If context_manager is not a supported value.
+        """
+        if context_manager is None:
+            return None, None
+
+        supported = get_args(ContextManagerStrategy)
+        if context_manager not in supported:
+            raise ValueError(
+                f"Unsupported context_manager value: {context_manager!r}. Supported values: {supported}"
+            )
+
+        from ..vended_plugins.context_offloader import ContextOffloader, InMemoryStorage
+        from .conversation_manager import SummarizingConversationManager
+
+        resolved_plugins = list(plugins) if plugins else []
+
+        has_offloader = any(
+            isinstance(p, ContextOffloader) for p in resolved_plugins
+        )
+        if not has_offloader:
+            offloader = ContextOffloader(
+                storage=InMemoryStorage(),
+                max_result_tokens=_CONTEXT_MANAGER_MAX_RESULT_TOKENS,
+                preview_tokens=_CONTEXT_MANAGER_PREVIEW_TOKENS,
+            )
+            resolved_plugins.append(offloader)
+
+        if conversation_manager is not None:
+            resolved_conversation_manager = conversation_manager
+        else:
+            resolved_conversation_manager = SummarizingConversationManager(
+                summary_ratio=_CONTEXT_MANAGER_SUMMARY_RATIO,
+                proactive_compression={"compression_threshold": _CONTEXT_MANAGER_COMPRESSION_THRESHOLD},
+            )
+
+        return resolved_conversation_manager, resolved_plugins
 
     def cancel(self) -> None:
         """Cancel the currently running agent invocation.
