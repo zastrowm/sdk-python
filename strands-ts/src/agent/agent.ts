@@ -531,13 +531,13 @@ export class Agent implements LocalAgent, InvokableAgent {
   ): () => void
   /**
    * Register an Output phase handler that transforms the result after execution.
-   * Output handlers run after Input but before Around handlers in the compose chain
-   * (meaning they wrap Around — they call next, which enters the Around chain, then transform the result).
+   * Output handlers see the result after Around handlers complete.
+   * Execution order: Input → Around → Output.
    *
    * @example
    * ```typescript
    * agent.addMiddleware(InvokeModelStage.Output, async (result) => {
-   *   log(`Model returned stopReason=${result.stopReason}`)
+   *   log(`Model returned stopReason=${result.result.stopReason}`)
    *   return result
    * })
    * ```

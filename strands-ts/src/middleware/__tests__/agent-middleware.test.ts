@@ -1498,6 +1498,29 @@ describe('Middleware phases (Input / Around / Output)', () => {
       await agent.invoke('Second')
       expect(inputCalled).toBe(false)
     })
+
+    it('cleanup removes Output handler', async () => {
+      const model = new MockMessageModel()
+        .addTurn({ type: 'textBlock', text: 'First' })
+        .addTurn({ type: 'textBlock', text: 'Second' })
+
+      const agent = new Agent({ model, printer: false })
+
+      let outputCalled = false
+      const cleanup = agent.addMiddleware(InvokeModelStage.Output, async (result) => {
+        outputCalled = true
+        return result
+      })
+
+      await agent.invoke('First')
+      expect(outputCalled).toBe(true)
+
+      outputCalled = false
+      cleanup()
+
+      await agent.invoke('Second')
+      expect(outputCalled).toBe(false)
+    })
   })
 
   describe('error handling', () => {

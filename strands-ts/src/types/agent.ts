@@ -351,11 +351,12 @@ export interface LocalAgent {
   loadSnapshot(snapshot: Snapshot): void
 
   /**
-   * Register a middleware handler for a given stage.
+   * Register a middleware handler for a given stage or phase.
    * Middleware wraps stage execution and can intercept, transform, or short-circuit operations.
    *
-   * @param stage - The stage token identifying the interception point
-   * @param handler - The middleware handler function (async generator)
+   * @param stageOrPhase - A stage token (Around) or phase sub-token (.Input / .Output)
+   * @param handler - Async generator for Around, plain async function for Input/Output
+   * @returns A cleanup function that removes the middleware when called
    */
   addMiddleware<TContext, TResult, TEvent>(
     phase: MiddlewareInputPhase<TContext, TResult, TEvent>,
