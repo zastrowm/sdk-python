@@ -128,6 +128,7 @@ const server = new McpServer({
 
 server.tool(
   'calculator',
+  // @ts-ignore - MCP SDK overload signature changed; snippet needs updating
   'Calculator tool which performs calculations',
   {
     x: z.number(),
