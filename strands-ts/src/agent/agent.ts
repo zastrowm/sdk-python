@@ -593,6 +593,10 @@ export class Agent implements LocalAgent, InvokableAgent {
         )
         return () => this._middlewareRegistry.remove(stage, adapted)
       }
+      // 'around' phase token — equivalent to bare stage
+      const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
+      this._middlewareRegistry.add(stage, aroundHandler)
+      return () => this._middlewareRegistry.remove(stage, aroundHandler)
     }
     const stage = stageOrPhase as MiddlewareStage<TContext, TResult, TEvent>
     const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>

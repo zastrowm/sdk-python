@@ -15,7 +15,7 @@ interface TaggedHandler<TContext, TResult, TEvent> {
   handler: MiddlewareHandler<TContext, TResult, TEvent>
 }
 
-/** Phase compose order: input (outermost) → output → around (innermost, closest to terminal). */
+/** Compose layering: input (outermost) → output → around (innermost). Execution order: input → around → output. */
 const PHASE_ORDER: Record<MiddlewarePhaseKind, number> = { input: 0, output: 1, around: 2 }
 
 /**

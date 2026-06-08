@@ -18,7 +18,7 @@ export interface MiddlewareStage<TContext, TResult, TEvent> {
   readonly Output: MiddlewareOutputPhase<TContext, TResult, TEvent>
 }
 
-/** Phase ordering constant. Input runs outermost, then Output, then Around (closest to terminal). */
+/** Phase ordering. Compose layering: input (outermost) → output → around (innermost). Execution order: input → around → output. */
 export type MiddlewarePhaseKind = 'input' | 'around' | 'output'
 
 /** Phase sub-token for Input handlers. */
