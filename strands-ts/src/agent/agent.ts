@@ -53,6 +53,7 @@ import type {
   MiddlewareOutputHandler,
   MiddlewareInputPhase,
   MiddlewareOutputPhase,
+  MiddlewarePhaseKind,
 } from '../middleware/index.js'
 import type {
   InvokeModelContext,
@@ -581,22 +582,31 @@ export class Agent implements LocalAgent, InvokableAgent {
       | MiddlewareOutputHandler<TResult>
   ): () => void {
     if ('_phase' in stageOrPhase) {
-      const stage = stageOrPhase._stage
-      if (stageOrPhase._phase === 'input') {
-        const adapted = this._middlewareRegistry.addInput(stageOrPhase, handler as MiddlewareInputHandler<TContext>)
-        return () => this._middlewareRegistry.remove(stage, adapted)
+      const phase = stageOrPhase as { _phase: MiddlewarePhaseKind; _stage: MiddlewareStage<TContext, TResult, TEvent> }
+      const stage = phase._stage
+      switch (phase._phase) {
+        case 'input': {
+          const adapted = this._middlewareRegistry.addInput(
+            stageOrPhase as MiddlewareInputPhase<TContext, TResult, TEvent>,
+            handler as MiddlewareInputHandler<TContext>
+          )
+          return () => this._middlewareRegistry.remove(stage, adapted)
+        }
+        case 'output': {
+          const adapted = this._middlewareRegistry.addOutput(
+            stageOrPhase as MiddlewareOutputPhase<TContext, TResult, TEvent>,
+            handler as MiddlewareOutputHandler<TResult>
+          )
+          return () => this._middlewareRegistry.remove(stage, adapted)
+        }
+        case 'around': {
+          const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
+          this._middlewareRegistry.add(stage, aroundHandler)
+          return () => this._middlewareRegistry.remove(stage, aroundHandler)
+        }
+        default:
+          throw new Error(`Unknown middleware phase: ${(phase as { _phase: string })._phase}`)
       }
-      if (stageOrPhase._phase === 'output') {
-        const adapted = this._middlewareRegistry.addOutput(
-          stageOrPhase as MiddlewareOutputPhase<TContext, TResult, TEvent>,
-          handler as MiddlewareOutputHandler<TResult>
-        )
-        return () => this._middlewareRegistry.remove(stage, adapted)
-      }
-      // 'around' phase token — equivalent to bare stage
-      const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
-      this._middlewareRegistry.add(stage, aroundHandler)
-      return () => this._middlewareRegistry.remove(stage, aroundHandler)
     }
     const stage = stageOrPhase as MiddlewareStage<TContext, TResult, TEvent>
     const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>

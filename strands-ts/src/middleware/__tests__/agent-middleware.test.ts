@@ -1499,4 +1499,13 @@ describe('Middleware phases (Input / Around / Output)', () => {
       expect(inputCalled).toBe(false)
     })
   })
+
+  describe('error handling', () => {
+    it('throws on unknown phase', () => {
+      const agent = new Agent({ model: 'test', printer: false })
+      const fakePhase = { _phase: 'unknown', _stage: InvokeModelStage } as never
+
+      expect(() => agent.addMiddleware(fakePhase, (() => {}) as never)).toThrow('Unknown middleware phase: unknown')
+    })
+  })
 })
