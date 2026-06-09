@@ -1366,6 +1366,8 @@ class Agent(AgentBase):
             # Store the content-block representation so round-trips preserve caching hints and
             # other block-level metadata.
             data["system_prompt"] = copy.deepcopy(self._system_prompt_content)
+        if "model_state" in fields:
+            data["model_state"] = copy.deepcopy(self._model_state)
 
         return Snapshot(
             scope="agent",
@@ -1399,6 +1401,8 @@ class Agent(AgentBase):
             self._interrupt_state = _InterruptState.from_dict(data["interrupt_state"])
         if "system_prompt" in data:
             self.system_prompt = copy.deepcopy(data["system_prompt"])
+        if "model_state" in data:
+            self._model_state = copy.deepcopy(data["model_state"])
 
     def _redact_user_content(self, content: list[ContentBlock], redact_message: str) -> list[ContentBlock]:
         """Redact user content preserving toolResult blocks.
