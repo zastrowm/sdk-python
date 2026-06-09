@@ -891,7 +891,29 @@ export class Agent implements LocalAgent, InvokableAgent {
         this._interruptState.resume(interruptResponses)
       }
 
+      // Thread the resolved invocationState so all layers share the same reference.
       const invocationState = options?.invocationState ?? {}
+      const resolvedOptions: InvokeOptions = options?.invocationState ? options : { ...options, invocationState }
+
+      return yield* this._streamWithResumeLoop(args, resolvedOptions, invocationState)
+    } finally {
+      this._isInvoking = false
+    }
+  }
+
+  /**
+   * Resume loop that fires BeforeInvocationEvent/AfterInvocationEvent per-iteration,
+   * outside middleware. Hooks always observe each iteration; middleware runs inside.
+   */
+  private async *_streamWithResumeLoop(
+    args: InvokeArgs,
+    options: InvokeOptions,
+    invocationState: InvocationState
+  ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
+    let currentArgs: InvokeArgs = args
+
+    while (true) {
+      // Hooks fire outside middleware — always, even on short-circuit.
       const beforeInvocationEvent = new BeforeInvocationEvent({ agent: this, invocationState })
       yield await this._invokeCallbacks(beforeInvocationEvent)
 
@@ -900,7 +922,10 @@ export class Agent implements LocalAgent, InvokableAgent {
           typeof beforeInvocationEvent.cancel === 'string' ? beforeInvocationEvent.cancel : 'invocation denied by hook'
         const message = new Message({ role: 'assistant', content: [new TextBlock(cancelText)] })
         yield this._appendMessage(message, invocationState)
-        yield await this._invokeCallbacks(new AfterInvocationEvent({ agent: this, invocationState }))
+        const afterEvent = (await this._invokeCallbacks(
+          new AfterInvocationEvent({ agent: this, invocationState })
+        )) as AfterInvocationEvent
+        yield afterEvent
         return new AgentResult({
           stopReason: 'endTurn',
           lastMessage: message,
@@ -910,160 +935,39 @@ export class Agent implements LocalAgent, InvokableAgent {
         })
       }
 
-      // Thread the resolved invocationState into options so _stream() shares the same reference.
-      const resolvedOptions: InvokeOptions = options?.invocationState ? options : { ...options, invocationState }
-      const context: AgentStreamContext = {
-        agent: this,
-        args,
-        ...(resolvedOptions !== undefined && { options: resolvedOptions }),
-        interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
-      }
-
-      // async function* doesn't bind lexical `this`; capture for the terminal callback.
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      const self = this
-      try {
-        const { result } = yield* this._middlewareRegistry.invoke(
-          AgentStreamStage,
-          context,
-          async function* (ctx: AgentStreamContext): AsyncGenerator<AgentStreamEvent, AgentStreamResult, undefined> {
-            const result = yield* self._streamWithResumeLoop(ctx.args, ctx.options)
-            return { result }
-          }
-        )
-        return result
-      } catch (error) {
-        if (error instanceof InterruptError) {
-          // Handles interrupts raised by AgentStreamStage middleware (before the agent loop starts).
-          // Tool/hook interrupts are caught separately in _stream() since they propagate through
-          // the agent loop and produce an AgentResult internally.
-          //
-          // We intentionally don't call _createInterruptResult() here because middleware
-          // is stateless during execution — agent state (e.g. _isInvoking) is only modified
-          // at the edges, so we construct the result directly.
-          for (const interrupt of error.interrupts) {
-            this._interruptState.getOrCreateInterrupt(interrupt.id, interrupt.name, interrupt.reason)
-          }
-          this._interruptState.activate()
-          for (const interrupt of error.interrupts) {
-            yield new InterruptEvent({ agent: this, interrupt, invocationState })
-          }
-          return new AgentResult({
-            stopReason: 'interrupt',
-            lastMessage:
-              this.messages.length > 0
-                ? this.messages[this.messages.length - 1]!
-                : new Message({ role: 'assistant', content: [new TextBlock('Interrupted')] }),
-            traces: this._tracer.localTraces,
-            metrics: this._meter.metrics,
-            interrupts: this._interruptState.getUnansweredInterrupts(),
-            invocationState,
-          })
-        }
-        throw error
-      }
-    } finally {
-      this._isInvoking = false
-    }
-  }
-
-  /**
-   * Internal stream logic with the outer resume loop.
-   * Extracted to allow AgentStreamStage middleware to wrap it as a terminal function.
-   */
-  private async *_streamWithResumeLoop(
-    args: InvokeArgs,
-    options?: InvokeOptions
-  ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
-    let currentArgs: InvokeArgs = args
-    let isFirstIteration = true
-
-    // Outer loop: re-enters _stream when a hook sets AfterInvocationEvent.resume.
-    // One invocation lock spans the whole resume chain.
-    while (true) {
-      // Fire BeforeInvocationEvent on resume iterations. The first iteration's
-      // BeforeInvocationEvent is fired in stream() (outside middleware).
-      if (!isFirstIteration) {
-        const invocationState = options?.invocationState ?? {}
-        yield await this._invokeCallbacks(new BeforeInvocationEvent({ agent: this, invocationState }))
-      }
-      isFirstIteration = false
-      // Fresh AbortController per invocation iteration, composed with any external signal.
+      // Fresh AbortController per iteration, composed with any external signal.
       this._abortController = new AbortController()
       this._abortSignal = options?.cancelSignal
         ? AbortSignal.any([this._abortController.signal, options.cancelSignal])
         : this._abortController.signal
 
-      const streamGenerator = this._stream(currentArgs, options)
+      let result: AgentResult | undefined
       let caughtError: Error | undefined
-      let lastAfterInvocation: AfterInvocationEvent | undefined
-      let iterationResult: IteratorResult<AgentStreamEvent, AgentResult>
+      let afterInvocationEvent: AfterInvocationEvent | undefined
       try {
-        iterationResult = await streamGenerator.next()
-
-        while (!iterationResult.done) {
-          try {
-            const processed = await this._invokeCallbacks(iterationResult.value)
-            if (processed instanceof AfterInvocationEvent) {
-              lastAfterInvocation = processed
-            }
-            yield processed
-            iterationResult = await streamGenerator.next()
-          } catch (error) {
-            // Throw interrupt errors back into _stream so executeTools can store the
-            // assistant message as pending execution state for resume.
-            if (error instanceof InterruptError) {
-              iterationResult = await streamGenerator.throw(error)
-            } else {
-              throw error
-            }
-          }
-        }
-
-        // Suppress AgentResultEvent for resumed iterations — only the final
-        // invocation in a resume chain reports an agent result.
-        if (lastAfterInvocation?.resume === undefined) {
-          yield await this._invokeCallbacks(
-            new AgentResultEvent({
-              agent: this,
-              result: iterationResult.value,
-              invocationState: iterationResult.value.invocationState,
-            })
-          )
-        }
+        result = yield* this._streamWithMiddleware(currentArgs, options, invocationState)
       } catch (error) {
         caughtError = error as Error
-        throw error
       } finally {
-        // Drain _stream() so cleanup hooks and printer still fire.
-        // Yield only on error (consumer may still be iterating); on a consumer
-        // break, yielding would suspend the generator and leak the lock.
-        let drainResult = await streamGenerator.return(undefined as never)
-        while (!drainResult.done) {
-          try {
-            if (caughtError) {
-              yield await this._invokeCallbacks(drainResult.value)
-            } else {
-              await this._invokeCallbacks(drainResult.value)
-            }
-          } catch (error) {
-            logger.warn(
-              `event_type=<${drainResult.value.type}>, error=<${error}> | error invoking callbacks during cleanup`
-            )
-          }
-          drainResult = await streamGenerator.next()
-        }
+        // AfterInvocationEvent always fires — even on error or consumer break. Outside middleware.
+        // Invoke hooks (so .resume can be set) but don't yield in finally (yields in finally
+        // suspend the generator on consumer break instead of completing cleanup).
+        afterInvocationEvent = (await this._invokeCallbacks(
+          new AfterInvocationEvent({ agent: this, invocationState })
+        )) as AfterInvocationEvent
+      }
 
-        // Reset controller and signal for next iteration / invocation
-        this._abortController = new AbortController()
-        this._abortSignal = this._abortController.signal
+      // Yield the event outside finally (only reached on normal completion or caught error, not break)
+      yield afterInvocationEvent
+
+      // Re-throw after hooks have fired
+      if (caughtError) {
+        throw caughtError
       }
 
       // Resume only on a clean invocation — errors propagate above.
-      if (lastAfterInvocation?.resume !== undefined) {
-        currentArgs = lastAfterInvocation.resume
-        // Apply any interrupt responses carried in the resume args so middleware
-        // sees them as answered on the next iteration.
+      if (afterInvocationEvent!.resume !== undefined) {
+        currentArgs = afterInvocationEvent!.resume
         const resumeInterruptResponses = this._extractInterruptResponses(currentArgs)
         if (resumeInterruptResponses.length > 0) {
           this._interruptState.resume(resumeInterruptResponses)
@@ -1071,8 +975,129 @@ export class Agent implements LocalAgent, InvokableAgent {
         continue
       }
 
-      return iterationResult.value
+      // Only emit AgentResultEvent on the final iteration (not on resumed ones).
+      yield await this._invokeCallbacks(
+        new AgentResultEvent({
+          agent: this,
+          result: result!,
+          invocationState,
+        })
+      )
+
+      return result!
     }
+  }
+
+  /**
+   * Invokes the AgentStreamStage middleware chain.
+   * Hooks fire outside this method (in _streamWithResumeLoop).
+   */
+  private async *_streamWithMiddleware(
+    args: InvokeArgs,
+    options: InvokeOptions,
+    invocationState: InvocationState
+  ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
+    const context: AgentStreamContext = {
+      agent: this,
+      args,
+      ...(options !== undefined && { options }),
+      interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
+    }
+
+    // async function* doesn't bind lexical `this`; capture for the terminal callback.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this
+    try {
+      const { result } = yield* this._middlewareRegistry.invoke(
+        AgentStreamStage,
+        context,
+        async function* (ctx: AgentStreamContext): AsyncGenerator<AgentStreamEvent, AgentStreamResult, undefined> {
+          const result = yield* self._streamCore(ctx.args, ctx.options)
+          return { result }
+        }
+      )
+      return result
+    } catch (error) {
+      if (error instanceof InterruptError) {
+        for (const interrupt of error.interrupts) {
+          this._interruptState.getOrCreateInterrupt(interrupt.id, interrupt.name, interrupt.reason)
+        }
+        this._interruptState.activate()
+        for (const interrupt of error.interrupts) {
+          yield new InterruptEvent({ agent: this, interrupt, invocationState })
+        }
+        return new AgentResult({
+          stopReason: 'interrupt',
+          lastMessage:
+            this.messages.length > 0
+              ? this.messages[this.messages.length - 1]!
+              : new Message({ role: 'assistant', content: [new TextBlock('Interrupted')] }),
+          traces: this._tracer.localTraces,
+          metrics: this._meter.metrics,
+          interrupts: this._interruptState.getUnansweredInterrupts(),
+          invocationState,
+        })
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Single-pass stream through _stream() with event processing.
+   * No resume loop, no lifecycle events — those are handled by _streamWithResumeLoop.
+   */
+  private async *_streamCore(
+    args: InvokeArgs,
+    options?: InvokeOptions
+  ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
+    const streamGenerator = this._stream(args, options)
+    let caughtError: Error | undefined
+    let iterationResult: IteratorResult<AgentStreamEvent, AgentResult>
+    try {
+      iterationResult = await streamGenerator.next()
+
+      while (!iterationResult.done) {
+        try {
+          const processed = await this._invokeCallbacks(iterationResult.value)
+          yield processed
+          iterationResult = await streamGenerator.next()
+        } catch (error) {
+          // Throw interrupt errors back into _stream so executeTools can store the
+          // assistant message as pending execution state for resume.
+          if (error instanceof InterruptError) {
+            iterationResult = await streamGenerator.throw(error)
+          } else {
+            throw error
+          }
+        }
+      }
+    } catch (error) {
+      caughtError = error as Error
+      throw error
+    } finally {
+      // Drain _stream() so cleanup hooks and printer still fire.
+      let drainResult = await streamGenerator.return(undefined as never)
+      while (!drainResult.done) {
+        try {
+          if (caughtError) {
+            yield await this._invokeCallbacks(drainResult.value)
+          } else {
+            await this._invokeCallbacks(drainResult.value)
+          }
+        } catch (error) {
+          logger.warn(
+            `event_type=<${drainResult.value.type}>, error=<${error}> | error invoking callbacks during cleanup`
+          )
+        }
+        drainResult = await streamGenerator.next()
+      }
+
+      // Reset controller and signal for next iteration
+      this._abortController = new AbortController()
+      this._abortSignal = this._abortController.signal
+    }
+
+    return iterationResult.value
   }
 
   /**
@@ -1494,9 +1519,6 @@ export class Agent implements LocalAgent, InvokableAgent {
       if (structuredOutputTool) {
         this._toolRegistry.remove(STRUCTURED_OUTPUT_TOOL_NAME)
       }
-
-      // Always emit final event
-      yield new AfterInvocationEvent({ agent: this, invocationState })
     }
   }
 
