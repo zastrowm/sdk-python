@@ -13,8 +13,8 @@ Hooks always fire outside the middleware chain. This means:
 ```
 BeforeHookEvent          ← always fires
   → Input phase          ← transforms context
-    → Output phase       ← wraps Around, transforms result on the way out
-      → Around phase     ← full wrap, may retry/short-circuit
+    → Output phase       ← wraps Wrap, transforms result on the way out
+      → Wrap phase       ← full wrap, may retry/short-circuit
         → terminal       ← actual operation
 AfterHookEvent           ← always fires (even on short-circuit)
 ```

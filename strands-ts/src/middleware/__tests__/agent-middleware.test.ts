@@ -1398,7 +1398,7 @@ describe('Middleware use cases', () => {
   })
 })
 
-describe('Middleware phases (Input / Around / Output)', () => {
+describe('Middleware phases (Input / Wrap / Output)', () => {
   describe('InvokeModelStage.Input', () => {
     it('transforms context before the model call', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
@@ -1422,15 +1422,15 @@ describe('Middleware phases (Input / Around / Output)', () => {
       expect((receivedMessages as Message[])[1]!.content[0]).toEqual(new TextBlock('injected'))
     })
 
-    it('runs before Around handlers regardless of registration order', async () => {
+    it('runs before Wrap handlers regardless of registration order', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
       const agent = new Agent({ model, printer: false })
 
       const order: string[] = []
 
-      // Register Around first, then Input
+      // Register Wrap first, then Input
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
-        order.push('around')
+        order.push('wrap')
         return yield* next(context)
       })
 
@@ -1441,7 +1441,7 @@ describe('Middleware phases (Input / Around / Output)', () => {
 
       await agent.invoke('Test')
 
-      expect(order).toStrictEqual(['input', 'around'])
+      expect(order).toStrictEqual(['input', 'wrap'])
     })
 
     it('multiple Input handlers compose in registration order', async () => {
@@ -1484,7 +1484,7 @@ describe('Middleware phases (Input / Around / Output)', () => {
       expect(outputSeen).toBe(true)
     })
 
-    it('runs after Around handlers (wraps them)', async () => {
+    it('runs after Wrap handlers (wraps them)', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
       const agent = new Agent({ model, printer: false })
 
@@ -1496,21 +1496,21 @@ describe('Middleware phases (Input / Around / Output)', () => {
       })
 
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
-        order.push('around-before')
+        order.push('wrap-before')
         const result = yield* next(context)
-        order.push('around-after')
+        order.push('wrap-after')
         return result
       })
 
       await agent.invoke('Test')
 
-      // Output wraps Around: output sees the result after around-after
-      expect(order).toStrictEqual(['around-before', 'around-after', 'output'])
+      // Output wraps Wrap: output sees the result after wrap-after
+      expect(order).toStrictEqual(['wrap-before', 'wrap-after', 'output'])
     })
   })
 
-  describe('InvokeModelStage (Around phase)', () => {
-    it('bare InvokeModelStage registers as Around phase and executes between Input and Output', async () => {
+  describe('InvokeModelStage (Wrap phase)', () => {
+    it('bare InvokeModelStage registers as Wrap phase and executes between Input and Output', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
       const agent = new Agent({ model, printer: false })
 
@@ -1522,7 +1522,7 @@ describe('Middleware phases (Input / Around / Output)', () => {
       })
 
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
-        order.push('around')
+        order.push('wrap')
         return yield* next(context)
       })
 
@@ -1533,12 +1533,12 @@ describe('Middleware phases (Input / Around / Output)', () => {
 
       await agent.invoke('Test prompt')
 
-      expect(order).toStrictEqual(['input', 'around', 'output'])
+      expect(order).toStrictEqual(['input', 'wrap', 'output'])
     })
   })
 
   describe('phase ordering', () => {
-    it('Input → Around → Output execution order', async () => {
+    it('Input → Wrap → Output execution order', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
       const agent = new Agent({ model, printer: false })
 
@@ -1551,7 +1551,7 @@ describe('Middleware phases (Input / Around / Output)', () => {
       })
 
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
-        order.push('around')
+        order.push('wrap')
         return yield* next(context)
       })
 
@@ -1562,7 +1562,7 @@ describe('Middleware phases (Input / Around / Output)', () => {
 
       await agent.invoke('Test')
 
-      expect(order).toStrictEqual(['input', 'around', 'output'])
+      expect(order).toStrictEqual(['input', 'wrap', 'output'])
     })
   })
 

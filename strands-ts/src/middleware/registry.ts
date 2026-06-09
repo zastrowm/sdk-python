@@ -15,8 +15,8 @@ interface TaggedHandler<TContext, TResult, TEvent> {
   handler: MiddlewareHandler<TContext, TResult, TEvent>
 }
 
-/** Compose layering: input (outermost) → output → around (innermost). Execution order: input → around → output. */
-const PHASE_ORDER: Record<MiddlewarePhaseKind, number> = { input: 0, output: 1, around: 2 }
+/** Compose layering: input (outermost) → output → wrap (innermost). Execution order: input → wrap → output. */
+const PHASE_ORDER: Record<MiddlewarePhaseKind, number> = { input: 0, output: 1, wrap: 2 }
 
 /**
  * Registry that stores middleware handlers keyed by stage tokens
@@ -31,7 +31,7 @@ export class MiddlewareRegistry {
   }
 
   /**
-   * Register a middleware handler for a given stage (Around phase).
+   * Register a middleware handler for a given stage (Wrap phase).
    * Handlers are stored in registration order within their phase.
    *
    * @param stage - The stage token to register the handler for
@@ -42,12 +42,12 @@ export class MiddlewareRegistry {
     handler: MiddlewareHandler<TContext, TResult, TEvent>
   ): void {
     const handlers = this._handlers.get(stage) ?? []
-    handlers.push({ phase: 'around', handler })
+    handlers.push({ phase: 'wrap', handler })
     this._handlers.set(stage, handlers)
   }
 
   /**
-   * Register an Input phase handler. Transforms context before the Around chain runs.
+   * Register an Input phase handler. Transforms context before the Wrap chain runs.
    * Multiple Input handlers compose in registration order (each sees the previous handler's output).
    * Returns the adapted handler for cleanup purposes.
    */
@@ -67,7 +67,7 @@ export class MiddlewareRegistry {
   }
 
   /**
-   * Register an Output phase handler. Transforms result after the Around chain completes.
+   * Register an Output phase handler. Transforms result after the Wrap chain completes.
    * Multiple Output handlers compose in registration order (each sees the previous handler's output).
    * Returns the adapted handler for cleanup purposes.
    */
@@ -105,7 +105,7 @@ export class MiddlewareRegistry {
 
   /**
    * Compose all registered handlers for a stage into a single middleware chain.
-   * Handlers are ordered by phase (input → output → around), then by registration order within phase.
+   * Handlers are ordered by phase (input → output → wrap), then by registration order within phase.
    * First in the composed chain = outermost.
    *
    * @param stage - The stage token to compose handlers for
@@ -118,7 +118,7 @@ export class MiddlewareRegistry {
   ): MiddlewareNext<TContext, TResult, TEvent> {
     const tagged = (this._handlers.get(stage) ?? []) as TaggedHandler<TContext, TResult, TEvent>[]
 
-    // Stable sort by phase: input first, output second, around last (closest to terminal)
+    // Stable sort by phase: input first, output second, wrap last (closest to terminal)
     const sorted = [...tagged].sort((a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase])
 
     let current: MiddlewareNext<TContext, TResult, TEvent> = terminal

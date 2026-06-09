@@ -7,7 +7,7 @@ export type {
   MiddlewareInputHandler,
   MiddlewareOutputHandler,
   MiddlewareInputPhase,
-  MiddlewareAroundPhase,
+  MiddlewareWrapPhase,
   MiddlewareOutputPhase,
   MiddlewarePhase,
   MiddlewarePhaseKind,

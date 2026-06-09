@@ -13,13 +13,13 @@ export interface MiddlewareStage<TContext, TResult, TEvent> {
   /** Phase sub-token: transform context before execution. */
   readonly Input: MiddlewareInputPhase<TContext, TResult, TEvent>
   /** Phase sub-token: full async generator wrap (before + call next + after). */
-  readonly Around: MiddlewareAroundPhase<TContext, TResult, TEvent>
+  readonly Wrap: MiddlewareWrapPhase<TContext, TResult, TEvent>
   /** Phase sub-token: transform result after execution. */
   readonly Output: MiddlewareOutputPhase<TContext, TResult, TEvent>
 }
 
-/** Phase ordering. Compose layering: input (outermost) → output → around (innermost). Execution order: input → around → output. */
-export type MiddlewarePhaseKind = 'input' | 'around' | 'output'
+/** Phase ordering. Compose layering: input (outermost) → output → wrap (innermost). Execution order: input → wrap → output. */
+export type MiddlewarePhaseKind = 'input' | 'wrap' | 'output'
 
 /** Phase sub-token for Input handlers. */
 export interface MiddlewareInputPhase<TContext, TResult, TEvent> {
@@ -29,10 +29,10 @@ export interface MiddlewareInputPhase<TContext, TResult, TEvent> {
   readonly _stage: MiddlewareStage<TContext, TResult, TEvent>
 }
 
-/** Phase sub-token for Around handlers. */
-export interface MiddlewareAroundPhase<TContext, TResult, TEvent> {
+/** Phase sub-token for Wrap handlers. */
+export interface MiddlewareWrapPhase<TContext, TResult, TEvent> {
   /** @internal */
-  readonly _phase: 'around'
+  readonly _phase: 'wrap'
   /** @internal Back-reference to parent stage. */
   readonly _stage: MiddlewareStage<TContext, TResult, TEvent>
 }
@@ -48,7 +48,7 @@ export interface MiddlewareOutputPhase<TContext, TResult, TEvent> {
 /** Union of all phase sub-tokens. */
 export type MiddlewarePhase<TContext, TResult, TEvent> =
   | MiddlewareInputPhase<TContext, TResult, TEvent>
-  | MiddlewareAroundPhase<TContext, TResult, TEvent>
+  | MiddlewareWrapPhase<TContext, TResult, TEvent>
   | MiddlewareOutputPhase<TContext, TResult, TEvent>
 
 /**
@@ -61,7 +61,7 @@ export type MiddlewareNext<TContext, TResult, TEvent> = (
 ) => AsyncGenerator<TEvent, TResult, undefined>
 
 /**
- * A middleware handler function (Around phase).
+ * A middleware handler function (Wrap phase).
  * Receives the context and a `next` function to call the next layer.
  * Must be an async generator that yields TEvent and returns TResult.
  * Middleware can yield its own events, forward events from next, or suppress them.

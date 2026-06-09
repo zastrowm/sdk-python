@@ -515,7 +515,7 @@ export class Agent implements LocalAgent, InvokableAgent {
 
   /**
    * Register an Input phase handler that transforms context before execution.
-   * Input handlers run before Around and Output handlers.
+   * Input handlers run before Wrap and Output handlers.
    *
    * @example
    * ```typescript
@@ -531,8 +531,8 @@ export class Agent implements LocalAgent, InvokableAgent {
   ): () => void
   /**
    * Register an Output phase handler that transforms the result after execution.
-   * Output handlers see the result after Around handlers complete.
-   * Execution order: Input → Around → Output.
+   * Output handlers see the result after Wrap handlers complete.
+   * Execution order: Input → Wrap → Output.
    *
    * @example
    * ```typescript
@@ -547,7 +547,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     handler: MiddlewareOutputHandler<TResult>
   ): () => void
   /**
-   * Register a middleware handler for a given stage (Around phase).
+   * Register a middleware handler for a given stage (Wrap phase).
    * Middleware wraps stage execution and can intercept, transform, or short-circuit operations.
    *
    * @param stage - The stage token identifying the interception point
@@ -599,19 +599,19 @@ export class Agent implements LocalAgent, InvokableAgent {
           )
           return () => this._middlewareRegistry.remove(stage, adapted)
         }
-        case 'around': {
-          const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
-          this._middlewareRegistry.add(stage, aroundHandler)
-          return () => this._middlewareRegistry.remove(stage, aroundHandler)
+        case 'wrap': {
+          const wrapHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
+          this._middlewareRegistry.add(stage, wrapHandler)
+          return () => this._middlewareRegistry.remove(stage, wrapHandler)
         }
         default:
           throw new Error(`Unknown middleware phase: ${(phase as { _phase: string })._phase}`)
       }
     }
     const stage = stageOrPhase as MiddlewareStage<TContext, TResult, TEvent>
-    const aroundHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
-    this._middlewareRegistry.add(stage, aroundHandler)
-    return () => this._middlewareRegistry.remove(stage, aroundHandler)
+    const wrapHandler = handler as MiddlewareHandler<TContext, TResult, TEvent>
+    this._middlewareRegistry.add(stage, wrapHandler)
+    return () => this._middlewareRegistry.remove(stage, wrapHandler)
   }
 
   public async initialize(): Promise<void> {

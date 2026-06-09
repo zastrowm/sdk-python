@@ -52,7 +52,7 @@ export interface MiddlewareInterruptible {
 }
 
 /**
- * Creates a new middleware stage token with Input/Around/Output phase sub-tokens.
+ * Creates a new middleware stage token with Input/Wrap/Output phase sub-tokens.
  * The returned object is frozen and used as a Map key by the registry.
  *
  * @param name - Human-readable name for debugging/logging
@@ -61,9 +61,9 @@ export interface MiddlewareInterruptible {
 export function createStage<TContext, TResult, TEvent>(name: string): MiddlewareStage<TContext, TResult, TEvent> {
   const stage = { name } as MiddlewareStage<TContext, TResult, TEvent>
   const input = Object.freeze({ _phase: 'input' as const, _stage: stage })
-  const around = Object.freeze({ _phase: 'around' as const, _stage: stage })
+  const wrap = Object.freeze({ _phase: 'wrap' as const, _stage: stage })
   const output = Object.freeze({ _phase: 'output' as const, _stage: stage })
-  return Object.freeze(Object.assign(stage, { Input: input, Around: around, Output: output }))
+  return Object.freeze(Object.assign(stage, { Input: input, Wrap: wrap, Output: output }))
 }
 
 /**
