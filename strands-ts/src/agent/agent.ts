@@ -891,10 +891,31 @@ export class Agent implements LocalAgent, InvokableAgent {
         this._interruptState.resume(interruptResponses)
       }
 
+      const invocationState = options?.invocationState ?? {}
+      const beforeInvocationEvent = new BeforeInvocationEvent({ agent: this, invocationState })
+      yield await this._invokeCallbacks(beforeInvocationEvent)
+
+      if (beforeInvocationEvent.cancel) {
+        const cancelText =
+          typeof beforeInvocationEvent.cancel === 'string' ? beforeInvocationEvent.cancel : 'invocation denied by hook'
+        const message = new Message({ role: 'assistant', content: [new TextBlock(cancelText)] })
+        yield this._appendMessage(message, invocationState)
+        yield await this._invokeCallbacks(new AfterInvocationEvent({ agent: this, invocationState }))
+        return new AgentResult({
+          stopReason: 'endTurn',
+          lastMessage: message,
+          traces: this._tracer.localTraces,
+          metrics: this._meter.metrics,
+          invocationState,
+        })
+      }
+
+      // Thread the resolved invocationState into options so _stream() shares the same reference.
+      const resolvedOptions: InvokeOptions = options?.invocationState ? options : { ...options, invocationState }
       const context: AgentStreamContext = {
         agent: this,
         args,
-        ...(options !== undefined && { options }),
+        ...(resolvedOptions !== undefined && { options: resolvedOptions }),
         interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
       }
 
@@ -920,7 +941,6 @@ export class Agent implements LocalAgent, InvokableAgent {
           // We intentionally don't call _createInterruptResult() here because middleware
           // is stateless during execution — agent state (e.g. _isInvoking) is only modified
           // at the edges, so we construct the result directly.
-          const invocationState = options?.invocationState ?? {}
           for (const interrupt of error.interrupts) {
             this._interruptState.getOrCreateInterrupt(interrupt.id, interrupt.name, interrupt.reason)
           }
@@ -930,7 +950,10 @@ export class Agent implements LocalAgent, InvokableAgent {
           }
           return new AgentResult({
             stopReason: 'interrupt',
-            lastMessage: new Message({ role: 'assistant', content: [] }),
+            lastMessage:
+              this.messages.length > 0
+                ? this.messages[this.messages.length - 1]!
+                : new Message({ role: 'assistant', content: [new TextBlock('Interrupted')] }),
             traces: this._tracer.localTraces,
             metrics: this._meter.metrics,
             interrupts: this._interruptState.getUnansweredInterrupts(),
@@ -953,10 +976,18 @@ export class Agent implements LocalAgent, InvokableAgent {
     options?: InvokeOptions
   ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
     let currentArgs: InvokeArgs = args
+    let isFirstIteration = true
 
     // Outer loop: re-enters _stream when a hook sets AfterInvocationEvent.resume.
     // One invocation lock spans the whole resume chain.
     while (true) {
+      // Fire BeforeInvocationEvent on resume iterations. The first iteration's
+      // BeforeInvocationEvent is fired in stream() (outside middleware).
+      if (!isFirstIteration) {
+        const invocationState = options?.invocationState ?? {}
+        yield await this._invokeCallbacks(new BeforeInvocationEvent({ agent: this, invocationState }))
+      }
+      isFirstIteration = false
       // Fresh AbortController per invocation iteration, composed with any external signal.
       this._abortController = new AbortController()
       this._abortSignal = options?.cancelSignal
@@ -1186,24 +1217,6 @@ export class Agent implements LocalAgent, InvokableAgent {
     // Reject non-interrupt input while in interrupted state
     if (this._interruptState.activated && interruptResponses.length === 0) {
       throw new TypeError('Agent is in an interrupted state. Resume by invoking with interruptResponse content blocks.')
-    }
-
-    const beforeInvocationEvent = new BeforeInvocationEvent({ agent: this, invocationState })
-    yield beforeInvocationEvent
-
-    if (beforeInvocationEvent.cancel) {
-      const cancelText =
-        typeof beforeInvocationEvent.cancel === 'string' ? beforeInvocationEvent.cancel : 'invocation denied by hook'
-      const message = new Message({ role: 'assistant', content: [new TextBlock(cancelText)] })
-      yield this._appendMessage(message, invocationState)
-      yield new AfterInvocationEvent({ agent: this, invocationState })
-      return new AgentResult({
-        stopReason: 'endTurn',
-        lastMessage: message,
-        traces: this._tracer.localTraces,
-        metrics: this._meter.metrics,
-        invocationState,
-      })
     }
 
     // Normalize input to get the user messages for telemetry

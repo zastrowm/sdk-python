@@ -20,6 +20,8 @@ import {
   BeforeModelCallEvent,
   AfterModelCallEvent,
   BeforeToolCallEvent,
+  BeforeInvocationEvent,
+  AfterInvocationEvent,
   ContentBlockEvent,
 } from '../../hooks/events.js'
 import type { ToolContext } from '../../tools/tool.js'
@@ -432,7 +434,9 @@ describe('AgentStreamStage integration', () => {
 
       const { items, result } = await collectGenerator(agent.stream('Test prompt'))
 
-      expect(items).toStrictEqual([])
+      // BeforeInvocationEvent fires outside middleware (always fires per design decision)
+      const nonHookItems = items.filter((e) => !(e instanceof BeforeInvocationEvent))
+      expect(nonHookItems).toStrictEqual([])
       expect(result.stopReason).toBe('endTurn')
     })
 
@@ -537,7 +541,9 @@ describe('AgentStreamStage integration', () => {
 
       const { items, result } = await collectGenerator(agent.stream('Test prompt'))
 
-      expect(items).toStrictEqual([])
+      // Middleware suppresses stream events but BeforeInvocationEvent fires outside middleware
+      const nonHookItems = items.filter((e) => !(e instanceof BeforeInvocationEvent))
+      expect(nonHookItems).toStrictEqual([])
       expect(result.stopReason).toBe('endTurn')
     })
   })
@@ -558,8 +564,9 @@ describe('AgentStreamStage integration', () => {
 
       const { items } = await collectGenerator(agent.stream('Test prompt'))
 
-      expect(items[0]).toBe(syntheticEvent)
-      expect(items.length).toBeGreaterThan(1)
+      // items[0] is BeforeInvocationEvent (fires outside middleware); synthetic is first middleware event
+      expect(items[1]).toBe(syntheticEvent)
+      expect(items.length).toBeGreaterThan(2)
     })
 
     it('injects events after the stream', async () => {
@@ -606,8 +613,8 @@ describe('AgentStreamStage integration', () => {
 
       const { items } = await collectGenerator(agent.stream('Test prompt'))
 
-      // The synthetic event should appear after the first real event
-      expect(items[1]).toBe(syntheticEvent)
+      // items[0] is BeforeInvocationEvent; items[1] is first real event from stream; items[2] is synthetic
+      expect(items[2]).toBe(syntheticEvent)
       // Total events should include exactly one synthetic event
       expect(items.filter((e: AgentStreamEvent) => e === syntheticEvent)).toHaveLength(1)
     })
@@ -636,7 +643,9 @@ describe('AgentStreamStage integration', () => {
 
       const { items } = await collectGenerator(agent.stream('Test prompt'))
 
-      expect(items).toStrictEqual([syntheticEvent1, syntheticEvent2])
+      // BeforeInvocationEvent fires outside middleware, then the two synthetic events
+      const nonHookItems = items.filter((e) => !(e instanceof BeforeInvocationEvent))
+      expect(nonHookItems).toStrictEqual([syntheticEvent1, syntheticEvent2])
     })
   })
 
@@ -676,6 +685,60 @@ describe('AgentStreamStage integration', () => {
       const { result } = await collectGenerator(agent.stream('Test prompt'))
 
       expect(result.stopReason).toBe('endTurn')
+    })
+  })
+
+  describe('hooks fire around middleware', () => {
+    it('BeforeInvocationEvent fires even when middleware short-circuits', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const beforeCalled = vi.fn()
+      agent.addHook(BeforeInvocationEvent, beforeCalled)
+
+      agent.addMiddleware(
+        AgentStreamStage,
+        // eslint-disable-next-line require-yield
+        async function* () {
+          return { result: { stopReason: 'endTurn' } } as never
+        }
+      )
+
+      await agent.invoke('Test')
+
+      expect(beforeCalled).toHaveBeenCalled()
+    })
+
+    it('AfterInvocationEvent fires on normal completion (inside terminal)', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const afterCalled = vi.fn()
+      agent.addHook(AfterInvocationEvent, afterCalled)
+
+      await agent.invoke('Test')
+
+      expect(afterCalled).toHaveBeenCalled()
+    })
+
+    it('BeforeInvocationEvent fires before middleware executes', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hello' })
+      const agent = new Agent({ model, printer: false })
+
+      const order: string[] = []
+
+      agent.addHook(BeforeInvocationEvent, () => {
+        order.push('hook')
+      })
+
+      agent.addMiddleware(AgentStreamStage, async function* (context, next) {
+        order.push('middleware')
+        return yield* next(context)
+      })
+
+      await agent.invoke('Test')
+
+      expect(order.indexOf('hook')).toBeLessThan(order.indexOf('middleware'))
     })
   })
 })

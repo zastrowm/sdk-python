@@ -184,6 +184,32 @@ describe('Middleware interrupts', () => {
 
       expect(result.stopReason).toBe('interrupt')
       expect(result.interrupts).toEqual([expect.objectContaining({ name: 'confirm_stream', reason: 'Are you sure?' })])
+      // lastMessage should match _createInterruptResult behavior (fallback when no messages exist)
+      expect(result.lastMessage.content).toEqual([new TextBlock('Interrupted')])
+    })
+
+    it('interrupt lastMessage uses last existing message when messages exist', async () => {
+      const model = new MockMessageModel()
+        .addTurn({ type: 'textBlock', text: 'First response' })
+        .addTurn({ type: 'textBlock', text: 'Should not reach' })
+
+      const agent = new Agent({ model, printer: false })
+
+      // First invocation succeeds — populates messages
+      await agent.invoke('Hello')
+
+      // Now add middleware that interrupts on the next call
+      // eslint-disable-next-line require-yield
+      agent.addMiddleware(AgentStreamStage, async function* (context) {
+        context.interrupt({ name: 'gate' })
+        return undefined as never
+      })
+
+      const { result } = await collectGenerator(agent.stream('Second call'))
+
+      expect(result.stopReason).toBe('interrupt')
+      // lastMessage should be the last message from the prior invocation
+      expect(result.lastMessage.content[0]).toEqual(new TextBlock('First response'))
     })
 
     it('middleware gets response on resume and continues', async () => {
