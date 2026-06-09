@@ -30,6 +30,7 @@ import type {
   MiddlewareStage,
   MiddlewareHandler,
   MiddlewareInputPhase,
+  MiddlewareWrapPhase,
   MiddlewareOutputPhase,
   MiddlewareInputHandler,
   MiddlewareOutputHandler,
@@ -361,6 +362,10 @@ export interface LocalAgent {
   addMiddleware<TContext, TResult, TEvent>(
     phase: MiddlewareInputPhase<TContext, TResult, TEvent>,
     handler: MiddlewareInputHandler<TContext>
+  ): () => void
+  addMiddleware<TContext, TResult, TEvent>(
+    phase: MiddlewareWrapPhase<TContext, TResult, TEvent>,
+    handler: MiddlewareHandler<TContext, TResult, TEvent>
   ): () => void
   addMiddleware<TContext, TResult, TEvent>(
     phase: MiddlewareOutputPhase<TContext, TResult, TEvent>,

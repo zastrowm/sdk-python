@@ -52,6 +52,7 @@ import type {
   MiddlewareInputHandler,
   MiddlewareOutputHandler,
   MiddlewareInputPhase,
+  MiddlewareWrapPhase,
   MiddlewareOutputPhase,
   MiddlewarePhaseKind,
 } from '../middleware/index.js'
@@ -530,6 +531,14 @@ export class Agent implements LocalAgent, InvokableAgent {
     handler: MiddlewareInputHandler<TContext>
   ): () => void
   /**
+   * Register a Wrap phase handler via the explicit `.Wrap` sub-token.
+   * Equivalent to passing the stage token directly.
+   */
+  addMiddleware<TContext, TResult, TEvent>(
+    phase: MiddlewareWrapPhase<TContext, TResult, TEvent>,
+    handler: MiddlewareHandler<TContext, TResult, TEvent>
+  ): () => void
+  /**
    * Register an Output phase handler that transforms the result after execution.
    * Output handlers see the result after Wrap handlers complete.
    * Execution order: Input → Wrap → Output.
@@ -575,6 +584,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     stageOrPhase:
       | MiddlewareStage<TContext, TResult, TEvent>
       | MiddlewareInputPhase<TContext, TResult, TEvent>
+      | MiddlewareWrapPhase<TContext, TResult, TEvent>
       | MiddlewareOutputPhase<TContext, TResult, TEvent>,
     handler:
       | MiddlewareHandler<TContext, TResult, TEvent>

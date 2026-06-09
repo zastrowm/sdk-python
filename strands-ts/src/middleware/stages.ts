@@ -59,6 +59,7 @@ export interface MiddlewareInterruptible {
  * @returns A frozen MiddlewareStage object carrying the Context/Event/Result type parameters
  */
 export function createStage<TContext, TResult, TEvent>(name: string): MiddlewareStage<TContext, TResult, TEvent> {
+  // Partially constructed; all required fields are assigned via Object.assign before Object.freeze below.
   const stage = { name } as MiddlewareStage<TContext, TResult, TEvent>
   const input = Object.freeze({ _phase: 'input' as const, _stage: stage })
   const wrap = Object.freeze({ _phase: 'wrap' as const, _stage: stage })

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createStage, MiddlewareRegistry } from '../index.js'
 import type { MiddlewareHandler, MiddlewareNext } from '../types.js'
+import { collectGenerator } from '../../__fixtures__/model-test-helpers.js'
+
+async function collect<TEvent, TResult>(gen: AsyncGenerator<TEvent, TResult, undefined>) {
+  const { items, result } = await collectGenerator(gen as AsyncGenerator<TEvent, TResult, never>)
+  return { events: items, result }
+}
 
 // Custom stage types for testing third-party extensibility
 interface CustomContext {
@@ -14,21 +20,6 @@ interface CustomEvent {
 
 interface CustomResult {
   readonly summary: string
-}
-
-/**
- * Helper to collect all yielded events and the return value from an async generator.
- */
-async function collect<TEvent, TResult>(
-  gen: AsyncGenerator<TEvent, TResult, undefined>
-): Promise<{ events: TEvent[]; result: TResult }> {
-  const events: TEvent[] = []
-  let iterResult = await gen.next()
-  while (!iterResult.done) {
-    events.push(iterResult.value)
-    iterResult = await gen.next()
-  }
-  return { events, result: iterResult.value }
 }
 
 describe('Third-party custom stages', () => {
