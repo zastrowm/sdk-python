@@ -128,6 +128,7 @@ jobs:
             const previewLinks = docFiles.map(f => {
               const urlPath = f.filename
                 .replace('site/src/content/docs/', '/docs/')
+                .replace(/\/index\.mdx$/, '/')
                 .replace(/\.mdx$/, '/');
               const label = urlPath.replace(/^\/docs\//, '').replace(/\/$/, '');
               return `- [${label}](${baseUrl}${urlPath})`;
