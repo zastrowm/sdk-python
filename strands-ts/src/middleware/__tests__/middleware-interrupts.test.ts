@@ -281,19 +281,12 @@ describe('Middleware interrupts', () => {
     })
   })
 
-  describe('resume via AfterInvocationEvent with interrupt responses', () => {
-    it('interrupt responses in resumed args are applied to interrupt state', async () => {
-      // Issue: resume() only runs once in stream() against the top-level args.
-      // When AfterInvocationEvent.resume carries interrupt-response blocks, the
-      // resume loop re-enters _stream but never re-applies resume(), so the
-      // interrupt responses are silently dropped and the middleware still sees
-      // the interrupt as unanswered.
-      //
-      // Scenario:
-      // 1. Tool middleware interrupts on first tool call
-      // 2. AfterInvocationEvent hook auto-approves by setting resume with the
-      //    interrupt response — this exercises _streamWithResumeLoop applying
-      //    interrupt responses from resume args
+  // Limitation: AgentStreamStage middleware cannot easily resume tool-level interrupts today.
+  // Interrupt resolution (_interruptState.resume()) runs in stream()'s outer loop, outside
+  // middleware. A future enhancement could add a resume mechanism to AgentStreamResult or
+  // AgentStreamContext so middleware can signal "re-run with these interrupt responses."
+  describe('resume via AfterInvocationEvent hook', () => {
+    it('AfterInvocationEvent hook can resume a tool-level interrupt in middleware', async () => {
       const model = new MockMessageModel()
         .addTurn({ type: 'toolUseBlock', name: 'myTool', toolUseId: 'tool-1', input: {} })
         .addTurn({ type: 'textBlock', text: 'Done after resume' })
@@ -305,7 +298,6 @@ describe('Middleware interrupts', () => {
       })
       const agent = new Agent({ model, tools: [tool], printer: false })
 
-      // Middleware that gates on approval
       agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
         const { response: approval } = context.interrupt<string>({ name: 'gate' })
         if (approval !== 'approved') {
@@ -320,9 +312,6 @@ describe('Middleware interrupts', () => {
         return yield* next(context)
       })
 
-      // Hook that auto-approves the interrupt on the first AfterInvocationEvent.
-      // This simulates an orchestrator that programmatically answers interrupts
-      // without requiring a new top-level invoke().
       agent.addHook(AfterInvocationEvent, (event: AfterInvocationEvent) => {
         const unanswered = (event.agent as Agent)._interruptState.getUnansweredInterrupts()
         if (unanswered.length > 0) {
@@ -330,11 +319,6 @@ describe('Middleware interrupts', () => {
         }
       })
 
-      // Single invocation: middleware interrupts → AfterInvocationEvent hook
-      // sets resume with the response → _streamWithResumeLoop re-enters _stream.
-      // The bug: _interruptState.resume() was only called in stream() for the
-      // original args (which have no responses), so the resumed iteration still
-      // sees the interrupt as unanswered.
       const result = await agent.invoke('Do it')
 
       expect(result.stopReason).toBe('endTurn')
