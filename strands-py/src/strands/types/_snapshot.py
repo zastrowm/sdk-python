@@ -33,7 +33,7 @@ VALID_SCOPES: tuple[Scope, ...] = ("agent",)
 SNAPSHOT_SCHEMA_VERSION = "1.0"
 
 SNAPSHOT_PRESETS: dict[str, tuple[SnapshotField, ...]] = {
-    "session": ("messages", "state", "conversation_manager_state", "interrupt_state"),
+    "session": ("messages", "state", "conversation_manager_state", "interrupt_state", "model_state"),
 }
 
 

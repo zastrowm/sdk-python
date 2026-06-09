@@ -1402,7 +1402,7 @@ class Agent(AgentBase):
         if "system_prompt" in data:
             self.system_prompt = copy.deepcopy(data["system_prompt"])
         if "model_state" in data:
-            self._model_state = data["model_state"]
+            self._model_state = copy.deepcopy(data["model_state"])
 
     def _redact_user_content(self, content: list[ContentBlock], redact_message: str) -> list[ContentBlock]:
         """Redact user content preserving toolResult blocks.

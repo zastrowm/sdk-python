@@ -128,7 +128,7 @@ def test_snapshot_structural_invariants(messages, state_dict, system_prompt):
     assert ISO_8601_UTC_RE.match(snapshot.created_at), f"created_at={snapshot.created_at!r} not ISO 8601 UTC"
     assert isinstance(snapshot.data, dict)
     assert isinstance(snapshot.app_data, dict)
-    for field in ("messages", "state", "conversation_manager_state", "interrupt_state"):
+    for field in ("messages", "state", "conversation_manager_state", "interrupt_state", "model_state"):
         assert field in snapshot.data
     assert "system_prompt" not in snapshot.data
 
@@ -465,9 +465,9 @@ def test_model_state_is_valid_snapshot_field():
     assert "model_state" in ALL_SNAPSHOT_FIELDS
 
 
-def test_model_state_not_in_session_preset():
-    """model_state is not included in the session preset."""
-    assert "model_state" not in SNAPSHOT_PRESETS["session"]
+def test_model_state_in_session_preset():
+    """model_state is included in the session preset."""
+    assert "model_state" in SNAPSHOT_PRESETS["session"]
 
 
 def test_take_snapshot_captures_model_state():
@@ -520,6 +520,16 @@ def test_load_snapshot_with_empty_model_state_clears_it():
     agent.load_snapshot(snap)
 
     assert agent._model_state == {}
+
+
+def test_load_snapshot_model_state_is_independent_copy():
+    """Mutating agent._model_state after load_snapshot doesn't corrupt the snapshot."""
+    agent = _make_agent()
+    snap = _make_snapshot(data={"model_state": {"response_id": "resp_original"}})
+    agent.load_snapshot(snap)
+
+    agent._model_state["response_id"] = "resp_mutated"
+    assert snap.data["model_state"]["response_id"] == "resp_original"
 
 
 def test_model_state_round_trip():
