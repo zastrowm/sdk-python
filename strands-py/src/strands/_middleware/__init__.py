@@ -5,7 +5,7 @@ agent operations using async generator handlers.
 """
 
 from .registry import MiddlewareRegistry
-from .stages import InvokeModelContext, InvokeModelResult, InvokeModelStage
+from .stages import ExecuteToolContext, ExecuteToolResult, ExecuteToolStage, InvokeModelContext, InvokeModelResult, InvokeModelStage
 from .types import (
     MiddlewareHandler,
     MiddlewareInputHandler,
@@ -19,6 +19,9 @@ from .types import (
 )
 
 __all__ = [
+    "ExecuteToolContext",
+    "ExecuteToolResult",
+    "ExecuteToolStage",
     "InvokeModelContext",
     "InvokeModelResult",
     "InvokeModelStage",

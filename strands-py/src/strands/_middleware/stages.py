@@ -1,9 +1,4 @@
-"""Built-in middleware stages and their context/result types.
-
-This module defines the stage tokens and dataclass contexts for the
-InvokeModelStage. Additional stages (ExecuteToolStage, AgentStreamStage)
-will be added in future phases.
-"""
+"""Built-in middleware stages and their context/result types."""
 
 from __future__ import annotations
 
@@ -16,7 +11,7 @@ if TYPE_CHECKING:
     from ..agent.agent import Agent
     from ..types.content import Messages
     from ..types.streaming import StopReason, Usage
-    from ..types.tools import ToolSpec
+    from ..types.tools import AgentTool, ToolSpec, ToolUse
 
 
 @dataclass
@@ -54,4 +49,35 @@ InvokeModelStage: MiddlewareStage[InvokeModelContext, InvokeModelResult, Any] = 
 """Built-in stage wrapping core model invocation.
 
 Middleware registered for this stage can rate-limit, cache, or transform model inputs/outputs.
+"""
+
+
+@dataclass
+class ExecuteToolContext:
+    """Context passed to ExecuteToolStage middleware.
+
+    Contains everything needed to understand and potentially modify the tool call.
+    """
+
+    agent: Agent
+    tool: AgentTool | None
+    tool_use: ToolUse
+    invocation_state: dict[str, Any]
+
+
+@dataclass
+class ExecuteToolResult:
+    """Result from ExecuteToolStage middleware.
+
+    Contains the tool result and optional exception from execution.
+    """
+
+    tool_result: dict[str, Any]
+    exception: Exception | None = None
+
+
+ExecuteToolStage: MiddlewareStage[ExecuteToolContext, ExecuteToolResult, Any] = MiddlewareStage(name="executeTool")
+"""Built-in stage wrapping individual tool execution.
+
+Middleware registered for this stage can add telemetry, validate inputs, or mock responses.
 """

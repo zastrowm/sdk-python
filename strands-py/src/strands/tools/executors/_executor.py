@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 from opentelemetry import trace as trace_api
 
+from ..._middleware.stages import ExecuteToolContext, ExecuteToolResult, ExecuteToolStage
+from ..._middleware.types import _MiddlewareResult
 from ...experimental.hooks.events import BidiAfterToolCallEvent, BidiBeforeToolCallEvent
 from ...hooks import AfterToolCallEvent, BeforeToolCallEvent
 from ...telemetry.metrics import Trace
@@ -222,38 +224,31 @@ class ToolExecutor(abc.ABC):
                 if structured_output_context.is_enabled:
                     kwargs["structured_output_context"] = structured_output_context
 
-                exception: Exception | None = None
+                # Build middleware context and run through ExecuteToolStage chain
+                middleware_context = ExecuteToolContext(
+                    agent=agent,
+                    tool=selected_tool,
+                    tool_use=tool_use,
+                    invocation_state=invocation_state,
+                )
 
-                async for event in selected_tool.stream(tool_use, invocation_state, **kwargs):
-                    # Internal optimization; for built-in AgentTools, we yield TypedEvents out of .stream()
-                    # so that we don't needlessly yield ToolStreamEvents for non-generator callbacks.
-                    # In which case, as soon as we get a ToolResultEvent we're done and for ToolStreamEvent
-                    # we yield it directly; all other cases (non-sdk AgentTools), we wrap events in
-                    # ToolStreamEvent and the last event is just the result.
-
-                    if isinstance(event, ToolInterruptEvent):
-                        # Register any interrupts not already in the agent's state.
-                        # For normal hooks this is a no-op (already registered by _Interruptible.interrupt()).
-                        # For sub-agent interrupts propagated via _AgentAsTool, this is where they get
-                        # registered so that _interrupt_state.resume() can locate them by ID.
-                        for interrupt in event.interrupts:
-                            agent._interrupt_state.interrupts.setdefault(interrupt.id, interrupt)
-                        yield event
-                        return
-
-                    if isinstance(event, ToolResultEvent):
-                        # Preserve exception from decorated tools before extracting tool_result
-                        exception = event.exception
-                        # below the last "event" must point to the tool_result
-                        event = event.tool_result
-                        break
-
-                    if isinstance(event, ToolStreamEvent):
-                        yield event
+                middleware_result: ExecuteToolResult | None = None
+                async for event in agent._middleware_registry.invoke(
+                    ExecuteToolStage,
+                    middleware_context,
+                    _make_execute_tool_terminal(agent, tool_use, kwargs),
+                ):
+                    if isinstance(event, _MiddlewareResult):
+                        middleware_result = event.value
                     else:
-                        yield ToolStreamEvent(tool_use, event)
+                        yield event
 
-                result = cast(ToolResult, event)
+                # ToolInterruptEvent short-circuits: terminal returns early with no result
+                if middleware_result is None:
+                    return
+
+                result = middleware_result.tool_result
+                exception = middleware_result.exception
 
                 after_event, _ = await ToolExecutor._invoke_after_tool_call_hook(
                     agent, selected_tool, tool_use, invocation_state, result, exception=exception
@@ -373,3 +368,41 @@ class ToolExecutor(abc.ABC):
             Events from the tool execution stream.
         """
         pass
+
+
+def _make_execute_tool_terminal(
+    agent: "Agent | BidiAgent",
+    tool_use: ToolUse,
+    extra_kwargs: dict[str, Any],
+) -> "Any":
+    """Create the terminal function for ExecuteToolStage middleware.
+
+    The terminal executes the actual tool via selected_tool.stream() and handles
+    interrupt propagation.
+    """
+
+    async def terminal(ctx: ExecuteToolContext) -> AsyncGenerator[Any, None]:
+        exception: Exception | None = None
+
+        async for event in ctx.tool.stream(ctx.tool_use, ctx.invocation_state, **extra_kwargs):
+            if isinstance(event, ToolInterruptEvent):
+                for interrupt in event.interrupts:
+                    agent._interrupt_state.interrupts.setdefault(interrupt.id, interrupt)
+                yield event
+                # No _MiddlewareResult yielded — signals interrupt short-circuit
+                return
+
+            if isinstance(event, ToolResultEvent):
+                exception = event.exception
+                event = event.tool_result
+                break
+
+            if isinstance(event, ToolStreamEvent):
+                yield event
+            else:
+                yield ToolStreamEvent(tool_use, event)
+
+        result = cast(ToolResult, event)  # type: ignore[possibly-undefined]
+        yield _MiddlewareResult(ExecuteToolResult(tool_result=result, exception=exception))
+
+    return terminal
