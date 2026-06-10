@@ -22,6 +22,7 @@ from typing import (
     Union,
     cast,
     get_args,
+    overload,
 )
 
 from opentelemetry import trace as trace_api
@@ -58,6 +59,16 @@ from ..hooks.registry import TEvent
 from ..interrupt import _InterruptState
 from ..interventions.handler import InterventionHandler
 from ..interventions.registry import InterventionRegistry
+from .._middleware import MiddlewareRegistry
+from .._middleware.types import (
+    MiddlewareHandler,
+    MiddlewareInputHandler,
+    MiddlewareInputPhase,
+    MiddlewareOutputHandler,
+    MiddlewareOutputPhase,
+    MiddlewareStage,
+    MiddlewareWrapPhase,
+)
 from ..models.bedrock import BedrockModel
 from ..models.model import Model, _ModelPlugin
 from ..plugins import Plugin
@@ -91,6 +102,11 @@ logger = logging.getLogger(__name__)
 
 # TypeVar for generic structured output
 T = TypeVar("T", bound=BaseModel)
+
+# TypeVars for middleware overloads
+_TCtx = TypeVar("_TCtx")
+_TRes = TypeVar("_TRes")
+_TEvt = TypeVar("_TEvt")
 
 
 # Sentinel class and object to distinguish between explicit None and default parameter value
@@ -351,6 +367,8 @@ class Agent(AgentBase):
         self.tool_caller = _ToolCaller(self)
 
         self.hooks = HookRegistry()
+
+        self._middleware_registry = MiddlewareRegistry()
 
         self._plugin_registry = _PluginRegistry(self)
 
@@ -904,6 +922,111 @@ class Agent(AgentBase):
             https://strandsagents.com/latest/documentation/docs/user-guide/concepts/agents/hooks/
         """
         self.hooks.add_callback(event_type, callback, order=order)
+
+    @overload
+    def add_middleware(
+        self,
+        stage: MiddlewareStage[_TCtx, _TRes, _TEvt],
+        handler: Callable[[_TCtx, Callable[[_TCtx], AsyncGenerator[Any, None]]], AsyncGenerator[Any, None]],
+    ) -> Callable[[], None]: ...
+
+    @overload
+    def add_middleware(
+        self,
+        stage: MiddlewareInputPhase[_TCtx, _TRes, _TEvt],
+        handler: Callable[[_TCtx], _TCtx | Any],
+    ) -> Callable[[], None]: ...
+
+    @overload
+    def add_middleware(
+        self,
+        stage: MiddlewareWrapPhase[_TCtx, _TRes, _TEvt],
+        handler: Callable[[_TCtx, Callable[[_TCtx], AsyncGenerator[Any, None]]], AsyncGenerator[Any, None]],
+    ) -> Callable[[], None]: ...
+
+    @overload
+    def add_middleware(
+        self,
+        stage: MiddlewareOutputPhase[_TCtx, _TRes, _TEvt],
+        handler: Callable[[_TRes], _TRes | Any],
+    ) -> Callable[[], None]: ...
+
+    def add_middleware(
+        self,
+        stage_or_phase: (
+            MiddlewareStage[Any, Any, Any]
+            | MiddlewareInputPhase[Any, Any, Any]
+            | MiddlewareWrapPhase[Any, Any, Any]
+            | MiddlewareOutputPhase[Any, Any, Any]
+        ),
+        handler: MiddlewareHandler | MiddlewareInputHandler | MiddlewareOutputHandler,
+    ) -> Callable[[], None]:
+        """Register middleware for a stage or phase.
+
+        Returns a cleanup function that removes the middleware when called.
+
+        Args:
+            stage_or_phase: A stage token (registers as Wrap phase) or a phase sub-token
+                (`.Input`, `.Wrap`, or `.Output`).
+            handler: The middleware handler function. For Wrap phase, this must be an
+                async generator function ``async def handler(context, next_fn)``. For
+                Input/Output phases, a plain sync or async function transforming the
+                context or result.
+
+        Returns:
+            A no-argument callable that removes this middleware registration.
+
+        Example:
+            ```python
+            from strands import InvokeModelStage
+
+            # Wrap handler (full control)
+            async def timing_middleware(context, next_fn):
+                import time
+                start = time.time()
+                async for event in next_fn(context):
+                    yield event
+                print(f"Model call took {time.time() - start:.2f}s")
+
+            cleanup = agent.add_middleware(InvokeModelStage, timing_middleware)
+
+            # Input handler (transform context)
+            async def inject_system_prompt(context):
+                context.system_prompt = (context.system_prompt or "") + "\\nBe concise."
+                return context
+
+            cleanup = agent.add_middleware(InvokeModelStage.Input, inject_system_prompt)
+
+            # Later, remove the middleware:
+            cleanup()
+            ```
+        """
+        if isinstance(stage_or_phase, (MiddlewareInputPhase, MiddlewareWrapPhase, MiddlewareOutputPhase)):
+            phase = stage_or_phase
+            stage = phase._stage
+            if phase._phase == "input":
+                adapted = self._middleware_registry.add_input(
+                    cast(MiddlewareInputPhase[Any, Any, Any], phase),
+                    cast(MiddlewareInputHandler, handler),
+                )
+                return lambda: self._middleware_registry.remove(stage, adapted)
+            elif phase._phase == "output":
+                adapted = self._middleware_registry.add_output(
+                    cast(MiddlewareOutputPhase[Any, Any, Any], phase),
+                    cast(MiddlewareOutputHandler, handler),
+                )
+                return lambda: self._middleware_registry.remove(stage, adapted)
+            elif phase._phase == "wrap":
+                wrap_handler = cast(MiddlewareHandler, handler)
+                self._middleware_registry.add(stage, wrap_handler)
+                return lambda: self._middleware_registry.remove(stage, wrap_handler)
+            else:
+                raise ValueError(f"Unknown middleware phase: {phase._phase!r}")
+        else:
+            stage = stage_or_phase
+            wrap_handler = cast(MiddlewareHandler, handler)
+            self._middleware_registry.add(stage, wrap_handler)
+            return lambda: self._middleware_registry.remove(stage, wrap_handler)
 
     def __del__(self) -> None:
         """Clean up resources when agent is garbage collected."""

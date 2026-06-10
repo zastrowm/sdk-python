@@ -10,6 +10,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import strands
+import strands._middleware
 import strands.telemetry
 from strands import Agent
 from strands.event_loop._retry import ModelRetryStrategy
@@ -158,6 +159,7 @@ def agent(model, system_prompt, messages, tool_registry, thread_pool, hook_regis
     mock._interrupt_state = _InterruptState()
     mock._cancel_signal = threading.Event()
     mock._model_state = {}
+    mock._middleware_registry = strands._middleware.MiddlewareRegistry()
     mock._checkpointing = False
     mock._checkpoint = None
     mock._checkpoint_cycle_index = 0
@@ -829,6 +831,7 @@ async def test_request_state_initialization(alist):
     # not setting this to False results in endless recursion
     mock_agent._interrupt_state.activated = False
     mock_agent._cancel_signal = threading.Event()
+    mock_agent._middleware_registry = strands._middleware.MiddlewareRegistry()
     mock_agent.event_loop_metrics.start_cycle.return_value = (0, MagicMock())
     mock_agent.hooks.invoke_callbacks_async = AsyncMock()
 

@@ -7,6 +7,7 @@ import pytest
 
 import strands
 import strands.event_loop.event_loop
+import strands._middleware
 from strands import Agent
 from strands.event_loop._retry import ModelRetryStrategy
 from strands.hooks import HookRegistry
@@ -55,6 +56,8 @@ def agent(model, messages, tool_registry, hook_registry):
     mock.tool_executor = SequentialToolExecutor()
     mock._interrupt_state = _InterruptState()
     mock._cancel_signal = threading.Event()
+    mock._model_state = {}
+    mock._middleware_registry = strands._middleware.MiddlewareRegistry()
     mock.trace_attributes = {}
     mock.retry_strategy = ModelRetryStrategy()
     return mock
