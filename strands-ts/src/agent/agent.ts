@@ -287,6 +287,7 @@ function createMiddlewareInterrupt(
       id: interruptId,
       name: params.name,
       ...(params.reason !== undefined && { reason: params.reason }),
+      source: 'middleware',
     })
     throw new InterruptError(interrupt)
   }
@@ -1015,7 +1016,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     } catch (error) {
       if (error instanceof InterruptError) {
         for (const interrupt of error.interrupts) {
-          this._interruptState.getOrCreateInterrupt(interrupt.id, interrupt.name, interrupt.reason)
+          this._interruptState.registerInterrupt(interrupt)
         }
         this._interruptState.activate()
         for (const interrupt of error.interrupts) {
@@ -1480,7 +1481,7 @@ export class Agent implements LocalAgent, InvokableAgent {
         // Handles interrupts from tools/hooks that propagated up through the agent loop.
         // AgentStreamStage middleware interrupts are caught separately in _streamWithMiddleware().
         for (const interrupt of error.interrupts) {
-          this._interruptState.getOrCreateInterrupt(interrupt.id, interrupt.name, interrupt.reason)
+          this._interruptState.registerInterrupt(interrupt)
         }
         // Fan out one event per interrupt. Each event exposes `interrupt.source` so
         // consumers can filter by origin (tool callback vs hook callback) without
@@ -1715,29 +1716,11 @@ export class Agent implements LocalAgent, InvokableAgent {
         return { message, stopReason: 'endTurn' }
       }
 
-      // Start model span within loop span context
-      const modelId = this.model.modelId
-      const modelSpan = this._tracer.startModelInvokeSpan({
-        messages: this.messages,
-        ...(modelId && { modelId }),
-        ...(this.systemPrompt !== undefined && { systemPrompt: this.systemPrompt }),
-      })
-
       try {
         const result = yield* this._invokeModelWithMiddleware(invocationState, toolChoice)
 
         // Accumulate token usage and model latency metrics
         this._meter.updateCycle(result.metadata)
-
-        // End model span with usage
-        const usage = result.metadata?.usage
-        const metrics = result.metadata?.metrics
-        this._tracer.endModelInvokeSpan(modelSpan, {
-          output: result.message,
-          stopReason: result.stopReason,
-          ...(usage && { usage }),
-          ...(metrics && { metrics }),
-        })
 
         yield new ModelMessageEvent({
           agent: this,
@@ -1774,9 +1757,6 @@ export class Agent implements LocalAgent, InvokableAgent {
         return result
       } catch (error) {
         const modelError = normalizeError(error)
-
-        // End model span with error
-        this._tracer.endModelInvokeSpan(modelSpan, { error: modelError })
 
         // Create error event
         const errorEvent = new AfterModelCallEvent({
@@ -1839,19 +1819,41 @@ export class Agent implements LocalAgent, InvokableAgent {
       InvokeModelStage,
       context,
       async function* (ctx: InvokeModelContext): AsyncGenerator<AgentStreamEvent, InvokeModelResult, undefined> {
-        const streamOptions: StreamOptions = {
-          toolSpecs: ctx.toolSpecs as ToolSpec[],
-          modelState: ctx.modelState,
+        const modelId = self.model.modelId
+        const modelSpan = self._tracer.startModelInvokeSpan({
+          messages: ctx.messages as Message[],
+          ...(modelId && { modelId }),
           ...(ctx.systemPrompt !== undefined && { systemPrompt: ctx.systemPrompt }),
-          ...(ctx.toolChoice && { toolChoice: ctx.toolChoice }),
+        })
+
+        try {
+          const streamOptions: StreamOptions = {
+            toolSpecs: ctx.toolSpecs as ToolSpec[],
+            modelState: ctx.modelState,
+            ...(ctx.systemPrompt !== undefined && { systemPrompt: ctx.systemPrompt }),
+            ...(ctx.toolChoice && { toolChoice: ctx.toolChoice }),
+          }
+          const gen = self._streamFromModel(ctx.messages as Message[], streamOptions, ctx.invocationState)
+          let iterResult = await gen.next()
+          while (!iterResult.done) {
+            yield iterResult.value
+            iterResult = await gen.next()
+          }
+
+          const usage = iterResult.value.metadata?.usage
+          const metrics = iterResult.value.metadata?.metrics
+          self._tracer.endModelInvokeSpan(modelSpan, {
+            output: iterResult.value.message,
+            stopReason: iterResult.value.stopReason,
+            ...(usage && { usage }),
+            ...(metrics && { metrics }),
+          })
+
+          return { result: iterResult.value }
+        } catch (error) {
+          self._tracer.endModelInvokeSpan(modelSpan, { error: normalizeError(error) })
+          throw error
         }
-        const gen = self._streamFromModel(ctx.messages as Message[], streamOptions, ctx.invocationState)
-        let iterResult = await gen.next()
-        while (!iterResult.done) {
-          yield iterResult.value
-          iterResult = await gen.next()
-        }
-        return { result: iterResult.value }
       }
     )
     return middlewareResult.result

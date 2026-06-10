@@ -27,7 +27,7 @@ describe('Middleware interrupts', () => {
 
       expect(result.stopReason).toBe('interrupt')
       expect(result.interrupts).toEqual([
-        expect.objectContaining({ name: 'approve_tool', reason: 'Confirm execution?' }),
+        expect.objectContaining({ name: 'approve_tool', reason: 'Confirm execution?', source: 'middleware' }),
       ])
     })
 
