@@ -19,6 +19,7 @@ from ...hooks import AfterToolCallEvent, BeforeToolCallEvent
 from ...telemetry.metrics import Trace
 from ...telemetry.tracer import get_tracer, serialize
 from ...types._events import ToolCancelEvent, ToolInterruptEvent, ToolResultEvent, ToolStreamEvent, TypedEvent
+from ...interrupt import InterruptException
 from ...types.content import Message
 from ...types.interrupt import Interrupt
 from ...types.tools import ToolChoice, ToolChoiceAuto, ToolConfig, ToolResult, ToolUse
@@ -230,6 +231,7 @@ class ToolExecutor(abc.ABC):
                     tool=selected_tool,
                     tool_use=tool_use,
                     invocation_state=invocation_state,
+                    _interrupt_state=agent._interrupt_state,
                 )
 
                 middleware_result: ExecuteToolResult | None = None
@@ -261,6 +263,11 @@ class ToolExecutor(abc.ABC):
 
                 yield ToolResultEvent(after_event.result, exception=after_event.exception)
                 tool_results.append(after_event.result)
+                return
+
+            except InterruptException as ie:
+                agent._interrupt_state.interrupts.setdefault(ie.interrupt.id, ie.interrupt)
+                yield ToolInterruptEvent(tool_use, [ie.interrupt])
                 return
 
             except Exception as e:

@@ -5,7 +5,15 @@ agent operations using async generator handlers.
 """
 
 from .registry import MiddlewareRegistry
-from .stages import ExecuteToolContext, ExecuteToolResult, ExecuteToolStage, InvokeModelContext, InvokeModelResult, InvokeModelStage
+from .stages import (
+    ExecuteToolContext,
+    ExecuteToolResult,
+    ExecuteToolStage,
+    InvokeModelContext,
+    InvokeModelResult,
+    InvokeModelStage,
+    MiddlewareInterruptResult,
+)
 from .types import (
     MiddlewareHandler,
     MiddlewareInputHandler,
