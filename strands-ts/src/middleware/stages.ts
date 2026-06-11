@@ -9,7 +9,6 @@ import type {
 } from '../types/agent.js'
 import type { Message, SystemPrompt, ToolResultBlock } from '../types/messages.js'
 import type { ToolSpec, ToolChoice } from '../tools/types.js'
-import type { StateStore } from '../state-store.js'
 import type { StreamAggregatedResult } from '../models/model.js'
 import type { ToolUseData } from '../hooks/events.js'
 import type { Tool } from '../tools/tool.js'
@@ -83,8 +82,6 @@ export interface InvokeModelContext {
   readonly toolSpecs: readonly ToolSpec[]
   /** Controls how the model selects tools. */
   readonly toolChoice?: ToolChoice
-  /** Runtime state for stateful model providers. */
-  readonly modelState: StateStore
   /** Per-invocation state shared across hooks and tools. */
   readonly invocationState: InvocationState
 }
