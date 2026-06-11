@@ -35,6 +35,7 @@ from ..types._events import (
 )
 from ..types.agent import Limits
 from ..types.content import Message, Messages
+from ..types.event_loop import Metrics, Usage
 from ..types.exceptions import (
     ContextWindowOverflowException,
     EventLoopException,
@@ -494,13 +495,39 @@ async def _handle_model_execution(
                 except Exception as e:
                     logger.debug("error=<%s> | token estimation failed, proceeding without estimate", e)
 
-                await agent.hooks.invoke_callbacks_async(
-                    BeforeModelCallEvent(
+                before_model_call_event = BeforeModelCallEvent(
+                    agent=agent,
+                    invocation_state=invocation_state,
+                    projected_input_tokens=projected_input_tokens,
+                )
+                await agent.hooks.invoke_callbacks_async(before_model_call_event)
+
+                if before_model_call_event.cancel:
+                    cancel_text = (
+                        before_model_call_event.cancel
+                        if isinstance(before_model_call_event.cancel, str)
+                        else "model call denied by hook"
+                    )
+                    message: Message = {"role": "assistant", "content": [{"text": cancel_text}]}
+                    stop_reason: StopReason = "end_turn"
+                    usage: Usage = {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+                    metrics: Metrics = {"latencyMs": 0}
+
+                    after_model_call_event = AfterModelCallEvent(
                         agent=agent,
                         invocation_state=invocation_state,
-                        projected_input_tokens=projected_input_tokens,
+                        stop_response=AfterModelCallEvent.ModelStopResponse(
+                            stop_reason=stop_reason,
+                            message=message,
+                        ),
                     )
-                )
+                    await agent.hooks.invoke_callbacks_async(after_model_call_event)
+
+                    tracer.end_model_invoke_span(model_invoke_span, message, usage, metrics, stop_reason)
+                    if after_model_call_event.retry:
+                        continue
+                    yield ModelStopReason(stop_reason=stop_reason, message=message, usage=usage, metrics=metrics)
+                    break
 
                 if structured_output_context.forced_mode:
                     tool_spec = structured_output_context.get_tool_spec()
