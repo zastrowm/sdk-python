@@ -57,6 +57,10 @@ The middleware module is `_middleware/` (underscore-prefixed) — not publicly i
 
 Same as TypeScript — `createStage` is internal. Only the built-in stages are public.
 
+## Dual system prompt representation
+
+Python's `InvokeModelContext` carries both `system_prompt: str | None` and `system_prompt_content: list | None`. This matches the Python SDK's existing dual representation throughout (`Model.stream()`, `stream_messages()`, `Agent.system_prompt`). The string form is for backwards compatibility; content blocks support features like cache points. TypeScript unifies these into a single `systemPrompt?: SystemPrompt`.
+
 ## Context is a dataclass
 
 TypeScript uses plain interfaces for contexts. Python uses `@dataclass` which enables `dataclasses.replace()` for immutable-style context transformation:
