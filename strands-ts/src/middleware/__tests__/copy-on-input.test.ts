@@ -63,6 +63,36 @@ describe('InvokeModelStage copy-on-input isolation', () => {
       // The content block in middleware should be a different instance
       expect(receivedContent).not.toBe(agent.messages[0]?.content[0])
     })
+
+    it('message metadata is deep copied (not shared reference)', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
+      const agent = new Agent({ model, printer: false })
+
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        const msg = context.messages[0]
+        if (msg?.metadata) {
+          msg.metadata.custom = { ...(msg.metadata.custom ?? {}), injected: 'value' }
+        }
+        return yield* next(context)
+      })
+
+      // Pre-set metadata on the agent's message so the middleware has something to mutate
+      agent.messages.push(
+        new Message({
+          role: 'user',
+          content: [new TextBlock('Hello')],
+          metadata: { custom: { original: 'data' } },
+        })
+      )
+
+      await agent.invoke('Hello')
+
+      const userMsg = agent.messages.find(
+        (m) => m.role === 'user' && m.metadata?.custom?.['original'] === 'data'
+      )
+      expect(userMsg?.metadata?.custom).toEqual({ original: 'data' })
+      expect(userMsg?.metadata?.custom).not.toHaveProperty('injected')
+    })
   })
 
   describe('systemPrompt', () => {
@@ -138,7 +168,7 @@ describe('InvokeModelStage copy-on-input isolation', () => {
   describe('modelState', () => {
     it('modelState is not exposed on the middleware context', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
-      const agent = new Agent({ model, printer: false, modelState: { existing: 'value' } })
+      const agent = new Agent({ model, printer: false, systemPrompt: 'hi', modelState: { existing: 'value' } })
 
       let contextKeys: string[] = []
 
@@ -149,7 +179,9 @@ describe('InvokeModelStage copy-on-input isolation', () => {
 
       await agent.invoke('Hello')
 
-      expect(contextKeys).not.toContain('modelState')
+      expect(contextKeys.sort()).toEqual(
+        ['agent', 'invocationState', 'messages', 'systemPrompt', 'toolSpecs'].sort()
+      )
     })
 
     it('model state changes are written back to agent.modelState after streaming', async () => {
@@ -285,6 +317,36 @@ describe('InvokeModelStage copy-on-input isolation', () => {
       await agent.invoke('Hello')
 
       expect(receivedChoice).toBeUndefined()
+    })
+
+    it('toolChoice is deep copied when present', async () => {
+      const model = new MockMessageModel()
+        .addTurn({ type: 'textBlock', text: 'plain response' })
+        .addTurn({
+          type: 'toolUseBlock',
+          name: 'strands_structured_output',
+          toolUseId: 'so-1',
+          input: { name: 'Alice' },
+        })
+      const { z } = await import('zod')
+      const agent = new Agent({
+        model,
+        printer: false,
+        structuredOutputSchema: z.object({ name: z.string() }),
+      })
+
+      const receivedChoices: unknown[] = []
+
+      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
+        receivedChoices.push(context.toolChoice)
+        return yield* next(context)
+      })
+
+      await agent.invoke('Hello')
+
+      // Second call should have toolChoice forced by structured output
+      const definedChoice = receivedChoices.find((c) => c !== undefined)
+      expect(definedChoice).toEqual({ tool: { name: 'strands_structured_output' } })
     })
   })
 

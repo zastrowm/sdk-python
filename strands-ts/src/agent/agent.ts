@@ -1984,6 +1984,7 @@ export class Agent implements LocalAgent, InvokableAgent {
 
     // Sync model state after the entire middleware chain has completed, so no
     // middleware mutation to agent.modelState (before or after next()) takes effect.
+    // Intentionally skipped on error — partial provider writes should not persist.
     if (tempModelState) {
       loadStateSerializable(this.modelState, serializeStateSerializable(tempModelState))
     }

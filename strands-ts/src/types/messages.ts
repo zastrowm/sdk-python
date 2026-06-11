@@ -122,7 +122,11 @@ export class Message implements JSONSerializable<MessageData> {
    * Creates a deep copy of this Message (round-trips through serialization).
    */
   clone(): Message {
-    return Message.fromMessageData(this.toJSON())
+    const data = this.toJSON()
+    if (data.metadata !== undefined) {
+      data.metadata = JSON.parse(JSON.stringify(data.metadata))
+    }
+    return Message.fromMessageData(data)
   }
 }
 
