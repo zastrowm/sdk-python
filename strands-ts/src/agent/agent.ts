@@ -23,6 +23,7 @@ import {
   type ToolResultBlockData,
   ToolUseBlock,
 } from '../types/messages.js'
+import { deepCopy } from '../types/json.js'
 import type { JSONValue } from '../types/json.js'
 import { McpClient } from '../mcp.js'
 import { isValidToolName, type Tool, type ToolContext } from '../tools/tool.js'
@@ -1922,8 +1923,8 @@ export class Agent implements LocalAgent, InvokableAgent {
       agent: this,
       messages: this.messages.map((msg) => msg.clone()),
       ...(this.systemPrompt !== undefined && { systemPrompt: cloneSystemPrompt(this.systemPrompt) }),
-      toolSpecs: structuredClone(this._toolRegistry.list().map((tool) => tool.toolSpec)),
-      ...(toolChoice !== undefined && { toolChoice: structuredClone(toolChoice) }),
+      toolSpecs: deepCopy(this._toolRegistry.list().map((tool) => tool.toolSpec)) as unknown as ToolSpec[],
+      ...(toolChoice !== undefined && { toolChoice: deepCopy(toolChoice) as unknown as ToolChoice }),
       invocationState: { ...invocationState },
     }
 
