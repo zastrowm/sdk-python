@@ -31,9 +31,7 @@ describe('InvokeModelStage copy-on-input isolation', () => {
 
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
         // Force-cast to bypass readonly for this mutation test
-        ;(context.messages as Message[]).push(
-          new Message({ role: 'user', content: [new TextBlock('injected')] })
-        )
+        ;(context.messages as Message[]).push(new Message({ role: 'user', content: [new TextBlock('injected')] }))
         return yield* next(context)
       })
 
@@ -87,9 +85,7 @@ describe('InvokeModelStage copy-on-input isolation', () => {
 
       await agent.invoke('Hello')
 
-      const userMsg = agent.messages.find(
-        (m) => m.role === 'user' && m.metadata?.custom?.['original'] === 'data'
-      )
+      const userMsg = agent.messages.find((m) => m.role === 'user' && m.metadata?.custom?.['original'] === 'data')
       expect(userMsg?.metadata?.custom).toEqual({ original: 'data' })
       expect(userMsg?.metadata?.custom).not.toHaveProperty('injected')
     })
@@ -159,9 +155,7 @@ describe('InvokeModelStage copy-on-input isolation', () => {
       // Each invocation should get a fresh copy
       expect(receivedSpecs[0]).not.toBe(receivedSpecs[1])
       expect(receivedSpecs[0]).toEqual(receivedSpecs[1])
-      expect(receivedSpecs[0]).toEqual(
-        expect.arrayContaining([expect.objectContaining({ name: 'testTool' })])
-      )
+      expect(receivedSpecs[0]).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'testTool' })]))
     })
   })
 
@@ -179,9 +173,7 @@ describe('InvokeModelStage copy-on-input isolation', () => {
 
       await agent.invoke('Hello')
 
-      expect(contextKeys.sort()).toEqual(
-        ['agent', 'invocationState', 'messages', 'systemPrompt', 'toolSpecs'].sort()
-      )
+      expect(contextKeys.sort()).toEqual(['agent', 'invocationState', 'messages', 'systemPrompt', 'toolSpecs'].sort())
     })
 
     it('model state changes are written back to agent.modelState after streaming', async () => {
@@ -320,14 +312,12 @@ describe('InvokeModelStage copy-on-input isolation', () => {
     })
 
     it('toolChoice is deep copied when present', async () => {
-      const model = new MockMessageModel()
-        .addTurn({ type: 'textBlock', text: 'plain response' })
-        .addTurn({
-          type: 'toolUseBlock',
-          name: 'strands_structured_output',
-          toolUseId: 'so-1',
-          input: { name: 'Alice' },
-        })
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'plain response' }).addTurn({
+        type: 'toolUseBlock',
+        name: 'strands_structured_output',
+        toolUseId: 'so-1',
+        input: { name: 'Alice' },
+      })
       const { z } = await import('zod')
       const agent = new Agent({
         model,
@@ -360,10 +350,7 @@ describe('InvokeModelStage copy-on-input isolation', () => {
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
         const newContext: InvokeModelContext = {
           ...context,
-          messages: [
-            ...context.messages,
-            new Message({ role: 'user', content: [new TextBlock('extra context')] }),
-          ],
+          messages: [...context.messages, new Message({ role: 'user', content: [new TextBlock('extra context')] })],
         }
         return yield* next(newContext)
       })
@@ -551,9 +538,7 @@ describe('AgentStreamStage copy-on-input isolation', () => {
       const inputMessages = [new Message({ role: 'user', content: [new TextBlock('Hello')] })]
 
       agent.addMiddleware(AgentStreamStage, async function* (context, next) {
-        ;(context.args as Message[]).push(
-          new Message({ role: 'user', content: [new TextBlock('injected')] })
-        )
+        ;(context.args as Message[]).push(new Message({ role: 'user', content: [new TextBlock('injected')] }))
         return yield* next(context)
       })
 
