@@ -307,6 +307,40 @@ def test_context_transform_modified_input_reaches_tool():
     assert received_args == [{"value": "modified"}]
 
 
+def test_context_transform_does_not_mutate_original():
+    """Modifying context via replace does not mutate the original context object."""
+
+    @strands.tool(name="echo_tool")
+    def echo_tool(value: str) -> str:
+        """Echo."""
+        return value
+
+    tool_use_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "t1", "name": "echo_tool", "input": {"value": "original"}}}],
+    }
+    final_msg = {"role": "assistant", "content": [{"text": "done"}]}
+    model = MockedModelProvider([tool_use_msg, final_msg])
+    agent = Agent(model=model, tools=[echo_tool], callback_handler=None)
+
+    original_contexts: list[ExecuteToolContext] = []
+
+    async def mutating_middleware(context, next_fn):
+        from dataclasses import replace
+
+        original_contexts.append(context)
+        modified = replace(context, tool_use={**context.tool_use, "input": {"value": "changed"}})
+        async for event in next_fn(modified):
+            yield event
+
+    agent.add_middleware(ExecuteToolStage, mutating_middleware)
+    agent("test")
+
+    assert len(original_contexts) == 1
+    # Original context must be unchanged
+    assert original_contexts[0].tool_use["input"] == {"value": "original"}
+
+
 def test_after_tool_call_event_fires_after_middleware(model, calculator_tool):
     """AfterToolCallEvent fires after middleware completes."""
     from strands.hooks import AfterToolCallEvent
@@ -435,3 +469,36 @@ def test_caching_plugin_use_case():
     agent("second call")
     # Tool should NOT have been called again — cached
     assert call_count == 1
+
+
+def test_short_circuit_result_appears_in_conversation(calculator_tool):
+    """When middleware short-circuits, the mocked result appears in agent.messages."""
+    tool_use_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "t1", "name": "calculator", "input": {"expression": "1+1"}}}],
+    }
+    final_msg = {"role": "assistant", "content": [{"text": "done"}]}
+    model = MockedModelProvider([tool_use_msg, final_msg])
+    agent = Agent(model=model, tools=[calculator_tool], callback_handler=None)
+
+    async def cached(context, next_fn):
+        yield _MiddlewareResult(
+            ExecuteToolResult(
+                tool_result={
+                    "toolUseId": context.tool_use["toolUseId"],
+                    "status": "success",
+                    "content": [{"text": "mocked_result"}],
+                }
+            )
+        )
+
+    agent.add_middleware(ExecuteToolStage, cached)
+    agent("calc")
+
+    # Find the tool result message in conversation
+    tool_result_messages = [
+        msg for msg in agent.messages if msg.get("role") == "user" and any("toolResult" in c for c in msg["content"])
+    ]
+    assert len(tool_result_messages) == 1
+    tool_result = tool_result_messages[0]["content"][0]["toolResult"]
+    assert tool_result["content"] == [{"text": "mocked_result"}]

@@ -253,3 +253,127 @@ def test_context_replace_preserves_interrupt(calculator_tool):
     # Resume: interrupt() returns response, execution continues
     result = agent([{"interruptResponse": {"interruptId": result.interrupts[0].id, "response": "yes"}}])
     assert interrupt_worked
+
+
+def test_middleware_interrupt_denial_returns_error_result(calculator_tool):
+    """Middleware can deny execution based on interrupt response."""
+    from strands._middleware.stages import ExecuteToolResult
+    from strands._middleware.types import _MiddlewareResult
+
+    tool_use_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "tool_1", "name": "calculator", "input": {"expression": "2+2"}}}],
+    }
+    final_msg = {"role": "assistant", "content": [{"text": "denied"}]}
+    model = MockedModelProvider([tool_use_msg, final_msg, final_msg])
+    agent = Agent(model=model, tools=[calculator_tool], callback_handler=None)
+
+    tool_executed = False
+
+    async def approval_gate(context, next_fn):
+        nonlocal tool_executed
+        r = context.interrupt("approve", reason="Allow?")
+        if r.response != "yes":
+            yield _MiddlewareResult(
+                ExecuteToolResult(
+                    tool_result={
+                        "toolUseId": context.tool_use["toolUseId"],
+                        "status": "error",
+                        "content": [{"text": "Denied by middleware"}],
+                    }
+                )
+            )
+            return
+        tool_executed = True
+        async for event in next_fn(context):
+            yield event
+
+    agent.add_middleware(ExecuteToolStage, approval_gate)
+
+    # First call: interrupt halts
+    result = agent("calc")
+    assert result.stop_reason == "interrupt"
+
+    # Resume with denial
+    result = agent([{"interruptResponse": {"interruptId": result.interrupts[0].id, "response": "no"}}])
+    assert not tool_executed
+
+
+def test_middleware_interrupt_approval_executes_tool(calculator_tool):
+    """When middleware receives approval, tool actually executes."""
+    from strands._middleware.types import _MiddlewareResult
+    from strands._middleware.stages import ExecuteToolResult
+
+    tool_use_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "tool_1", "name": "calculator", "input": {"expression": "2+2"}}}],
+    }
+    final_msg = {"role": "assistant", "content": [{"text": "4"}]}
+    model = MockedModelProvider([tool_use_msg, final_msg, final_msg])
+    agent = Agent(model=model, tools=[calculator_tool], callback_handler=None)
+
+    tool_executed = False
+    original_stream = calculator_tool.stream
+
+    async def tracking_stream(*args, **kwargs):
+        nonlocal tool_executed
+        tool_executed = True
+        async for event in original_stream(*args, **kwargs):
+            yield event
+
+    calculator_tool.stream = tracking_stream
+
+    async def approval_gate(context, next_fn):
+        r = context.interrupt("approve", reason="Allow?")
+        if r.response != "yes":
+            yield _MiddlewareResult(
+                ExecuteToolResult(
+                    tool_result={
+                        "toolUseId": context.tool_use["toolUseId"],
+                        "status": "error",
+                        "content": [{"text": "Denied"}],
+                    }
+                )
+            )
+            return
+        async for event in next_fn(context):
+            yield event
+
+    agent.add_middleware(ExecuteToolStage, approval_gate)
+
+    # First call: interrupt halts
+    result = agent("calc")
+    assert result.stop_reason == "interrupt"
+
+    # Resume with approval
+    result = agent([{"interruptResponse": {"interruptId": result.interrupts[0].id, "response": "yes"}}])
+    assert tool_executed
+
+
+@pytest.mark.asyncio
+async def test_middleware_interrupt_yields_event_on_stream(calculator_tool):
+    """Iterating the agent stream produces an interrupt-related stop event."""
+    from strands._async import run_async
+
+    tool_use_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "tool_1", "name": "calculator", "input": {"expression": "2+2"}}}],
+    }
+    final_msg = {"role": "assistant", "content": [{"text": "4"}]}
+    model = MockedModelProvider([tool_use_msg, final_msg])
+    agent = Agent(model=model, tools=[calculator_tool], callback_handler=None)
+
+    async def gate(context, next_fn):
+        context.interrupt("gate", reason="check")
+        async for event in next_fn(context):
+            yield event
+
+    agent.add_middleware(ExecuteToolStage, gate)
+
+    events = []
+    async for event in agent.stream_async("calc"):
+        events.append(event)
+
+    # The final event should indicate interrupt
+    result_events = [e for e in events if "result" in e and hasattr(e.get("result"), "stop_reason")]
+    assert any(e["result"].stop_reason == "interrupt" for e in result_events)

@@ -111,6 +111,30 @@ def test_wrap_context_transformation(agent):
     assert transformed_system_prompt == "Injected prompt"
 
 
+def test_wrap_context_transformation_tool_specs(agent):
+    """Middleware can modify tool_specs and the model receives the modified list."""
+    received_tool_specs = None
+
+    async def modify_specs(context, next_fn):
+        from dataclasses import replace
+
+        modified = replace(context, tool_specs=[])
+        async for event in next_fn(modified):
+            yield event
+
+    async def capture(context, next_fn):
+        nonlocal received_tool_specs
+        received_tool_specs = context.tool_specs
+        async for event in next_fn(context):
+            yield event
+
+    agent.add_middleware(InvokeModelStage, modify_specs)
+    agent.add_middleware(InvokeModelStage, capture)
+    agent("test")
+
+    assert received_tool_specs == []
+
+
 def test_wrap_short_circuit_skips_model_call(agent):
     """Middleware can short-circuit by not calling next and yielding its own result."""
     from strands.types._events import ModelStopReason
@@ -327,6 +351,53 @@ def test_plugin_can_register_middleware(model):
     agent("test")
 
     assert plugin.call_count == 1
+
+
+# --- no-middleware baselines ---
+
+
+def test_no_middleware_agent_works_correctly():
+    """Agent with no middleware produces correct results."""
+    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "Response"}]}])
+    agent = Agent(model=model, callback_handler=None)
+    result = agent("hello")
+    assert result.message["content"][0]["text"] == "Response"
+    assert result.stop_reason == "end_turn"
+
+
+def test_no_middleware_agent_with_tools_works_correctly():
+    """Agent with tools but no middleware executes tools correctly."""
+    import strands
+
+    @strands.tool(name="greet")
+    def greet(name: str) -> str:
+        """Greet someone."""
+        return f"Hello, {name}!"
+
+    tool_msg = {
+        "role": "assistant",
+        "content": [{"toolUse": {"toolUseId": "t1", "name": "greet", "input": {"name": "World"}}}],
+    }
+    final_msg = {"role": "assistant", "content": [{"text": "Greeted!"}]}
+    model = MockedModelProvider([tool_msg, final_msg])
+    agent = Agent(model=model, tools=[greet], callback_handler=None)
+    result = agent("greet someone")
+    assert result.message["content"][0]["text"] == "Greeted!"
+
+
+def test_passthrough_middleware_preserves_result():
+    """Passthrough middleware returns the correct stop_reason and message."""
+    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "Correct"}]}])
+    agent = Agent(model=model, callback_handler=None)
+
+    async def passthrough(context, next_fn):
+        async for event in next_fn(context):
+            yield event
+
+    agent.add_middleware(InvokeModelStage, passthrough)
+    result = agent("test")
+    assert result.stop_reason == "end_turn"
+    assert result.message["content"][0]["text"] == "Correct"
 
 
 # --- additional coverage ---
