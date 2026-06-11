@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { Agent } from '../../agent/agent.js'
 import { MockMessageModel } from '../../__fixtures__/mock-message-model.js'
 import { createMockTool } from '../../__fixtures__/tool-helpers.js'
-import { InvokeModelStage } from '../stages.js'
+import { InvokeModelStage, ExecuteToolStage, AgentStreamStage } from '../stages.js'
 import type { InvokeModelContext } from '../stages.js'
 import { TextBlock, ToolResultBlock, Message } from '../../types/messages.js'
+import type { JSONValue } from '../../types/json.js'
 
 describe('InvokeModelStage copy-on-input isolation', () => {
   describe('messages', () => {
@@ -349,6 +350,154 @@ describe('InvokeModelStage copy-on-input isolation', () => {
       await agent.invoke('Hello')
 
       expect(terminalSpecs).toEqual([])
+    })
+  })
+})
+
+describe('ExecuteToolStage copy-on-input isolation', () => {
+  function createToolCallingModel(): MockMessageModel {
+    return new MockMessageModel()
+      .addTurn({
+        type: 'toolUseBlock',
+        name: 'testTool',
+        toolUseId: 'tool-1',
+        input: { key: 'value', nested: { arr: [1, 2, 3] } },
+      })
+      .addTurn({ type: 'textBlock', text: 'Done' })
+  }
+
+  describe('toolUse.input', () => {
+    it('toolUse.input is a deep copy of the model output', async () => {
+      const model = createToolCallingModel()
+      const tool = createMockTool(
+        'testTool',
+        () =>
+          new ToolResultBlock({
+            toolUseId: 'tool-1',
+            status: 'success',
+            content: [new TextBlock('ok')],
+          })
+      )
+      const agent = new Agent({ model, tools: [tool], printer: false })
+
+      let receivedInput: JSONValue | undefined
+
+      agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
+        receivedInput = context.toolUse.input
+        return yield* next(context)
+      })
+
+      await agent.invoke('Call the tool')
+
+      expect(receivedInput).toEqual({ key: 'value', nested: { arr: [1, 2, 3] } })
+    })
+
+    it('mutating toolUse.input in middleware does not affect the original message', async () => {
+      const model = createToolCallingModel()
+      const tool = createMockTool(
+        'testTool',
+        () =>
+          new ToolResultBlock({
+            toolUseId: 'tool-1',
+            status: 'success',
+            content: [new TextBlock('ok')],
+          })
+      )
+      const agent = new Agent({ model, tools: [tool], printer: false })
+
+      agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
+        ;(context.toolUse.input as Record<string, unknown>)['injected'] = true
+        return yield* next(context)
+      })
+
+      await agent.invoke('Call the tool')
+
+      // The original tool use block in the assistant message should be unaffected
+      const assistantMsg = agent.messages.find((m) => m.role === 'assistant')
+      const toolUseBlock = assistantMsg?.content.find((b) => b.type === 'toolUseBlock')
+      expect(toolUseBlock).toBeDefined()
+      expect((toolUseBlock as { input: JSONValue }).input).not.toHaveProperty('injected')
+    })
+  })
+
+  describe('invocationState', () => {
+    it('invocationState is shared by reference (intentionally mutable)', async () => {
+      const model = createToolCallingModel()
+      const tool = createMockTool(
+        'testTool',
+        () =>
+          new ToolResultBlock({
+            toolUseId: 'tool-1',
+            status: 'success',
+            content: [new TextBlock('ok')],
+          })
+      )
+      const agent = new Agent({ model, tools: [tool], printer: false })
+
+      agent.addMiddleware(ExecuteToolStage, async function* (context, next) {
+        ;(context.invocationState as Record<string, unknown>)['middlewareTouched'] = true
+        return yield* next(context)
+      })
+
+      const result = await agent.invoke('Call the tool', { invocationState: { original: true } })
+
+      expect(result.invocationState).toEqual({ original: true, middlewareTouched: true })
+    })
+  })
+})
+
+describe('AgentStreamStage copy-on-input isolation', () => {
+  describe('args', () => {
+    it('array args are shallow-copied (not the same reference)', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
+      const agent = new Agent({ model, printer: false })
+
+      const inputMessages = [new Message({ role: 'user', content: [new TextBlock('Hello')] })]
+      let receivedArgs: unknown
+
+      agent.addMiddleware(AgentStreamStage, async function* (context, next) {
+        receivedArgs = context.args
+        return yield* next(context)
+      })
+
+      await agent.invoke(inputMessages)
+
+      expect(receivedArgs).not.toBe(inputMessages)
+      expect(receivedArgs).toHaveLength(1)
+    })
+
+    it('string args pass through (immutable primitive)', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
+      const agent = new Agent({ model, printer: false })
+
+      let receivedArgs: unknown
+
+      agent.addMiddleware(AgentStreamStage, async function* (context, next) {
+        receivedArgs = context.args
+        return yield* next(context)
+      })
+
+      await agent.invoke('Hello')
+
+      expect(receivedArgs).toBe('Hello')
+    })
+
+    it('pushing to the args array does not affect the caller array', async () => {
+      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
+      const agent = new Agent({ model, printer: false })
+
+      const inputMessages = [new Message({ role: 'user', content: [new TextBlock('Hello')] })]
+
+      agent.addMiddleware(AgentStreamStage, async function* (context, next) {
+        ;(context.args as Message[]).push(
+          new Message({ role: 'user', content: [new TextBlock('injected')] })
+        )
+        return yield* next(context)
+      })
+
+      await agent.invoke(inputMessages)
+
+      expect(inputMessages).toHaveLength(1)
     })
   })
 })

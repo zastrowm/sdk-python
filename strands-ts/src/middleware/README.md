@@ -60,7 +60,11 @@ Middleware is intended to supersede hooks. The Input/Output phases already cover
 
 `modelState` is intentionally excluded from `InvokeModelContext`. The agent snapshots model state before the middleware chain runs and writes back the model provider's changes after the entire chain completes. Any mutations middleware makes to `agent.modelState` — whether before or after `next()` — are overwritten by this writeback.
 
-Model state is provider-internal bookkeeping (e.g., OpenAI's `responseId` for conversation chaining). Exposing it to middleware would couple plugin authors to provider-specific implementation details and create ordering hazards when multiple middleware layers each try to read/write the same keys. If a future use case requires middleware to influence model state, we'll add an explicit, scoped API rather than exposing the raw store.
+We may revisit this later.
+
+## `invocationState` is shared by reference
+
+`invocationState` is not copied. Tools and hooks write to it, and those mutations must appear on `AgentResult.invocationState`.
 
 ## Middleware cannot resume interrupts
 

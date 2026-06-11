@@ -106,7 +106,7 @@ export interface ExecuteToolContext extends MiddlewareInterruptible {
   readonly tool: Tool | undefined
   /** The tool use request (name, toolUseId, input). */
   readonly toolUse: ToolUseData
-  /** Per-invocation state shared across hooks and tools. */
+  /** Per-invocation state shared across hooks and tools. Shared by reference — mutations are intentionally visible to subsequent hooks, tools, and the AgentResult. */
   readonly invocationState: InvocationState
 }
 

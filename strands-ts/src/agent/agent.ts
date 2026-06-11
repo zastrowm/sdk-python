@@ -1112,7 +1112,7 @@ export class Agent implements LocalAgent, InvokableAgent {
   ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
     const context: AgentStreamContext = {
       agent: this,
-      args,
+      args: Array.isArray(args) ? ([...args] as typeof args) : args,
       ...(options !== undefined && { options }),
       interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
     }
@@ -2472,11 +2472,7 @@ export class Agent implements LocalAgent, InvokableAgent {
     const context: ExecuteToolContext = {
       agent: this,
       tool,
-      toolUse: {
-        name: toolUse.name,
-        toolUseId: toolUse.toolUseId,
-        input: toolUse.input,
-      },
+      toolUse: deepCopy(toolUse) as unknown as ToolUseData,
       invocationState,
       interrupt: createMiddlewareInterrupt(this._interruptState, `middleware:executeTool:${toolUse.toolUseId}`),
     }
