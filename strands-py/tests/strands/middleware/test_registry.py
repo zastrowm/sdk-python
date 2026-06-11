@@ -500,3 +500,146 @@ async def test_try_finally_runs_on_generator_close(registry, stage):
     await gen.__anext__()
     await gen.aclose()
     assert finally_ran
+
+
+# --- additional coverage ---
+
+
+@pytest.mark.asyncio
+async def test_chained_context_modification_across_wrap_handlers(registry, stage):
+    """Multiple Wrap handlers each modify context; terminal sees accumulated changes."""
+    received_context = {}
+
+    async def terminal(context):
+        received_context.update(context)
+        yield _MiddlewareResult("done")
+
+    async def add_a(context, next_fn):
+        async for event in next_fn({**context, "a": True}):
+            yield event
+
+    async def add_b(context, next_fn):
+        async for event in next_fn({**context, "b": True}):
+            yield event
+
+    registry.add(stage, add_a)
+    registry.add(stage, add_b)
+    await _collect(registry.invoke(stage, {"original": True}, terminal))
+    assert received_context == {"original": True, "a": True, "b": True}
+
+
+@pytest.mark.asyncio
+async def test_error_transformation_by_middleware(registry, stage):
+    """Middleware can catch and re-throw a different error."""
+
+    async def terminal(context):
+        raise ValueError("original")
+        yield  # noqa: unreachable
+
+    async def transformer(context, next_fn):
+        try:
+            async for event in next_fn(context):
+                yield event
+        except ValueError as e:
+            raise RuntimeError(f"Wrapped: {e}") from e
+
+    registry.add(stage, transformer)
+    with pytest.raises(RuntimeError, match="Wrapped: original"):
+        await _collect(registry.invoke(stage, {}, terminal))
+
+
+@pytest.mark.asyncio
+async def test_interrupt_exception_propagates_through_passthrough(registry, stage):
+    """InterruptException propagates through passthrough middleware without being swallowed."""
+    from strands.interrupt import Interrupt, InterruptException
+
+    async def terminal(context):
+        raise InterruptException(Interrupt(id="int-1", name="test"))
+        yield  # noqa: unreachable
+
+    async def passthrough(context, next_fn):
+        async for event in next_fn(context):
+            yield event
+
+    registry.add(stage, passthrough)
+    with pytest.raises(InterruptException):
+        await _collect(registry.invoke(stage, {}, terminal))
+
+
+@pytest.mark.asyncio
+async def test_multi_layer_finally_ordering_on_error(registry, stage):
+    """All finally blocks run in reverse order (inner first) when terminal throws."""
+    order: list[str] = []
+
+    async def terminal(context):
+        raise ValueError("boom")
+        yield  # noqa: unreachable
+
+    async def outer(context, next_fn):
+        try:
+            async for event in next_fn(context):
+                yield event
+        finally:
+            order.append("outer_finally")
+
+    async def inner(context, next_fn):
+        try:
+            async for event in next_fn(context):
+                yield event
+        finally:
+            order.append("inner_finally")
+
+    registry.add(stage, outer)
+    registry.add(stage, inner)
+    with pytest.raises(ValueError, match="boom"):
+        await _collect(registry.invoke(stage, {}, terminal))
+    assert order == ["inner_finally", "outer_finally"]
+
+
+@pytest.mark.asyncio
+async def test_two_layer_finally_on_generator_close(registry, stage):
+    """Both middleware finally blocks run when consumer calls aclose."""
+    order: list[str] = []
+
+    async def outer(context, next_fn):
+        try:
+            async for event in next_fn(context):
+                yield event
+        finally:
+            order.append("outer_finally")
+
+    async def inner(context, next_fn):
+        try:
+            async for event in next_fn(context):
+                yield event
+        finally:
+            order.append("inner_finally")
+
+    registry.add(stage, outer)
+    registry.add(stage, inner)
+    terminal = _make_terminal("e1", "e2", "e3", result="done")
+    gen = registry.invoke(stage, {}, terminal)
+    await gen.__anext__()
+    await gen.aclose()
+    assert "inner_finally" in order
+    assert "outer_finally" in order
+
+
+@pytest.mark.asyncio
+async def test_remove_only_first_occurrence_of_duplicate(registry, stage):
+    """Removing a handler registered twice only removes one occurrence."""
+    call_count = 0
+
+    async def handler(context, next_fn):
+        nonlocal call_count
+        call_count += 1
+        async for event in next_fn(context):
+            yield event
+
+    registry.add(stage, handler)
+    registry.add(stage, handler)
+    registry.remove(stage, handler)
+
+    terminal = _make_terminal(result="done")
+    await _collect(registry.invoke(stage, {}, terminal))
+    assert call_count == 1

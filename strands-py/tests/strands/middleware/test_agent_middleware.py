@@ -327,3 +327,171 @@ def test_plugin_can_register_middleware(model):
     agent("test")
 
     assert plugin.call_count == 1
+
+
+# --- additional coverage ---
+
+
+def test_short_circuit_model_not_called(model):
+    """When middleware short-circuits, model.stream is never invoked."""
+    from unittest.mock import AsyncMock
+
+    from strands.types._events import ModelStopReason
+    from strands.types.streaming import Metrics, Usage
+
+    agent = Agent(model=model, callback_handler=None)
+    agent.model.stream = AsyncMock(wraps=agent.model.stream)
+
+    usage = {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+    metrics = {"latencyMs": 0}
+
+    async def cached(context, next_fn):
+        msg = {"role": "assistant", "content": [{"text": "Cached"}]}
+        yield ModelStopReason("end_turn", msg, Usage(**usage), Metrics(**metrics))
+        yield _MiddlewareResult(InvokeModelResult("end_turn", msg, usage, metrics))
+
+    agent.add_middleware(InvokeModelStage, cached)
+    agent("test")
+    agent.model.stream.assert_not_called()
+
+
+def test_hooks_fire_when_middleware_short_circuits(model):
+    """AfterModelCallEvent fires even when middleware short-circuits (never calls next)."""
+    from strands.hooks import AfterModelCallEvent
+    from strands.types._events import ModelStopReason
+    from strands.types.streaming import Metrics, Usage
+
+    hook_provider = MockHookProvider(event_types="all")
+    agent = Agent(model=model, callback_handler=None, hooks=[hook_provider])
+
+    usage = {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+    metrics = {"latencyMs": 0}
+
+    async def cached(context, next_fn):
+        msg = {"role": "assistant", "content": [{"text": "Cached"}]}
+        yield ModelStopReason("end_turn", msg, Usage(**usage), Metrics(**metrics))
+        yield _MiddlewareResult(InvokeModelResult("end_turn", msg, usage, metrics))
+
+    agent.add_middleware(InvokeModelStage, cached)
+    agent("test")
+
+    _, events = hook_provider.get_events()
+    event_types = [type(e) for e in events]
+    assert AfterModelCallEvent in event_types
+
+
+def test_cleanup_only_removes_specific_handler(model):
+    """Removing one handler doesn't affect other handlers on the same stage."""
+    calls: list[str] = []
+
+    async def handler_a(context, next_fn):
+        calls.append("a")
+        async for event in next_fn(context):
+            yield event
+
+    async def handler_b(context, next_fn):
+        calls.append("b")
+        async for event in next_fn(context):
+            yield event
+
+    agent = Agent(model=model, callback_handler=None)
+    cleanup_a = agent.add_middleware(InvokeModelStage, handler_a)
+    agent.add_middleware(InvokeModelStage, handler_b)
+
+    cleanup_a()
+
+    agent("test")
+    assert calls == ["b"]
+
+
+def test_phase_ordering_at_agent_level(model):
+    """Input/Output/Wrap ordering works at agent level regardless of registration order."""
+    order: list[str] = []
+
+    def output_handler(result):
+        order.append("output")
+        return result
+
+    async def wrap_handler(context, next_fn):
+        order.append("wrap")
+        async for event in next_fn(context):
+            yield event
+
+    def input_handler(context):
+        order.append("input")
+        return context
+
+    agent = Agent(model=model, callback_handler=None)
+    # Register in non-canonical order: output, wrap, input
+    agent.add_middleware(InvokeModelStage.Output, output_handler)
+    agent.add_middleware(InvokeModelStage, wrap_handler)
+    agent.add_middleware(InvokeModelStage.Input, input_handler)
+
+    agent("test")
+    assert order == ["input", "wrap", "output"]
+
+
+def test_cleanup_input_handler_at_agent_level(model):
+    """Cleanup function from Input phase registration works."""
+    called = False
+
+    def input_handler(context):
+        nonlocal called
+        called = True
+        return context
+
+    agent = Agent(model=model, callback_handler=None)
+    cleanup = agent.add_middleware(InvokeModelStage.Input, input_handler)
+    cleanup()
+
+    agent("test")
+    assert not called
+
+
+def test_cleanup_output_handler_at_agent_level(model):
+    """Cleanup function from Output phase registration works."""
+    called = False
+
+    def output_handler(result):
+        nonlocal called
+        called = True
+        return result
+
+    agent = Agent(model=model, callback_handler=None)
+    cleanup = agent.add_middleware(InvokeModelStage.Output, output_handler)
+    cleanup()
+
+    agent("test")
+    assert not called
+
+
+def test_retry_on_error_use_case():
+    """Middleware can retry model calls on transient errors."""
+    call_count = 0
+
+    class FlakyModel(MockedModelProvider):
+        async def stream(self, *args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise RuntimeError("ThrottlingException")
+            async for event in super().stream(*args, **kwargs):
+                yield event
+
+    model = FlakyModel([{"role": "assistant", "content": [{"text": "Success!"}]}])
+    agent = Agent(model=model, callback_handler=None, retry_strategy=None)
+
+    async def retry_middleware(context, next_fn):
+        for attempt in range(3):
+            try:
+                async for event in next_fn(context):
+                    yield event
+                return
+            except RuntimeError as e:
+                if "ThrottlingException" not in str(e) or attempt == 2:
+                    raise
+
+    agent.add_middleware(InvokeModelStage, retry_middleware)
+    result = agent("test")
+    assert result.message["content"][0]["text"] == "Success!"
+    assert call_count == 3

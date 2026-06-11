@@ -118,8 +118,22 @@ class MiddlewareRegistry:
             next_fn = current
 
             def _make_layer(h: MiddlewareHandler, nf: MiddlewareNext) -> MiddlewareNext:
-                def layer(ctx: Any) -> AsyncGenerator[Any, None]:
-                    return h(ctx, nf)
+                async def layer(ctx: Any) -> AsyncGenerator[Any, None]:
+                    inner_gens: list[AsyncGenerator[Any, None]] = []
+
+                    def tracking_next(c: Any) -> AsyncGenerator[Any, None]:
+                        gen = nf(c)
+                        inner_gens.append(gen)
+                        return gen
+
+                    handler_gen = h(ctx, tracking_next)
+                    try:
+                        async for event in handler_gen:
+                            yield event
+                    finally:
+                        await handler_gen.aclose()
+                        for gen in inner_gens:
+                            await gen.aclose()
 
                 return layer
 
