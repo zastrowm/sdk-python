@@ -1,11 +1,14 @@
 """Integration tests for ExecuteToolStage middleware with Agent."""
 
+from dataclasses import replace
+
 import pytest
 
 import strands
-from strands import Agent, ExecuteToolStage
+from strands import Agent, ExecuteToolStage, Plugin
 from strands._middleware.stages import ExecuteToolContext, ExecuteToolResult
 from strands._middleware.types import _MiddlewareResult
+from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 from tests.fixtures.mock_hook_provider import MockHookProvider
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
@@ -153,7 +156,6 @@ def test_input_transforms_tool_context(agent):
             yield event
 
     def modify_input(context):
-        from dataclasses import replace
 
         modified_tool_use = {**context.tool_use, "input": {"expression": "3+3"}}
         return replace(context, tool_use=modified_tool_use)
@@ -172,7 +174,6 @@ def test_output_transforms_tool_result(agent):
     transformed_results: list[ExecuteToolResult] = []
 
     def output_handler(result):
-        from dataclasses import replace
 
         new_result = replace(
             result,
@@ -199,7 +200,6 @@ def test_hooks_fire_outside_middleware(model, calculator_tool):
 
     async def check_middleware(context, next_fn):
         nonlocal middleware_saw_before_hook
-        from strands.hooks import BeforeToolCallEvent
 
         _, events = hook_provider.get_events()
         event_types = [type(e) for e in events]
@@ -211,34 +211,6 @@ def test_hooks_fire_outside_middleware(model, calculator_tool):
     agent("what is 2+2?")
     assert middleware_saw_before_hook
 
-
-# --- cleanup ---
-
-
-def test_cleanup_removes_middleware(agent):
-    call_count = 0
-
-    async def counter(context, next_fn):
-        nonlocal call_count
-        call_count += 1
-        async for event in next_fn(context):
-            yield event
-
-    cleanup = agent.add_middleware(ExecuteToolStage, counter)
-    agent("what is 2+2?")
-    assert call_count == 1
-
-    cleanup()
-
-    # Need fresh model for second invocation
-    tool_use_msg = {
-        "role": "assistant",
-        "content": [{"toolUse": {"toolUseId": "t2", "name": "calculator", "input": {"expression": "3+3"}}}],
-    }
-    final_msg = {"role": "assistant", "content": [{"text": "6"}]}
-    agent.model = MockedModelProvider([tool_use_msg, final_msg])
-    agent("what is 3+3?")
-    assert call_count == 1
 
 
 # --- additional coverage ---
@@ -296,7 +268,6 @@ def test_context_transform_modified_input_reaches_tool():
     agent = Agent(model=model, tools=[echo_tool], callback_handler=None)
 
     def modify_input(context):
-        from dataclasses import replace
 
         modified_tool_use = {**context.tool_use, "input": {"value": "modified"}}
         return replace(context, tool_use=modified_tool_use)
@@ -326,7 +297,6 @@ def test_context_transform_does_not_mutate_original():
     original_contexts: list[ExecuteToolContext] = []
 
     async def mutating_middleware(context, next_fn):
-        from dataclasses import replace
 
         original_contexts.append(context)
         modified = replace(context, tool_use={**context.tool_use, "input": {"value": "changed"}})
@@ -343,7 +313,6 @@ def test_context_transform_does_not_mutate_original():
 
 def test_after_tool_call_event_fires_after_middleware(model, calculator_tool):
     """AfterToolCallEvent fires after middleware completes."""
-    from strands.hooks import AfterToolCallEvent
 
     hook_provider = MockHookProvider(event_types="all")
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None, hooks=[hook_provider])
@@ -367,7 +336,6 @@ def test_after_tool_call_event_fires_after_middleware(model, calculator_tool):
 
 def test_hooks_fire_when_middleware_short_circuits(model, calculator_tool):
     """AfterToolCallEvent fires even when middleware short-circuits."""
-    from strands.hooks import AfterToolCallEvent
 
     hook_provider = MockHookProvider(event_types="all")
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None, hooks=[hook_provider])
@@ -389,7 +357,6 @@ def test_hooks_fire_when_middleware_short_circuits(model, calculator_tool):
 
 def test_after_tool_call_receives_middleware_result_on_short_circuit(model, calculator_tool):
     """AfterToolCallEvent.result contains the middleware-provided result on short-circuit."""
-    from strands.hooks import AfterToolCallEvent
 
     hook_provider = MockHookProvider(event_types="all")
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None, hooks=[hook_provider])
@@ -416,7 +383,6 @@ def test_after_tool_call_receives_middleware_result_on_short_circuit(model, calc
 
 def test_caching_plugin_use_case():
     """Full caching plugin: first call executes, second call returns cached result."""
-    from strands import Plugin
 
     call_count = 0
 

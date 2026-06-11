@@ -1,10 +1,16 @@
 """Integration tests for middleware with Agent (InvokeModelStage)."""
 
+from dataclasses import replace
+from unittest.mock import AsyncMock
+
 import pytest
 
-from strands import Agent, InvokeModelStage
+from strands import Agent, InvokeModelStage, Plugin
 from strands._middleware.stages import InvokeModelContext, InvokeModelResult
 from strands._middleware.types import _MiddlewareResult
+from strands.hooks import AfterModelCallEvent, BeforeModelCallEvent
+from strands.types._events import ModelStopReason
+from strands.types.streaming import Metrics, Usage
 from tests.fixtures.mock_hook_provider import MockHookProvider
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
@@ -24,35 +30,6 @@ def agent(model):
 
 
 # --- add_middleware API ---
-
-
-def test_add_middleware_returns_cleanup_callable(agent):
-    async def handler(context, next_fn):
-        async for event in next_fn(context):
-            yield event
-
-    cleanup = agent.add_middleware(InvokeModelStage, handler)
-    assert callable(cleanup)
-
-
-def test_add_middleware_cleanup_removes_middleware(agent):
-    call_count = 0
-
-    async def handler(context, next_fn):
-        nonlocal call_count
-        call_count += 1
-        async for event in next_fn(context):
-            yield event
-
-    cleanup = agent.add_middleware(InvokeModelStage, handler)
-    agent("first call")
-    assert call_count == 1
-
-    cleanup()
-
-    agent.model = MockedModelProvider([{"role": "assistant", "content": [{"text": "Second"}]}])
-    agent("second call")
-    assert call_count == 1
 
 
 # --- wrap phase ---
@@ -92,7 +69,6 @@ def test_wrap_context_transformation(agent):
     transformed_system_prompt = None
 
     async def inject_prompt(context, next_fn):
-        from dataclasses import replace
 
         modified = replace(context, system_prompt="Injected prompt")
         async for event in next_fn(modified):
@@ -116,7 +92,6 @@ def test_wrap_context_transformation_tool_specs(agent):
     received_tool_specs = None
 
     async def modify_specs(context, next_fn):
-        from dataclasses import replace
 
         modified = replace(context, tool_specs=[])
         async for event in next_fn(modified):
@@ -137,8 +112,6 @@ def test_wrap_context_transformation_tool_specs(agent):
 
 def test_wrap_short_circuit_skips_model_call(agent):
     """Middleware can short-circuit by not calling next and yielding its own result."""
-    from strands.types._events import ModelStopReason
-    from strands.types.streaming import Metrics, Usage
 
     async def cached_response(context, next_fn):
         cached_message = {"role": "assistant", "content": [{"text": "Cached!"}]}
@@ -226,7 +199,6 @@ def test_input_transforms_context(agent):
             yield event
 
     def inject_prompt(context):
-        from dataclasses import replace
 
         return replace(context, system_prompt="From input handler")
 
@@ -247,7 +219,6 @@ def test_input_async_handler(agent):
             yield event
 
     async def async_inject(context):
-        from dataclasses import replace
 
         return replace(context, system_prompt="Async input")
 
@@ -265,7 +236,6 @@ def test_output_transforms_result(agent):
     transformed_results: list[InvokeModelResult] = []
 
     def output_handler(result):
-        from dataclasses import replace
 
         new_result = replace(result, stop_reason="custom_stop")
         transformed_results.append(new_result)
@@ -290,7 +260,6 @@ def test_before_model_call_fires_before_middleware(model):
     async def check_middleware(context, next_fn):
         nonlocal middleware_saw_hook_fired
         _, events = hook_provider.get_events()
-        from strands.hooks import BeforeModelCallEvent
 
         event_types = [type(e) for e in events]
         middleware_saw_hook_fired = BeforeModelCallEvent in event_types
@@ -318,7 +287,6 @@ def test_after_model_call_fires_after_middleware(model):
     agent("test")
 
     assert middleware_completed
-    from strands.hooks import AfterModelCallEvent
 
     _, events = hook_provider.get_events()
     event_types = [type(e) for e in events]
@@ -329,7 +297,6 @@ def test_after_model_call_fires_after_middleware(model):
 
 
 def test_plugin_can_register_middleware(model):
-    from strands import Plugin
 
     class TimingPlugin(Plugin):
         name = "timing"
@@ -405,10 +372,7 @@ def test_passthrough_middleware_preserves_result():
 
 def test_short_circuit_model_not_called(model):
     """When middleware short-circuits, model.stream is never invoked."""
-    from unittest.mock import AsyncMock
 
-    from strands.types._events import ModelStopReason
-    from strands.types.streaming import Metrics, Usage
 
     agent = Agent(model=model, callback_handler=None)
     agent.model.stream = AsyncMock(wraps=agent.model.stream)
@@ -428,9 +392,6 @@ def test_short_circuit_model_not_called(model):
 
 def test_hooks_fire_when_middleware_short_circuits(model):
     """AfterModelCallEvent fires even when middleware short-circuits (never calls next)."""
-    from strands.hooks import AfterModelCallEvent
-    from strands.types._events import ModelStopReason
-    from strands.types.streaming import Metrics, Usage
 
     hook_provider = MockHookProvider(event_types="all")
     agent = Agent(model=model, callback_handler=None, hooks=[hook_provider])
@@ -449,30 +410,6 @@ def test_hooks_fire_when_middleware_short_circuits(model):
     _, events = hook_provider.get_events()
     event_types = [type(e) for e in events]
     assert AfterModelCallEvent in event_types
-
-
-def test_cleanup_only_removes_specific_handler(model):
-    """Removing one handler doesn't affect other handlers on the same stage."""
-    calls: list[str] = []
-
-    async def handler_a(context, next_fn):
-        calls.append("a")
-        async for event in next_fn(context):
-            yield event
-
-    async def handler_b(context, next_fn):
-        calls.append("b")
-        async for event in next_fn(context):
-            yield event
-
-    agent = Agent(model=model, callback_handler=None)
-    cleanup_a = agent.add_middleware(InvokeModelStage, handler_a)
-    agent.add_middleware(InvokeModelStage, handler_b)
-
-    cleanup_a()
-
-    agent("test")
-    assert calls == ["b"]
 
 
 def test_phase_ordering_at_agent_level(model):
@@ -501,39 +438,6 @@ def test_phase_ordering_at_agent_level(model):
     agent("test")
     assert order == ["input", "wrap", "output"]
 
-
-def test_cleanup_input_handler_at_agent_level(model):
-    """Cleanup function from Input phase registration works."""
-    called = False
-
-    def input_handler(context):
-        nonlocal called
-        called = True
-        return context
-
-    agent = Agent(model=model, callback_handler=None)
-    cleanup = agent.add_middleware(InvokeModelStage.Input, input_handler)
-    cleanup()
-
-    agent("test")
-    assert not called
-
-
-def test_cleanup_output_handler_at_agent_level(model):
-    """Cleanup function from Output phase registration works."""
-    called = False
-
-    def output_handler(result):
-        nonlocal called
-        called = True
-        return result
-
-    agent = Agent(model=model, callback_handler=None)
-    cleanup = agent.add_middleware(InvokeModelStage.Output, output_handler)
-    cleanup()
-
-    agent("test")
-    assert not called
 
 
 def test_retry_on_error_use_case():

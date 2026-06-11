@@ -1,5 +1,7 @@
 """Tests for middleware-initiated interrupts on ExecuteToolStage."""
 
+from dataclasses import replace
+
 import pytest
 
 import strands
@@ -181,8 +183,6 @@ def test_middleware_interrupt_id_is_deterministic(agent):
 
 def test_middleware_interrupt_yields_interrupt_event_on_stream(calculator_tool):
     """When middleware interrupts, a ToolInterruptEvent is visible on the stream."""
-    from strands._async import run_async
-    from strands.types._events import ToolInterruptEvent
 
     tool_use_msg = {
         "role": "assistant",
@@ -220,7 +220,6 @@ def test_middleware_interrupt_yields_interrupt_event_on_stream(calculator_tool):
 
 def test_context_replace_preserves_interrupt(calculator_tool):
     """dataclasses.replace() on ExecuteToolContext preserves interrupt functionality."""
-    from dataclasses import replace
 
     tool_use_msg = {
         "role": "assistant",
@@ -257,8 +256,6 @@ def test_context_replace_preserves_interrupt(calculator_tool):
 
 def test_middleware_interrupt_denial_returns_error_result(calculator_tool):
     """Middleware can deny execution based on interrupt response."""
-    from strands._middleware.stages import ExecuteToolResult
-    from strands._middleware.types import _MiddlewareResult
 
     tool_use_msg = {
         "role": "assistant",
@@ -301,8 +298,6 @@ def test_middleware_interrupt_denial_returns_error_result(calculator_tool):
 
 def test_middleware_interrupt_approval_executes_tool(calculator_tool):
     """When middleware receives approval, tool actually executes."""
-    from strands._middleware.types import _MiddlewareResult
-    from strands._middleware.stages import ExecuteToolResult
 
     tool_use_msg = {
         "role": "assistant",
@@ -353,7 +348,6 @@ def test_middleware_interrupt_approval_executes_tool(calculator_tool):
 @pytest.mark.asyncio
 async def test_middleware_interrupt_yields_event_on_stream(calculator_tool):
     """Iterating the agent stream produces an interrupt-related stop event."""
-    from strands._async import run_async
 
     tool_use_msg = {
         "role": "assistant",

@@ -23,6 +23,10 @@ async def passthrough(context, next_fn):
         yield event
 ```
 
+## No removal / cleanup function
+
+TypeScript `addMiddleware` returns a cleanup function that removes the handler. The Python `add_middleware` returns `None` — once registered, middleware cannot be removed. This matches the Python hook system (`add_hook` / `add_callback`) which also does not support removal.
+
 ## Interrupt source ID format
 
 TypeScript uses `{idPrefix}:{params.name}` as the interrupt ID (plain name string):

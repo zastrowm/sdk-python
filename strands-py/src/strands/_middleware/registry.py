@@ -19,6 +19,7 @@ from .types import (
     MiddlewareOutputHandler,
     MiddlewareOutputPhase,
     MiddlewareStage,
+    MiddlewareWrapPhase,
     _MiddlewareResult,
 )
 
@@ -41,18 +42,34 @@ class MiddlewareRegistry:
     def __init__(self) -> None:
         self._handlers: dict[MiddlewareStage[Any, Any, Any], list[_TaggedHandler]] = {}
 
-    def add(self, stage: MiddlewareStage[Any, Any, Any], handler: MiddlewareHandler) -> None:
-        """Register a Wrap phase handler for the given stage.
+    def add_middleware(
+        self,
+        stage_or_phase: (
+            MiddlewareStage[Any, Any, Any]
+            | MiddlewareInputPhase[Any, Any, Any]
+            | MiddlewareWrapPhase[Any, Any, Any]
+            | MiddlewareOutputPhase[Any, Any, Any]
+        ),
+        handler: Any,
+    ) -> None:
+        """Register middleware for a stage or phase sub-token.
 
-        Handlers are stored in registration order within their phase.
+        Dispatches to the appropriate internal method based on the token type.
         """
+        if isinstance(stage_or_phase, MiddlewareInputPhase):
+            self._add_input(stage_or_phase, handler)
+        elif isinstance(stage_or_phase, MiddlewareOutputPhase):
+            self._add_output(stage_or_phase, handler)
+        elif isinstance(stage_or_phase, MiddlewareWrapPhase):
+            self._add_wrap(stage_or_phase._stage, handler)
+        else:
+            self._add_wrap(stage_or_phase, handler)
+
+    def _add_wrap(self, stage: MiddlewareStage[Any, Any, Any], handler: MiddlewareHandler) -> None:
         handlers = self._handlers.setdefault(stage, [])
         handlers.append(_TaggedHandler(phase="wrap", handler=handler))
 
-    def add_input(
-        self, phase: MiddlewareInputPhase[Any, Any, Any], handler: MiddlewareInputHandler
-    ) -> MiddlewareHandler:
-        """Register an Input phase handler. Returns the adapted handler for removal."""
+    def _add_input(self, phase: MiddlewareInputPhase[Any, Any, Any], handler: MiddlewareInputHandler) -> None:
         stage = phase._stage
 
         async def adapted(context: Any, next_fn: MiddlewareNext) -> AsyncGenerator[Any, None]:
@@ -64,12 +81,8 @@ class MiddlewareRegistry:
 
         handlers = self._handlers.setdefault(stage, [])
         handlers.append(_TaggedHandler(phase="input", handler=adapted))
-        return adapted
 
-    def add_output(
-        self, phase: MiddlewareOutputPhase[Any, Any, Any], handler: MiddlewareOutputHandler
-    ) -> MiddlewareHandler:
-        """Register an Output phase handler. Returns the adapted handler for removal."""
+    def _add_output(self, phase: MiddlewareOutputPhase[Any, Any, Any], handler: MiddlewareOutputHandler) -> None:
         stage = phase._stage
 
         async def adapted(context: Any, next_fn: MiddlewareNext) -> AsyncGenerator[Any, None]:
@@ -84,17 +97,6 @@ class MiddlewareRegistry:
 
         handlers = self._handlers.setdefault(stage, [])
         handlers.append(_TaggedHandler(phase="output", handler=adapted))
-        return adapted
-
-    def remove(self, stage: MiddlewareStage[Any, Any, Any], handler: MiddlewareHandler) -> None:
-        """Remove the first occurrence of a handler from a stage (by reference equality)."""
-        handlers = self._handlers.get(stage)
-        if not handlers:
-            return
-        for i, tagged in enumerate(handlers):
-            if tagged.handler is handler:
-                handlers.pop(i)
-                return
 
     def compose(self, stage: MiddlewareStage[Any, Any, Any], terminal: MiddlewareNext) -> MiddlewareNext:
         """Compose all registered handlers for a stage into a single chain.
