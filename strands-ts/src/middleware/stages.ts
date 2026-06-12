@@ -82,7 +82,7 @@ export interface InvokeModelContext {
   readonly toolSpecs: readonly ToolSpec[]
   /** Controls how the model selects tools. */
   readonly toolChoice?: ToolChoice
-  /** Per-invocation state shared across hooks and tools. */
+  /** Per-invocation state. Shared by reference — mutations are visible to hooks, tools, and AgentResult. */
   readonly invocationState: InvocationState
 }
 
@@ -106,7 +106,7 @@ export interface ExecuteToolContext extends MiddlewareInterruptible {
   readonly tool: Tool | undefined
   /** The tool use request (name, toolUseId, input). */
   readonly toolUse: ToolUseData
-  /** Per-invocation state shared across hooks and tools. Shared by reference — mutations are intentionally visible to subsequent hooks, tools, and the AgentResult. */
+  /** Per-invocation state. Shared by reference — mutations are visible to hooks, tools, and AgentResult. */
   readonly invocationState: InvocationState
 }
 

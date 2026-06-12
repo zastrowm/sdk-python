@@ -1925,7 +1925,7 @@ export class Agent implements LocalAgent, InvokableAgent {
       ...(this.systemPrompt !== undefined && { systemPrompt: cloneSystemPrompt(this.systemPrompt) }),
       toolSpecs: deepCopy(this._toolRegistry.list().map((tool) => tool.toolSpec)) as unknown as ToolSpec[],
       ...(toolChoice !== undefined && { toolChoice: deepCopy(toolChoice) as unknown as ToolChoice }),
-      invocationState: { ...invocationState },
+      invocationState,
     }
 
     // Snapshot model state before middleware runs so concurrent mutations don't leak in.

@@ -260,37 +260,18 @@ describe('InvokeModelStage copy-on-input isolation', () => {
   })
 
   describe('invocationState', () => {
-    it('invocationState is a shallow copy', async () => {
+    it('invocationState is shared by reference — mutations are visible on the result', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
       const agent = new Agent({ model, printer: false })
 
-      let receivedState: unknown
-
       agent.addMiddleware(InvokeModelStage, async function* (context, next) {
-        receivedState = context.invocationState
+        ;(context.invocationState as Record<string, unknown>)['middlewareTouched'] = true
         return yield* next(context)
       })
 
-      await agent.invoke('Hello', { invocationState: { myKey: 'myValue' } })
+      const result = await agent.invoke('Hello', { invocationState: { myKey: 'myValue' } })
 
-      expect(receivedState).toEqual({ myKey: 'myValue' })
-    })
-
-    it('adding keys to context.invocationState does not pollute the original', async () => {
-      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
-      const agent = new Agent({ model, printer: false })
-
-      const originalState = { myKey: 'myValue' }
-
-      agent.addMiddleware(InvokeModelStage, async function* (context, next) {
-        ;(context.invocationState as Record<string, unknown>)['injected'] = true
-        return yield* next(context)
-      })
-
-      await agent.invoke('Hello', { invocationState: originalState })
-
-      expect(originalState).toEqual({ myKey: 'myValue' })
-      expect('injected' in originalState).toBe(false)
+      expect(result.invocationState).toEqual({ myKey: 'myValue', middlewareTouched: true })
     })
   })
 
