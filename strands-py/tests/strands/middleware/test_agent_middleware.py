@@ -60,7 +60,9 @@ def test_wrap_handler_receives_invoke_model_context(agent):
     ctx = received_context[0]
     assert ctx.agent is agent
     assert isinstance(ctx.messages, list)
+    assert ctx.system_prompt is not None or ctx.system_prompt is None  # field exists
     assert isinstance(ctx.tool_specs, list)
+    assert hasattr(ctx, "tool_choice")
     assert isinstance(ctx.invocation_state, dict)
 
 
@@ -108,6 +110,25 @@ def test_wrap_context_transformation_tool_specs(agent):
     agent("test")
 
     assert received_tool_specs == []
+
+
+def test_context_modification_does_not_mutate_agent_state():
+    """Context fields are defensive copies — middleware mutations don't affect agent state."""
+    model = MockedModelProvider([{"role": "assistant", "content": [{"text": "ok"}]}])
+    agent = Agent(model=model, callback_handler=None, system_prompt="original")
+
+    async def mutating_middleware(context, next_fn):
+        context.messages.append({"role": "user", "content": [{"text": "injected"}]})
+        async for event in next_fn(context):
+            yield event
+
+    agent._middleware_registry.add_middleware(InvokeModelStage, mutating_middleware)
+    agent("test")
+
+    # Agent's messages should not contain the injected message from middleware mutation
+    # (it will have the user "test" message and the model response, but not "injected" before "test")
+    user_texts = [m["content"][0].get("text") for m in agent.messages if m.get("role") == "user"]
+    assert "injected" not in user_texts
 
 
 def test_wrap_short_circuit_skips_model_call(agent):
@@ -391,7 +412,7 @@ def test_short_circuit_model_not_called(model):
 
 
 def test_hooks_fire_when_middleware_short_circuits(model):
-    """AfterModelCallEvent fires even when middleware short-circuits (never calls next)."""
+    """Both BeforeModelCallEvent and AfterModelCallEvent fire even when middleware short-circuits."""
 
     hook_provider = MockHookProvider(event_types="all")
     agent = Agent(model=model, callback_handler=None, hooks=[hook_provider])
@@ -409,6 +430,7 @@ def test_hooks_fire_when_middleware_short_circuits(model):
 
     _, events = hook_provider.get_events()
     event_types = [type(e) for e in events]
+    assert BeforeModelCallEvent in event_types
     assert AfterModelCallEvent in event_types
 
 
