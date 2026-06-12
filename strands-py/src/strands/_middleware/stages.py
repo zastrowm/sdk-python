@@ -9,7 +9,8 @@ from .types import MiddlewareStage
 
 if TYPE_CHECKING:
     from ..agent.agent import Agent
-    from ..types.content import Messages, SystemPrompt
+    from ..types.content import Message, Messages, SystemPrompt
+    from ..types.event_loop import Metrics, Usage
     from ..types.streaming import StopReason
     from ..types.tools import ToolSpec
 
@@ -36,9 +37,9 @@ class InvokeModelResult:
     """Result from InvokeModelStage middleware."""
 
     stop_reason: StopReason
-    message: dict[str, Any]
-    usage: dict[str, Any]
-    metrics: dict[str, Any]
+    message: Message
+    usage: Usage
+    metrics: Metrics
 
 
 InvokeModelStage: MiddlewareStage[InvokeModelContext, InvokeModelResult, Any] = MiddlewareStage(name="invokeModel")

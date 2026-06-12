@@ -555,7 +555,11 @@ async def _handle_model_execution(
                 else:
                     yield event
 
-            assert model_result is not None
+            if model_result is None:
+                raise RuntimeError(
+                    "Middleware chain did not produce a MiddlewareResult. "
+                    "Ensure all middleware forwards the result from next()."
+                )
             stop_reason = model_result.stop_reason
             message = model_result.message
             usage = model_result.usage
@@ -673,7 +677,7 @@ def _make_invoke_model_terminal(
                 ):
                     yield event
 
-                stop_reason, message, usage, metrics = event["stop"]  # type: ignore[possibly-undefined]
+                stop_reason, message, usage, metrics = event["stop"]
                 tracer.end_model_invoke_span(model_invoke_span, message, usage, metrics, stop_reason)
                 yield MiddlewareResult(InvokeModelResult(
                     stop_reason=stop_reason,

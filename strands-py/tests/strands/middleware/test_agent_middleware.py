@@ -60,7 +60,7 @@ def test_wrap_handler_receives_invoke_model_context(agent):
     ctx = received_context[0]
     assert ctx.agent is agent
     assert isinstance(ctx.messages, list)
-    assert ctx.system_prompt is not None or ctx.system_prompt is None  # field exists
+    assert hasattr(ctx, "system_prompt")
     assert isinstance(ctx.tool_specs, list)
     assert hasattr(ctx, "tool_choice")
     assert isinstance(ctx.invocation_state, dict)
