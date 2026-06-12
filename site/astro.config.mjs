@@ -27,6 +27,9 @@ export default defineConfig({
   base: process.env.ASTRO_BASE_PATH || '/',
   vite: {
     plugins: [sdkSetupPlugin(), watchNavigationPlugin()],
+    resolve: {
+      preserveSymlinks: true,
+    },
     // TODO once we separate out CMS build from TS verification, fix this
     // https://github.com/withastro/astro/issues/14117
 		ssr: {
@@ -59,9 +62,9 @@ export default defineConfig({
         { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://strandsagents.com/og-image.png' } },
       ],
       markdown: {
-        // API docs are symlinked from .build/api-docs; processedDirs ensures Starlight's
+        // Content symlinked from outside site/; processedDirs ensures Starlight's
         // rehype plugins (e.g. heading anchor links) run on the real resolved paths.
-        processedDirs: [path.resolve('.build/api-docs')],
+        processedDirs: [path.resolve('.build/api-docs'), path.resolve('../docs')],
       },
       title: 'Strands Agents SDK',
       description: 'A model-driven approach to building AI agents in just a few lines of code.',
