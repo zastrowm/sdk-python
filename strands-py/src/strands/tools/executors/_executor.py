@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 from opentelemetry import trace as trace_api
 
 from ..._middleware.stages import ExecuteToolContext, ExecuteToolResult, ExecuteToolStage
-from ..._middleware.types import _MiddlewareResult
+from ..._middleware.types import MiddlewareResult
 from ...experimental.hooks.events import BidiAfterToolCallEvent, BidiBeforeToolCallEvent
 from ...hooks import AfterToolCallEvent, BeforeToolCallEvent
 from ...telemetry.metrics import Trace
@@ -240,12 +240,17 @@ class ToolExecutor(abc.ABC):
                     middleware_context,
                     _make_execute_tool_terminal(agent, tool_use, kwargs),
                 ):
-                    if isinstance(event, _MiddlewareResult):
+                    if isinstance(event, MiddlewareResult):
                         middleware_result = event.value
                     else:
                         yield event
 
-                # ToolInterruptEvent short-circuits: terminal returns early with no result
+                # Tool-originated interrupts (ToolInterruptEvent from tool.stream()) are yielded
+                # as events through the middleware chain — middleware can observe them. The terminal
+                # returns without a MiddlewareResult to signal the short-circuit. This differs from
+                # middleware-initiated interrupts (context.interrupt()) which raise InterruptException
+                # and are caught below, because middleware interrupts halt immediately rather than
+                # flowing through the chain as events.
                 if middleware_result is None:
                     return
 
@@ -396,7 +401,7 @@ def _make_execute_tool_terminal(
                 for interrupt in event.interrupts:
                     agent._interrupt_state.interrupts.setdefault(interrupt.id, interrupt)
                 yield event
-                # No _MiddlewareResult yielded — signals interrupt short-circuit
+                # No MiddlewareResult yielded — signals interrupt short-circuit
                 return
 
             if isinstance(event, ToolResultEvent):
@@ -410,6 +415,6 @@ def _make_execute_tool_terminal(
                 yield ToolStreamEvent(tool_use, event)
 
         result = cast(ToolResult, event)  # type: ignore[possibly-undefined]
-        yield _MiddlewareResult(ExecuteToolResult(tool_result=result, exception=exception))
+        yield MiddlewareResult(ExecuteToolResult(tool_result=result, exception=exception))
 
     return terminal

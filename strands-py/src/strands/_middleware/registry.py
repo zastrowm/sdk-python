@@ -20,7 +20,7 @@ from .types import (
     MiddlewareOutputPhase,
     MiddlewareStage,
     MiddlewareWrapPhase,
-    _MiddlewareResult,
+    MiddlewareResult,
 )
 
 # Compose layering: input (outermost) → output → wrap (innermost, closest to terminal).
@@ -87,11 +87,11 @@ class MiddlewareRegistry:
 
         async def adapted(context: Any, next_fn: MiddlewareNext) -> AsyncGenerator[Any, None]:
             async for event in next_fn(context):
-                if isinstance(event, _MiddlewareResult):
+                if isinstance(event, MiddlewareResult):
                     transformed = handler(event.value)
                     if inspect.isawaitable(transformed):
                         transformed = await transformed
-                    yield _MiddlewareResult(transformed)
+                    yield MiddlewareResult(transformed)
                 else:
                     yield event
 
@@ -151,8 +151,8 @@ class MiddlewareRegistry:
     ) -> AsyncGenerator[Any, None]:
         """Compose and invoke the middleware chain for a stage.
 
-        Yields all events from the chain including the _MiddlewareResult sentinel.
-        The caller is responsible for stripping _MiddlewareResult from the stream.
+        Yields all events from the chain including the MiddlewareResult sentinel.
+        The caller is responsible for stripping MiddlewareResult from the stream.
         """
         chain = self.compose(stage, terminal)
         gen = chain(context)

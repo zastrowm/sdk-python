@@ -7,7 +7,7 @@ import pytest
 import strands
 from strands import Agent, ExecuteToolStage
 from strands._middleware.stages import ExecuteToolContext, ExecuteToolResult, MiddlewareInterruptResult
-from strands._middleware.types import _MiddlewareResult
+from strands._middleware.types import MiddlewareResult
 from tests.fixtures.mocked_model_provider import MockedModelProvider
 
 
@@ -271,7 +271,7 @@ def test_middleware_interrupt_denial_returns_error_result(calculator_tool):
         nonlocal tool_executed
         r = context.interrupt("approve", reason="Allow?")
         if r.response != "yes":
-            yield _MiddlewareResult(
+            yield MiddlewareResult(
                 ExecuteToolResult(
                     tool_result={
                         "toolUseId": context.tool_use["toolUseId"],
@@ -321,7 +321,7 @@ def test_middleware_interrupt_approval_executes_tool(calculator_tool):
     async def approval_gate(context, next_fn):
         r = context.interrupt("approve", reason="Allow?")
         if r.response != "yes":
-            yield _MiddlewareResult(
+            yield MiddlewareResult(
                 ExecuteToolResult(
                     tool_result={
                         "toolUseId": context.tool_use["toolUseId"],

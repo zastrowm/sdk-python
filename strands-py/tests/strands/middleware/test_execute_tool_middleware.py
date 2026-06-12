@@ -7,7 +7,7 @@ import pytest
 import strands
 from strands import Agent, ExecuteToolStage, Plugin
 from strands._middleware.stages import ExecuteToolContext, ExecuteToolResult
-from strands._middleware.types import _MiddlewareResult
+from strands._middleware.types import MiddlewareResult
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 from tests.fixtures.mock_hook_provider import MockHookProvider
 from tests.fixtures.mocked_model_provider import MockedModelProvider
@@ -75,7 +75,7 @@ def test_wrap_short_circuit_with_cached_result(agent):
     """Middleware can short-circuit by returning a cached tool result without calling next."""
 
     async def mock_tool(context, next_fn):
-        yield _MiddlewareResult(
+        yield MiddlewareResult(
             ExecuteToolResult(
                 tool_result={
                     "toolUseId": context.tool_use["toolUseId"],
@@ -238,7 +238,7 @@ def test_short_circuit_tool_not_called(calculator_tool):
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None)
 
     async def cached(context, next_fn):
-        yield _MiddlewareResult(
+        yield MiddlewareResult(
             ExecuteToolResult(
                 tool_result={"toolUseId": context.tool_use["toolUseId"], "status": "success", "content": [{"text": "2"}]}
             )
@@ -341,7 +341,7 @@ def test_hooks_fire_when_middleware_short_circuits(model, calculator_tool):
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None, hooks=[hook_provider])
 
     async def cached(context, next_fn):
-        yield _MiddlewareResult(
+        yield MiddlewareResult(
             ExecuteToolResult(
                 tool_result={"toolUseId": context.tool_use["toolUseId"], "status": "success", "content": [{"text": "4"}]}
             )
@@ -362,7 +362,7 @@ def test_after_tool_call_receives_middleware_result_on_short_circuit(model, calc
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None, hooks=[hook_provider])
 
     async def cached(context, next_fn):
-        yield _MiddlewareResult(
+        yield MiddlewareResult(
             ExecuteToolResult(
                 tool_result={
                     "toolUseId": context.tool_use["toolUseId"],
@@ -406,10 +406,10 @@ def test_caching_plugin_use_case():
         async def _middleware(self, context, next_fn):
             key = f"{context.tool_use['name']}:{context.tool_use['input']}"
             if key in self._cache:
-                yield _MiddlewareResult(ExecuteToolResult(tool_result=self._cache[key]))
+                yield MiddlewareResult(ExecuteToolResult(tool_result=self._cache[key]))
                 return
             async for event in next_fn(context):
-                if isinstance(event, _MiddlewareResult):
+                if isinstance(event, MiddlewareResult):
                     self._cache[key] = event.value.tool_result
                 yield event
 
@@ -448,7 +448,7 @@ def test_short_circuit_result_appears_in_conversation(calculator_tool):
     agent = Agent(model=model, tools=[calculator_tool], callback_handler=None)
 
     async def cached(context, next_fn):
-        yield _MiddlewareResult(
+        yield MiddlewareResult(
             ExecuteToolResult(
                 tool_result={
                     "toolUseId": context.tool_use["toolUseId"],

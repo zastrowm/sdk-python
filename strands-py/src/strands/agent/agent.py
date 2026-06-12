@@ -84,7 +84,7 @@ from ..tools.structured_output._structured_output_context import StructuredOutpu
 from ..tools.watcher import ToolWatcher
 from ..types._events import AgentResultEvent, EventLoopStopEvent, InitEventLoopEvent, ModelStreamChunkEvent, TypedEvent
 from ..types.agent import AgentInput, ConcurrentInvocationMode, Limits
-from ..types.content import ContentBlock, Message, Messages, SystemContentBlock
+from ..types.content import ContentBlock, Message, Messages, SystemContentBlock, split_system_prompt
 from ..types.exceptions import ConcurrencyException, ContextWindowOverflowException
 from ..types.tools import AgentTool
 from ..types.traces import AttributeValue
@@ -283,7 +283,7 @@ class Agent(AgentBase):
         self.model = BedrockModel() if not model else BedrockModel(model_id=model) if isinstance(model, str) else model
         self.messages = messages if messages is not None else []
         # initializing self._system_prompt for backwards compatibility
-        self._system_prompt, self._system_prompt_content = self._initialize_system_prompt(system_prompt)
+        self._system_prompt, self._system_prompt_content = split_system_prompt(system_prompt)
         self._default_structured_output_model = structured_output_model
         self._structured_output_prompt = structured_output_prompt
         self.agent_id = _identifier.validate(agent_id or _DEFAULT_AGENT_ID, _identifier.Identifier.AGENT)
@@ -565,7 +565,7 @@ class Agent(AgentBase):
                   - list[SystemContentBlock]: Content blocks with features like caching
                   - None: Clear the system prompt
         """
-        self._system_prompt, self._system_prompt_content = self._initialize_system_prompt(value)
+        self._system_prompt, self._system_prompt_content = split_system_prompt(value)
 
     @property
     def system_prompt_content(self) -> list[SystemContentBlock] | None:
@@ -1416,19 +1416,6 @@ class Agent(AgentBase):
             value = limits[key]
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise TypeError(f"limits[{key!r}] must be a positive int, got {value!r}")
-
-    @staticmethod
-    def _initialize_system_prompt(
-        system_prompt: str | list[SystemContentBlock] | None,
-    ) -> tuple[str | None, list[SystemContentBlock] | None]:
-        """Initialize system prompt fields from constructor input.
-
-        Delegates to split_system_prompt() which maps a single system_prompt value
-        into both string and content block representations for backwards compatibility.
-        """
-        from ..types.content import split_system_prompt
-
-        return split_system_prompt(system_prompt)
 
     async def _append_messages(self, *messages: Message) -> None:
         """Appends messages to history and invoke the callbacks for the MessageAddedEvent."""

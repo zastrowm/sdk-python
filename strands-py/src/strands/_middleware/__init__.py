@@ -23,7 +23,7 @@ from .types import (
     MiddlewareOutputPhase,
     MiddlewareStage,
     MiddlewareWrapPhase,
-    _MiddlewareResult,
+    MiddlewareResult,
 )
 
 __all__ = [
@@ -42,5 +42,5 @@ __all__ = [
     "MiddlewareRegistry",
     "MiddlewareStage",
     "MiddlewareWrapPhase",
-    "_MiddlewareResult",
+    "MiddlewareResult",
 ]

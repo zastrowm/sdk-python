@@ -115,8 +115,8 @@ class SystemContentBlock(TypedDict, total=False):
     text: str
 
 
-# Union type matching TypeScript's `SystemPrompt = string | SystemContentBlock[]`
 SystemPrompt = str | list[SystemContentBlock] | None
+"""System prompt as either a plain string or structured content blocks (e.g., with cache points)."""
 
 
 def split_system_prompt(system_prompt: SystemPrompt) -> tuple[str | None, list[SystemContentBlock] | None]:

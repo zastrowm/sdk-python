@@ -16,7 +16,7 @@ TEvent = TypeVar("TEvent")
 
 
 @dataclass
-class _MiddlewareResult(Generic[TResult]):
+class MiddlewareResult(Generic[TResult]):
     """Internal sentinel yielded as the last item to communicate the result up the chain.
 
     Not part of the public API. Integration sites strip this from the event stream.
@@ -92,13 +92,13 @@ class MiddlewareStage(Generic[TContext, TResult, TEvent]):
 MiddlewareNext = Callable[[Any], AsyncGenerator[Any, None]]
 """Type alias for the `next` function passed to Wrap handlers.
 
-Signature: (context) -> AsyncGenerator[event | _MiddlewareResult, None]
+Signature: (context) -> AsyncGenerator[event | MiddlewareResult, None]
 """
 
 MiddlewareHandler = Callable[[Any, MiddlewareNext], AsyncGenerator[Any, None]]
 """Type alias for Wrap phase handlers.
 
-Signature: async def handler(context, next_fn) -> AsyncGenerator[event | _MiddlewareResult, None]
+Signature: async def handler(context, next_fn) -> AsyncGenerator[event | MiddlewareResult, None]
 """
 
 MiddlewareInputHandler = Callable[[Any], Union[Any, Awaitable[Any]]]

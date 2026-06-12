@@ -45,7 +45,7 @@ from ..types.exceptions import (
 from ..types.streaming import StopReason
 from ..types.tools import ToolResult, ToolUse
 from .._middleware.stages import InvokeModelContext, InvokeModelResult, InvokeModelStage
-from .._middleware.types import _MiddlewareResult
+from .._middleware.types import MiddlewareResult
 from ._recover_message_on_max_tokens_reached import recover_message_on_max_tokens_reached
 from ._retry import ModelRetryStrategy
 from .streaming import stream_messages
@@ -548,7 +548,7 @@ async def _handle_model_execution(
                 middleware_context,
                 _make_invoke_model_terminal(agent, cycle_span, tracer),
             ):
-                if isinstance(event, _MiddlewareResult):
+                if isinstance(event, MiddlewareResult):
                     model_result = event.value
                 else:
                     yield event
@@ -680,7 +680,7 @@ def _make_invoke_model_terminal(
 
                 stop_reason, message, usage, metrics = event["stop"]  # type: ignore[possibly-undefined]
                 tracer.end_model_invoke_span(model_invoke_span, message, usage, metrics, stop_reason)
-                yield _MiddlewareResult(InvokeModelResult(
+                yield MiddlewareResult(InvokeModelResult(
                     stop_reason=stop_reason,
                     message=message,
                     usage=usage,

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from strands._middleware.registry import MiddlewareRegistry
-from strands._middleware.types import MiddlewareStage, _MiddlewareResult
+from strands._middleware.types import MiddlewareStage, MiddlewareResult
 from strands.interrupt import Interrupt, InterruptException
 
 
@@ -21,11 +21,11 @@ def stage():
 
 
 async def _collect(gen: AsyncGenerator[Any, None]) -> tuple[list[Any], Any]:
-    """Iterate a middleware chain, separating events from the _MiddlewareResult."""
+    """Iterate a middleware chain, separating events from the MiddlewareResult."""
     events: list[Any] = []
     result = None
     async for item in gen:
-        if isinstance(item, _MiddlewareResult):
+        if isinstance(item, MiddlewareResult):
             result = item.value
         else:
             events.append(item)
@@ -33,12 +33,12 @@ async def _collect(gen: AsyncGenerator[Any, None]) -> tuple[list[Any], Any]:
 
 
 def _make_terminal(*events: Any, result: Any = "terminal_result"):
-    """Create a terminal function that yields events then a _MiddlewareResult."""
+    """Create a terminal function that yields events then a MiddlewareResult."""
 
     async def terminal(context: Any) -> AsyncGenerator[Any, None]:
         for event in events:
             yield event
-        yield _MiddlewareResult(result)
+        yield MiddlewareResult(result)
 
     return terminal
 
@@ -83,7 +83,7 @@ async def test_wrap_context_modification_reaches_terminal(registry, stage):
 
     async def terminal(context):
         received_context.update(context)
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     async def modifier(context, next_fn):
         async for event in next_fn({**context, "added": True}):
@@ -101,11 +101,11 @@ async def test_wrap_short_circuit_skips_terminal(registry, stage):
     async def terminal(context):
         nonlocal terminal_called
         terminal_called = True
-        yield _MiddlewareResult("should not reach")
+        yield MiddlewareResult("should not reach")
 
     async def short_circuit(context, next_fn):
         yield "cached_event"
-        yield _MiddlewareResult("cached_result")
+        yield MiddlewareResult("cached_result")
 
     registry.add_middleware(stage, short_circuit)
     events, result = await _collect(registry.invoke(stage, {}, terminal))
@@ -118,8 +118,8 @@ async def test_wrap_short_circuit_skips_terminal(registry, stage):
 async def test_wrap_result_transformation(registry, stage):
     async def transformer(context, next_fn):
         async for event in next_fn(context):
-            if isinstance(event, _MiddlewareResult):
-                yield _MiddlewareResult(event.value.upper())
+            if isinstance(event, MiddlewareResult):
+                yield MiddlewareResult(event.value.upper())
             else:
                 yield event
 
@@ -133,7 +133,7 @@ async def test_wrap_result_transformation(registry, stage):
 async def test_wrap_event_filtering(registry, stage):
     async def filter_middleware(context, next_fn):
         async for event in next_fn(context):
-            if isinstance(event, _MiddlewareResult) or event != "skip_me":
+            if isinstance(event, MiddlewareResult) or event != "skip_me":
                 yield event
 
     registry.add_middleware(stage, filter_middleware)
@@ -149,12 +149,12 @@ async def test_wrap_event_injection(registry, stage):
         yield "before"
         result_value = None
         async for event in next_fn(context):
-            if isinstance(event, _MiddlewareResult):
+            if isinstance(event, MiddlewareResult):
                 result_value = event.value
             else:
                 yield event
         yield "after"
-        yield _MiddlewareResult(result_value)
+        yield MiddlewareResult(result_value)
 
     registry.add_middleware(stage, before_after_injector)
     terminal = _make_terminal("inner", result="done")
@@ -173,7 +173,7 @@ async def test_wrap_retry_calls_next_multiple_times(registry, stage):
         if call_count < 3:
             raise ValueError("not yet")
         yield "success"
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     async def retry_middleware(context, next_fn):
         for attempt in range(3):
@@ -224,13 +224,13 @@ async def test_multiple_handlers_all_see_events(registry, stage):
 
     async def handler_a(context, next_fn):
         async for event in next_fn(context):
-            if not isinstance(event, _MiddlewareResult):
+            if not isinstance(event, MiddlewareResult):
                 seen_by["a"].append(event)
             yield event
 
     async def handler_b(context, next_fn):
         async for event in next_fn(context):
-            if not isinstance(event, _MiddlewareResult):
+            if not isinstance(event, MiddlewareResult):
                 seen_by["b"].append(event)
             yield event
 
@@ -251,7 +251,7 @@ async def test_input_transforms_context(registry, stage):
 
     async def terminal(context):
         received_context.update(context)
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     def input_handler(context):
         return {**context, "injected": True}
@@ -267,7 +267,7 @@ async def test_input_async_handler(registry, stage):
 
     async def terminal(context):
         received_context.update(context)
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     async def async_input(context):
         return {**context, "async": True}
@@ -283,7 +283,7 @@ async def test_input_runs_before_wrap(registry, stage):
 
     async def terminal(context):
         order.append(f"terminal(injected={context.get('injected')})")
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     def input_handler(context):
         order.append("input")
@@ -307,7 +307,7 @@ async def test_input_multiple_compose_in_order(registry, stage):
 
     async def terminal(context):
         received_context.update(context)
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     def first_input(context):
         return {**context, "first": True}
@@ -465,7 +465,7 @@ async def test_chained_context_modification_across_wrap_handlers(registry, stage
 
     async def terminal(context):
         received_context.update(context)
-        yield _MiddlewareResult("done")
+        yield MiddlewareResult("done")
 
     async def add_a(context, next_fn):
         async for event in next_fn({**context, "a": True}):

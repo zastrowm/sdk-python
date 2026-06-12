@@ -7,7 +7,7 @@ import pytest
 
 from strands import Agent, InvokeModelStage, Plugin
 from strands._middleware.stages import InvokeModelContext, InvokeModelResult
-from strands._middleware.types import _MiddlewareResult
+from strands._middleware.types import MiddlewareResult
 from strands.hooks import AfterModelCallEvent, BeforeModelCallEvent
 from strands.types._events import ModelStopReason
 from strands.types.streaming import Metrics, Usage
@@ -121,7 +121,7 @@ def test_wrap_short_circuit_skips_model_call(agent):
             usage=Usage(inputTokens=0, outputTokens=0, totalTokens=0),
             metrics=Metrics(latencyMs=0),
         )
-        yield _MiddlewareResult(
+        yield MiddlewareResult(
             InvokeModelResult(
                 stop_reason="end_turn",
                 message=cached_message,
@@ -383,7 +383,7 @@ def test_short_circuit_model_not_called(model):
     async def cached(context, next_fn):
         msg = {"role": "assistant", "content": [{"text": "Cached"}]}
         yield ModelStopReason("end_turn", msg, Usage(**usage), Metrics(**metrics))
-        yield _MiddlewareResult(InvokeModelResult("end_turn", msg, usage, metrics))
+        yield MiddlewareResult(InvokeModelResult("end_turn", msg, usage, metrics))
 
     agent.add_middleware(InvokeModelStage, cached)
     agent("test")
@@ -402,7 +402,7 @@ def test_hooks_fire_when_middleware_short_circuits(model):
     async def cached(context, next_fn):
         msg = {"role": "assistant", "content": [{"text": "Cached"}]}
         yield ModelStopReason("end_turn", msg, Usage(**usage), Metrics(**metrics))
-        yield _MiddlewareResult(InvokeModelResult("end_turn", msg, usage, metrics))
+        yield MiddlewareResult(InvokeModelResult("end_turn", msg, usage, metrics))
 
     agent.add_middleware(InvokeModelStage, cached)
     agent("test")
