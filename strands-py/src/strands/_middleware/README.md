@@ -32,6 +32,16 @@ The `_middleware/` package is not part of the public API. Internal consumers acc
 
 Context fields (`messages`, `system_prompt`, `tool_specs`, `tool_choice`) are deep-copied when building the middleware context. `invocation_state` is shared by reference. `model_state` is not on the context — the terminal reads it directly from the agent.
 
+## Context transformation
+
+Middleware creates modified contexts via `dataclasses.replace()`:
+```python
+from dataclasses import replace
+modified = replace(context, system_prompt="Injected")
+```
+
+When this goes public, we should add a typed `.replace()` method to context dataclasses for better discoverability and ergonomics (following `datetime.replace()` precedent).
+
 ## Generator cleanup
 
 Python's `compose()` uses `try/finally` with explicit `aclose()`. TypeScript relies on `yield*` delegation which calls `.return()` automatically. Both correctly clean up generators.
