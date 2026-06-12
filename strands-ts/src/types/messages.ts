@@ -1,5 +1,5 @@
 import type { JSONValue, Serialized, MaybeSerializedInput, JSONSerializable } from './json.js'
-import { omitUndefined } from './json.js'
+import { deepCopy, omitUndefined } from './json.js'
 import type { ImageBlockData, VideoBlockData, DocumentBlockData } from './media.js'
 import { ImageBlock, VideoBlock, DocumentBlock, encodeBase64, decodeBase64 } from './media.js'
 import type { CitationsBlockData } from './citations.js'
@@ -122,11 +122,7 @@ export class Message implements JSONSerializable<MessageData> {
    * Creates a deep copy of this Message (round-trips through serialization).
    */
   clone(): Message {
-    const data = this.toJSON()
-    if (data.metadata !== undefined) {
-      data.metadata = JSON.parse(JSON.stringify(data.metadata))
-    }
-    return Message.fromMessageData(data)
+    return Message.fromMessageData(deepCopy(this.toJSON()) as unknown as MessageData)
   }
 }
 
