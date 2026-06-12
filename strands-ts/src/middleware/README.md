@@ -62,9 +62,13 @@ Middleware is intended to supersede hooks. The Input/Output phases already cover
 
 We may revisit this later.
 
+## `AgentStreamContext` fields are shared by reference
+
+`args` and `options` on `AgentStreamContext` are not copied. They may contain non-cloneable objects (Zod schemas, AbortSignals) and shared mutable state (`invocationState`).
+
 ## `invocationState` is shared by reference
 
-`invocationState` is not copied. Tools and hooks write to it, and those mutations must appear on `AgentResult.invocationState`.
+`invocationState` is not copied. Tools and hooks write to it, and those mutations must appear on `AgentResult.invocationState`. The SDK should never write to it directly — the key space belongs to the caller.
 
 ## Middleware cannot resume interrupts
 

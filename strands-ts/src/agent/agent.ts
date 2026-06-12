@@ -1112,7 +1112,7 @@ export class Agent implements LocalAgent, InvokableAgent {
   ): AsyncGenerator<AgentStreamEvent, AgentResult, undefined> {
     const context: AgentStreamContext = {
       agent: this,
-      args: Array.isArray(args) ? ([...args] as typeof args) : args,
+      args,
       ...(options !== undefined && { options }),
       interrupt: createMiddlewareInterrupt(this._interruptState, 'middleware:agentStream'),
     }

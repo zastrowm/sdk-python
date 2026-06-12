@@ -476,9 +476,9 @@ describe('ExecuteToolStage copy-on-input isolation', () => {
   })
 })
 
-describe('AgentStreamStage copy-on-input isolation', () => {
+describe('AgentStreamStage shared references', () => {
   describe('args', () => {
-    it('array args are shallow-copied (not the same reference)', async () => {
+    it('args is shared by reference with the caller', async () => {
       const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
       const agent = new Agent({ model, printer: false })
 
@@ -492,40 +492,7 @@ describe('AgentStreamStage copy-on-input isolation', () => {
 
       await agent.invoke(inputMessages)
 
-      expect(receivedArgs).not.toBe(inputMessages)
-      expect(receivedArgs).toHaveLength(1)
-    })
-
-    it('string args pass through (immutable primitive)', async () => {
-      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
-      const agent = new Agent({ model, printer: false })
-
-      let receivedArgs: unknown
-
-      agent.addMiddleware(AgentStreamStage, async function* (context, next) {
-        receivedArgs = context.args
-        return yield* next(context)
-      })
-
-      await agent.invoke('Hello')
-
-      expect(receivedArgs).toBe('Hello')
-    })
-
-    it('pushing to the args array does not affect the caller array', async () => {
-      const model = new MockMessageModel().addTurn({ type: 'textBlock', text: 'Hi' })
-      const agent = new Agent({ model, printer: false })
-
-      const inputMessages = [new Message({ role: 'user', content: [new TextBlock('Hello')] })]
-
-      agent.addMiddleware(AgentStreamStage, async function* (context, next) {
-        ;(context.args as Message[]).push(new Message({ role: 'user', content: [new TextBlock('injected')] }))
-        return yield* next(context)
-      })
-
-      await agent.invoke(inputMessages)
-
-      expect(inputMessages).toHaveLength(1)
+      expect(receivedArgs).toBe(inputMessages)
     })
   })
 })

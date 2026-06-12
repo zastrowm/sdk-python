@@ -126,9 +126,9 @@ export interface ExecuteToolResult {
 export interface AgentStreamContext extends MiddlewareInterruptible {
   /** The agent instance (escape hatch for advanced use cases). */
   readonly agent: LocalAgent
-  /** The invocation arguments passed to agent.stream(). */
+  /** The invocation arguments passed to agent.stream(). Shared by reference. */
   readonly args: InvokeArgs
-  /** Per-invocation options (cancel signal, structured output, etc.). */
+  /** Per-invocation options (cancel signal, structured output, etc.). Shared by reference. */
   readonly options?: InvokeOptions
 }
 
