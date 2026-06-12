@@ -1417,29 +1417,18 @@ class Agent(AgentBase):
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise TypeError(f"limits[{key!r}] must be a positive int, got {value!r}")
 
+    @staticmethod
     def _initialize_system_prompt(
-        self, system_prompt: str | list[SystemContentBlock] | None
+        system_prompt: str | list[SystemContentBlock] | None,
     ) -> tuple[str | None, list[SystemContentBlock] | None]:
         """Initialize system prompt fields from constructor input.
 
-        Maintains backwards compatibility by keeping system_prompt as str when string input
-        provided, avoiding breaking existing consumers.
-
-        Maps system_prompt input to both string and content block representations:
-        - If string: system_prompt=string, _system_prompt_content=[{text: string}]
-        - If list with text elements: system_prompt=concatenated_text, _system_prompt_content=list
-        - If list without text elements: system_prompt=None, _system_prompt_content=list
-        - If None: system_prompt=None, _system_prompt_content=None
+        Delegates to split_system_prompt() which maps a single system_prompt value
+        into both string and content block representations for backwards compatibility.
         """
-        if isinstance(system_prompt, str):
-            return system_prompt, [{"text": system_prompt}]
-        elif isinstance(system_prompt, list):
-            # Concatenate all text elements for backwards compatibility, None if no text found
-            text_parts = [block["text"] for block in system_prompt if "text" in block]
-            system_prompt_str = "\n".join(text_parts) if text_parts else None
-            return system_prompt_str, system_prompt
-        else:
-            return None, None
+        from ..types.content import split_system_prompt
+
+        return split_system_prompt(system_prompt)
 
     async def _append_messages(self, *messages: Message) -> None:
         """Appends messages to history and invoke the callbacks for the MessageAddedEvent."""

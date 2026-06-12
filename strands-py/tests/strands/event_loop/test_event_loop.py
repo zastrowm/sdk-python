@@ -149,6 +149,7 @@ def agent(model, system_prompt, messages, tool_registry, thread_pool, hook_regis
     mock.config.cache_points = []
     mock.model = model
     mock.system_prompt = system_prompt
+    mock._system_prompt_content = None
     mock.messages = messages
     mock.tool_registry = tool_registry
     mock.thread_pool = thread_pool
@@ -562,7 +563,8 @@ async def test_event_loop_cycle_creates_spans(
     mock_tracer.start_model_invoke_span.assert_called_once()
     call_kwargs = mock_tracer.start_model_invoke_span.call_args[1]
     assert call_kwargs["system_prompt"] == agent.system_prompt
-    assert call_kwargs["system_prompt_content"] == agent._system_prompt_content
+    # Terminal synthesizes content blocks from the string system_prompt via split_system_prompt
+    assert call_kwargs["system_prompt_content"] == [{"text": agent.system_prompt}]
     mock_tracer.end_model_invoke_span.assert_called_once()
     mock_tracer.end_event_loop_cycle_span.assert_called_once()
 

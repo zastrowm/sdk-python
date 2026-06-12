@@ -526,12 +526,15 @@ async def _handle_model_execution(
             else:
                 tool_specs = agent.tool_registry.get_all_tool_specs()
 
-            # Build middleware context
+            # Build middleware context — use content blocks (authoritative) if available, else string
             middleware_context = InvokeModelContext(
                 agent=agent,
                 messages=agent.messages,
-                system_prompt=agent.system_prompt,
-                system_prompt_content=agent._system_prompt_content,
+                system_prompt=(
+                    agent._system_prompt_content
+                    if agent._system_prompt_content is not None
+                    else agent.system_prompt
+                ),
                 tool_specs=tool_specs,
                 tool_choice=structured_output_context.tool_choice,
                 invocation_state=invocation_state,
@@ -646,23 +649,28 @@ def _make_invoke_model_terminal(
     """
 
     async def terminal(ctx: InvokeModelContext) -> AsyncGenerator[Any, None]:
+        from ..types.content import split_system_prompt
+
+        # Decompose union system_prompt into the two-param form needed by stream_messages/model
+        system_prompt_str, system_prompt_content = split_system_prompt(ctx.system_prompt)
+
         model_id = agent.model.config.get("model_id") if hasattr(agent.model, "config") else None
         model_invoke_span = tracer.start_model_invoke_span(
             messages=ctx.messages,
             parent_span=cycle_span,
             model_id=model_id,
             custom_trace_attributes=agent.trace_attributes,
-            system_prompt=ctx.system_prompt,
-            system_prompt_content=ctx.system_prompt_content,
+            system_prompt=system_prompt_str,
+            system_prompt_content=system_prompt_content,
         )
         with trace_api.use_span(model_invoke_span, end_on_exit=False):
             try:
                 async for event in stream_messages(
                     agent.model,
-                    ctx.system_prompt,
+                    system_prompt_str,
                     ctx.messages,
                     ctx.tool_specs,
-                    system_prompt_content=ctx.system_prompt_content,
+                    system_prompt_content=system_prompt_content,
                     tool_choice=ctx.tool_choice,
                     invocation_state=ctx.invocation_state,
                     model_state=ctx.model_state,

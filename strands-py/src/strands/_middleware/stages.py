@@ -13,7 +13,7 @@ from .types import MiddlewareStage
 if TYPE_CHECKING:
     from ..agent.agent import Agent
     from ..interrupt import _InterruptState
-    from ..types.content import Messages
+    from ..types.content import Messages, SystemPrompt
     from ..types.streaming import StopReason, Usage
     from ..types.tools import AgentTool, ToolSpec, ToolUse
 
@@ -28,8 +28,7 @@ class InvokeModelContext:
 
     agent: Agent
     messages: Messages
-    system_prompt: str | None
-    system_prompt_content: list[Any] | None
+    system_prompt: SystemPrompt
     tool_specs: list[ToolSpec]
     tool_choice: Any | None
     invocation_state: dict[str, Any]
