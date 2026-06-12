@@ -534,7 +534,9 @@ def test_agent__call__retry_with_reduced_context(mock_model, agent, tool, agener
     assert conversation_manager_spy.apply_management.call_count == 1
 
 
-def test_agent__call__always_sliding_window_conversation_manager_doesnt_infinite_loop(mock_model, agent, tool):
+def test_agent__call__always_sliding_window_conversation_manager_doesnt_infinite_loop(
+    mock_model, agent, tool, quiet_strands_logging
+):
     conversation_manager = SlidingWindowConversationManager(window_size=500, should_truncate_results=False)
     conversation_manager_spy = unittest.mock.Mock(wraps=conversation_manager)
     agent.conversation_manager = conversation_manager_spy
@@ -560,7 +562,9 @@ def test_agent__call__always_sliding_window_conversation_manager_doesnt_infinite
     assert conversation_manager_spy.apply_management.call_count == 1
 
 
-def test_agent__call__null_conversation_window_manager__doesnt_infinite_loop(mock_model, agent, tool):
+def test_agent__call__null_conversation_window_manager__doesnt_infinite_loop(
+    mock_model, agent, tool, quiet_strands_logging
+):
     agent.conversation_manager = NullConversationManager()
 
     messages: Messages = [
