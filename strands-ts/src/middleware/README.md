@@ -62,9 +62,9 @@ Middleware is intended to supersede hooks. The Input/Output phases already cover
 
 We may revisit this later.
 
-## `AgentStreamContext` fields are shared by reference
+## `AgentStreamStage` is internal
 
-`args` and `options` on `AgentStreamContext` are not copied. They may contain non-cloneable objects (Zod schemas, AbortSignals) and shared mutable state (`invocationState`).
+`AgentStreamStage` is not exported from the public API. The context for this stage passes `args` and `options` by reference, but the correct contract (copy vs. reference, readonly enforcement) hasn't been finalized. Rather than ship an inconsistent surface, we're keeping it internal until we decide whether `args` should be deep-copied (consistent with `InvokeModelStage.messages`) or remain a reference (simpler, but surprising given the other stages' guarantees).
 
 ## `invocationState` is shared by reference
 

@@ -122,6 +122,9 @@ export interface ExecuteToolResult {
 /**
  * Context passed to agent-stream-stage middleware.
  * Wraps the entire agent output stream at the outermost interception point.
+ *
+ * @internal Not part of the public API. The contract for this context (particularly
+ * around copy vs. reference semantics for `args` and `options`) is not yet finalized.
  */
 export interface AgentStreamContext extends MiddlewareInterruptible {
   /** The agent instance (escape hatch for advanced use cases). */
@@ -135,6 +138,8 @@ export interface AgentStreamContext extends MiddlewareInterruptible {
 /**
  * Result from agent-stream-stage middleware.
  * The return value of the async generator.
+ *
+ * @internal Not part of the public API.
  */
 export interface AgentStreamResult {
   /** The final agent result from the stream. */
@@ -156,5 +161,8 @@ export const ExecuteToolStage = createStage<ExecuteToolContext, ExecuteToolResul
 /**
  * Built-in stage wrapping the entire agent output stream.
  * Middleware registered for this stage can filter, transform, or inject events.
+ *
+ * @internal Not part of the public API. The context contract for this stage is not
+ * yet finalized — particularly around copy vs. reference semantics for args/options.
  */
 export const AgentStreamStage = createStage<AgentStreamContext, AgentStreamResult, AgentStreamEvent>('agentStream')
